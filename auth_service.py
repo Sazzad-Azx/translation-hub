@@ -73,6 +73,44 @@ CREATE INDEX IF NOT EXISTS idx_admins_email ON admins(email);
 """
 
 
+def auto_create_table() -> dict:
+    """Try to create the admins table using pg8000 or the Supabase DB URL."""
+    sql = get_admins_table_sql()
+    db_url = os.getenv("SUPABASE_DB_URL", "")
+
+    # Method 1: Try SUPABASE_DB_URL with pg8000
+    if db_url:
+        try:
+            import pg8000
+            import urllib.parse as urlparse
+            parsed = urlparse.urlparse(db_url)
+            conn = pg8000.connect(
+                host=parsed.hostname,
+                port=parsed.port or 5432,
+                database=parsed.path.lstrip("/"),
+                user=parsed.username,
+                password=parsed.password,
+                ssl_context=True,
+            )
+            cur = conn.cursor()
+            cur.execute(sql)
+            conn.commit()
+            cur.close()
+            conn.close()
+            return {"success": True, "method": "pg8000"}
+        except Exception as e:
+            print(f"[auth] pg8000 auto-create failed: {e}", flush=True)
+
+    # Method 2: Try creating via PostgREST (won't work for DDL, but as fallback)
+    # Actually, just create a simple check by inserting and catching error
+    # Instead, inform the user
+    return {
+        "success": False,
+        "error": "Auto-create not available. Please run the SQL in Supabase SQL Editor.",
+        "sql": sql,
+    }
+
+
 # ─── Authentication ───────────────────────────────────────────
 def login(email: str, password: str) -> Optional[dict]:
     """

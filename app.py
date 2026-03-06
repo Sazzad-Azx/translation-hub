@@ -230,6 +230,14 @@ def auth_check_admins_table():
     return jsonify({'success': True, 'exists': exists, 'sql': auth_service.get_admins_table_sql()})
 
 
+@app.route('/api/auth/admins-table/create', methods=['POST'])
+@require_super_admin
+def auth_create_admins_table():
+    """Auto-create admins table via pg8000 or Supabase."""
+    result = auth_service.auto_create_table()
+    return jsonify(result)
+
+
 def _format_articles_for_frontend(articles):
     """Format article dicts for frontend."""
     formatted = []

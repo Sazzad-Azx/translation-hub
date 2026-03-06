@@ -351,6 +351,33 @@ async function initAdminSection() {
         });
     }
 
+    // Auto-create table button
+    const autoCreateBtn = document.getElementById('admin-auto-create');
+    if (autoCreateBtn) {
+        autoCreateBtn.addEventListener('click', async () => {
+            autoCreateBtn.disabled = true;
+            autoCreateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating...';
+            try {
+                const resp = await fetch('/api/auth/admins-table/create', {
+                    method: 'POST',
+                    headers: authHeaders(),
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    document.getElementById('admin-setup-banner').classList.add('hidden');
+                    adminState.tableExists = true;
+                    loadAdmins();
+                } else {
+                    alert(data.error || 'Auto-create failed. Please use the SQL Editor.');
+                }
+            } catch (e) {
+                alert('Failed to auto-create table. Please use the SQL Editor.');
+            }
+            autoCreateBtn.disabled = false;
+            autoCreateBtn.innerHTML = '<i class="fas fa-magic"></i> Auto-Create Table';
+        });
+    }
+
     // Add admin button
     const addBtn = document.getElementById('admin-add-btn');
     if (addBtn) {
