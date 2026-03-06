@@ -19,5 +19,10 @@ load_dotenv()
 # Import the Flask app
 from app import app
 
+# Explicitly set static and template folders using absolute paths
+# This ensures Flask can find them in the Vercel serverless environment
+app.static_folder = str(parent_dir / 'static')
+app.template_folder = str(parent_dir / 'templates')
+
 # Vercel Python runtime expects the app to be exported
 # It automatically handles WSGI apps like Flask
