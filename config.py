@@ -50,5 +50,5 @@ SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "eyJhbGciOiJIUzI1NiIsIn
 SUPABASE_DB_URL = os.getenv("SUPABASE_DB_URL", "")
 
 # Super Admin Configuration (stored in environment variables)
-SUPER_ADMIN_EMAIL = os.getenv("SUPER_ADMIN_EMAIL", "")
-SUPER_ADMIN_PASSWORD = os.getenv("SUPER_ADMIN_PASSWORD", "")
+SUPER_ADMIN_EMAIL = os.getenv("SUPER_ADMIN_EMAIL", "sazzad@nextventures.io")
+SUPER_ADMIN_PASSWORD = os.getenv("SUPER_ADMIN_PASSWORD", "Sazzad123")

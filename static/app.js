@@ -15,7 +15,7 @@ function authHeaders() {
     return h;
 }
 
-// Intercept all fetch calls to /api/ to add auth header automatically
+// Intercept all fetch calls to /api/ to add auth header and handle 401
 const _originalFetch = window.fetch;
 window.fetch = function(url, options = {}) {
     if (typeof url === 'string' && url.startsWith('/api/') && url !== '/api/auth/login') {
@@ -30,7 +30,20 @@ window.fetch = function(url, options = {}) {
             }
         }
     }
-    return _originalFetch.call(this, url, options);
+    return _originalFetch.call(this, url, options).then(response => {
+        // Auto-redirect to login on 401 (expired / invalid token)
+        if (response.status === 401 && typeof url === 'string' &&
+            url.startsWith('/api/') && url !== '/api/auth/login' && url !== '/api/auth/me') {
+            console.warn('[Auth] 401 received – session expired, redirecting to login.');
+            authState.token = '';
+            authState.user = null;
+            authState.authenticated = false;
+            localStorage.removeItem('auth_token');
+            state._appBooted = false;
+            showLogin();
+        }
+        return response;
+    });
 };
 
 // Global state

@@ -2,26 +2,30 @@
 Authentication service for Translation Hub.
 Super admin credentials stored in environment variables.
 Other admin credentials stored in Supabase.
+
+Uses stateless HMAC-signed tokens so authentication works
+correctly on serverless platforms (Vercel) where each request
+may hit a different process instance.
 """
 import os
 import hashlib
+import hmac
 import secrets
 import time
 import json
+import base64
 import requests
 from typing import Optional, Dict, List
 
 # ─── Config ────────────────────────────────────────────────────
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
-SUPER_ADMIN_EMAIL = os.getenv("SUPER_ADMIN_EMAIL", "")
-SUPER_ADMIN_PASSWORD = os.getenv("SUPER_ADMIN_PASSWORD", "")
+SUPER_ADMIN_EMAIL = os.getenv("SUPER_ADMIN_EMAIL", "sazzad@nextventures.io")
+SUPER_ADMIN_PASSWORD = os.getenv("SUPER_ADMIN_PASSWORD", "Sazzad123")
+AUTH_SECRET = os.getenv("AUTH_SECRET", os.getenv("JWT_SECRET_KEY", "fnth-default-secret-change-me"))
 
-# In-memory session store  {token: {email, role, name, expires_at}}
-_sessions: Dict[str, dict] = {}
-
-# Session duration: 24 hours
-SESSION_TTL = 86400
+# Token duration: 24 hours
+TOKEN_TTL = 86400
 
 
 def _sb_headers():
@@ -111,10 +115,52 @@ def auto_create_table() -> dict:
     }
 
 
+# ─── Stateless Token helpers ──────────────────────────────────
+def _create_token(email: str, role: str, name: str) -> str:
+    """Create a self-contained HMAC-signed token embedding user info."""
+    payload = json.dumps({
+        "email": email,
+        "role": role,
+        "name": name,
+        "exp": int(time.time()) + TOKEN_TTL,
+    }, separators=(",", ":"))
+    payload_b64 = base64.urlsafe_b64encode(payload.encode("utf-8")).decode("utf-8")
+    sig = hmac.new(AUTH_SECRET.encode("utf-8"), payload_b64.encode("utf-8"), hashlib.sha256).hexdigest()
+    return f"{payload_b64}.{sig}"
+
+
+def validate_session(token: str) -> Optional[dict]:
+    """Verify an HMAC-signed token and return the payload dict, or None."""
+    if not token:
+        return None
+    try:
+        parts = token.rsplit(".", 1)
+        if len(parts) != 2:
+            return None
+        payload_b64, sig = parts
+        expected_sig = hmac.new(
+            AUTH_SECRET.encode("utf-8"),
+            payload_b64.encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+        if not hmac.compare_digest(sig, expected_sig):
+            return None
+        payload = json.loads(base64.urlsafe_b64decode(payload_b64))
+        if time.time() > payload.get("exp", 0):
+            return None
+        return {
+            "email": payload["email"],
+            "role": payload["role"],
+            "name": payload["name"],
+        }
+    except Exception:
+        return None
+
+
 # ─── Authentication ───────────────────────────────────────────
 def login(email: str, password: str) -> Optional[dict]:
     """
-    Authenticate a user.  Returns session dict or None.
+    Authenticate a user.  Returns dict with signed token or None.
     Checks super admin first, then Supabase admins table.
     """
     email = email.strip().lower()
@@ -122,7 +168,7 @@ def login(email: str, password: str) -> Optional[dict]:
     # 1) Super admin check
     sa_email = SUPER_ADMIN_EMAIL.strip().lower()
     if email == sa_email and password == SUPER_ADMIN_PASSWORD:
-        token = _create_session(email, "super_admin", "Super Admin")
+        token = _create_token(email, "super_admin", "Super Admin")
         return {
             "token": token,
             "email": email,
@@ -142,7 +188,7 @@ def login(email: str, password: str) -> Optional[dict]:
             rows = r.json()
             if rows and rows[0].get("password_hash") == pw_hash:
                 admin = rows[0]
-                token = _create_session(
+                token = _create_token(
                     admin["email"],
                     admin.get("role", "admin"),
                     admin.get("name", "Admin"),
@@ -159,32 +205,9 @@ def login(email: str, password: str) -> Optional[dict]:
     return None
 
 
-def _create_session(email: str, role: str, name: str) -> str:
-    token = secrets.token_hex(32)
-    _sessions[token] = {
-        "email": email,
-        "role": role,
-        "name": name,
-        "expires_at": time.time() + SESSION_TTL,
-    }
-    return token
-
-
-def validate_session(token: str) -> Optional[dict]:
-    """Return session dict if valid, else None."""
-    if not token:
-        return None
-    session = _sessions.get(token)
-    if not session:
-        return None
-    if time.time() > session["expires_at"]:
-        _sessions.pop(token, None)
-        return None
-    return session
-
-
 def logout(token: str):
-    _sessions.pop(token, None)
+    """Stateless tokens don't need server-side invalidation."""
+    pass
 
 
 # ─── Admin CRUD (super-admin only) ───────────────────────────
