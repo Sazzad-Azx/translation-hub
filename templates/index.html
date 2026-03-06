@@ -1,0 +1,1143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FundedNext - Translation Hub</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body>
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-logo">
+                <i class="fas fa-language"></i>
+                <span class="sidebar-brand">FundedNext</span>
+            </div>
+            <span class="sidebar-subtitle">Translation Hub</span>
+        </div>
+
+        <nav class="sidebar-nav">
+            <a href="#" class="nav-item active" data-section="dashboard">
+                <i class="fas fa-chart-line"></i>
+                <span>Dashboard</span>
+            </a>
+            <a href="#" class="nav-item" data-section="content-hub">
+                <i class="fas fa-folder-open"></i>
+                <span>Content Hub</span>
+            </a>
+            <a href="#" class="nav-item" data-section="pull">
+                <i class="fas fa-cloud-download-alt"></i>
+                <span>Pull</span>
+            </a>
+            <a href="#" class="nav-item" data-section="translate">
+                <i class="fas fa-exchange-alt"></i>
+                <span>Translate</span>
+            </a>
+            <a href="#" class="nav-item" data-section="push">
+                <i class="fas fa-cloud-upload-alt"></i>
+                <span>Push</span>
+            </a>
+            <a href="#" class="nav-item" data-section="automation">
+                <i class="fas fa-robot"></i>
+                <span>Automation</span>
+            </a>
+            <a href="#" class="nav-item" data-section="fundee-update">
+                <i class="fas fa-bullhorn"></i>
+                <span>Fundee Update</span>
+            </a>
+            <a href="#" class="nav-item" data-section="language">
+                <i class="fas fa-globe"></i>
+                <span>Language</span>
+            </a>
+            <a href="#" class="nav-item" data-section="glossary">
+                <i class="fas fa-book"></i>
+                <span>Glossary</span>
+            </a>
+        </nav>
+
+        <div class="sidebar-footer">
+            <div class="connection-badge" id="connection-badge">
+                <span class="conn-dot" id="conn-dot"></span>
+                <span class="conn-text" id="conn-text">Checking...</span>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-area" id="main-area">
+        <!-- Top Bar -->
+        <header class="topbar">
+            <button class="sidebar-toggle" id="sidebar-toggle">
+                <i class="fas fa-bars"></i>
+            </button>
+            <h1 class="topbar-title" id="topbar-title">Dashboard</h1>
+            <div class="topbar-actions">
+                <button class="btn btn-icon" id="refresh-page-btn" title="Refresh">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- ========================================== -->
+        <!-- SECTION: Dashboard                         -->
+        <!-- ========================================== -->
+        <section class="page-section active" id="section-dashboard">
+            <!-- Stats Cards Row -->
+            <div class="stats-row">
+                <div class="stat-card">
+                    <div class="stat-icon" style="background:#eff6ff;color:#2563eb;">
+                        <i class="fas fa-file-alt"></i>
+                    </div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="stat-total-articles">--</span>
+                        <span class="stat-label">Total Articles</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon" style="background:#f0fdf4;color:#059669;">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="stat-translated">--</span>
+                        <span class="stat-label">Translated</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon" style="background:#fef3c7;color:#d97706;">
+                        <i class="fas fa-calendar-week"></i>
+                    </div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="stat-changed-week">--</span>
+                        <span class="stat-label">Changed This Week</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon" style="background:#fef2f2;color:#dc2626;">
+                        <i class="fas fa-dollar-sign"></i>
+                    </div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="stat-cost-month">--</span>
+                        <span class="stat-label">API Cost (Month)</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts Row -->
+            <div class="charts-row">
+                <div class="card chart-card">
+                    <div class="card-header">
+                        <h3>FAQ Changes Over Time</h3>
+                        <div class="chart-period-toggle">
+                            <button class="period-btn active" data-period="week">Week</button>
+                            <button class="period-btn" data-period="month">Month</button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="changesChart"></canvas>
+                    </div>
+                </div>
+                <div class="card chart-card">
+                    <div class="card-header">
+                        <h3>Cost Analysis</h3>
+                        <div class="chart-period-toggle">
+                            <button class="period-btn active" data-period="week" data-chart="cost">Week</button>
+                            <button class="period-btn" data-period="month" data-chart="cost">Month</button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="costChart"></canvas>
+                    </div>
+                </div>
+        </div>
+
+            <!-- Bottom Row: Ranking + Recent Activity -->
+            <div class="bottom-row">
+                <div class="card ranking-card">
+                    <div class="card-header">
+                        <h3>Top Changed Articles</h3>
+                    </div>
+                    <div class="card-body">
+                        <table class="ranking-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Article</th>
+                                    <th>Changes</th>
+                                    <th>Last Updated</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ranking-table-body">
+                                <tr><td colspan="4" class="empty-cell">Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card activity-card">
+                    <div class="card-header">
+                        <h3>Recent Activity</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="activity-feed" id="activity-feed">
+                            <div class="activity-empty">Loading recent activities...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- SECTION: Content Hub                       -->
+        <!-- ========================================== -->
+        <section class="page-section" id="section-content-hub">
+
+            <!-- Header -->
+            <div class="ch-header">
+                <div class="ch-header-text">
+                    <h2><i class="fas fa-folder-open"></i> Content Hub</h2>
+                    <span class="ch-subtitle">Operational Control Center</span>
+                </div>
+                <div class="ch-header-stats">
+                    <span class="ch-global-stat" id="ch-total-articles-stat">
+                        <i class="fas fa-file-alt"></i> <strong id="ch-article-count-val">--</strong> articles
+                    </span>
+                </div>
+            </div>
+
+
+            <!-- ===== Attention Filter Bar ===== -->
+            <div class="ch-filter-bar" id="ch-filter-bar">
+                <button class="ch-filter-btn active" data-health="ALL">
+                    <span class="ch-filter-icon">📋</span>
+                    All <span class="ch-filter-count" id="ch-count-ALL">--</span>
+                </button>
+                <button class="ch-filter-btn" data-health="NEEDS_PULL">
+                    <span class="ch-filter-icon">🔄</span>
+                    Needs Pull <span class="ch-filter-count" id="ch-count-NEEDS_PULL">0</span>
+                </button>
+                <button class="ch-filter-btn" data-health="NEEDS_TRANSLATION">
+                    <span class="ch-filter-icon">🌍</span>
+                    Needs Translation <span class="ch-filter-count" id="ch-count-NEEDS_TRANSLATION">0</span>
+                </button>
+                <button class="ch-filter-btn" data-health="NEEDS_PUSH">
+                    <span class="ch-filter-icon">🚀</span>
+                    Ready to Push <span class="ch-filter-count" id="ch-count-NEEDS_PUSH">0</span>
+                </button>
+                <button class="ch-filter-btn" data-health="OUTDATED">
+                    <span class="ch-filter-icon">⚠️</span>
+                    Outdated <span class="ch-filter-count" id="ch-count-OUTDATED">0</span>
+                </button>
+                <button class="ch-filter-btn" data-health="COMPLETE">
+                    <span class="ch-filter-icon">✅</span>
+                    Complete <span class="ch-filter-count" id="ch-count-COMPLETE">0</span>
+                </button>
+            </div>
+
+            <!-- Search & Sort Bar -->
+            <div class="ch-toolbar">
+                <div class="ch-toolbar-left">
+                    <div class="ch-search-wrap">
+                        <i class="fas fa-search"></i>
+                        <input type="text" id="ch-search-input" class="ch-search-input" placeholder="Search articles by title..." aria-label="Search articles by title">
+                    </div>
+                </div>
+                <div class="ch-toolbar-right">
+                    <select id="ch-sort-select" class="ch-sort-select" aria-label="Sort articles">
+                        <option value="attention">Needs Attention First</option>
+                        <option value="updated_desc">Most Recently Updated</option>
+                        <option value="title_asc">Title A–Z</option>
+                    </select>
+                    <select id="ch-page-size" class="ch-sort-select" aria-label="Page size">
+                        <option value="10">10 / page</option>
+                        <option value="25" selected>25 / page</option>
+                        <option value="50">50 / page</option>
+                    </select>
+            </div>
+        </div>
+
+            <!-- ===== Bulk Action Bar (hidden until items selected) ===== -->
+            <div class="ch-bulk-bar hidden" id="ch-bulk-bar">
+                <div class="ch-bulk-info">
+                    <strong><span id="ch-bulk-count">0</span></strong> selected
+                </div>
+                <div class="ch-bulk-actions">
+                    <button class="btn btn-small btn-primary" id="ch-bulk-pull"><i class="fas fa-cloud-download-alt"></i> Pull</button>
+                    <button class="btn btn-small btn-success" id="ch-bulk-translate"><i class="fas fa-exchange-alt"></i> Translate</button>
+                    <button class="btn btn-small btn-secondary" id="ch-bulk-push"><i class="fas fa-cloud-upload-alt"></i> Push</button>
+                </div>
+                </div>
+                
+            <!-- ===== Articles Content ===== -->
+            <div id="ch-tab-articles">
+                <div class="card ch-table-card">
+                    <div class="ch-table-wrap">
+                        <table class="ch-table">
+                            <thead>
+                                <tr>
+                                    <th class="ch-th-check"><input type="checkbox" id="ch-select-all" title="Select all" aria-label="Select all articles"></th>
+                                    <th>Title</th>
+                                    <th>Source Updated</th>
+                                    <th>Pulled</th>
+                                    <th>Languages</th>
+                                    <th class="ch-th-health">Health</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ch-table-body">
+                                <tr><td colspan="6" class="empty-cell">Navigate to Content Hub to load articles.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Pagination -->
+                <div class="ch-pagination">
+                    <span class="ch-page-info" id="ch-page-info">Page 1</span>
+                    <div class="ch-page-btns">
+                        <button class="btn btn-small btn-secondary" id="ch-prev-btn" disabled><i class="fas fa-chevron-left"></i> Prev</button>
+                        <button class="btn btn-small btn-secondary" id="ch-next-btn" disabled>Next <i class="fas fa-chevron-right"></i></button>
+                    </div>
+                </div>
+            </div>
+
+
+            <!-- ===== Details Drawer ===== -->
+            <div class="ch-drawer-overlay hidden" id="ch-drawer-overlay"></div>
+            <aside class="ch-drawer hidden" id="ch-drawer">
+                <div class="ch-drawer-header">
+                    <h3 id="ch-drawer-title">Article Details</h3>
+                    <button class="btn btn-icon ch-drawer-close" id="ch-drawer-close"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="ch-drawer-body" id="ch-drawer-body">
+                    <!-- Dynamically populated -->
+                </div>
+            </aside>
+
+        </section>
+
+        <!-- ========================================== -->
+        <!-- SECTION: Pull                              -->
+        <!-- ========================================== -->
+        <section class="page-section" id="section-pull">
+
+            <!-- Setup Banner (shown when table doesn't exist) -->
+            <div id="pull-setup-banner" class="pull-setup-banner hidden">
+                <div class="setup-banner-icon"><i class="fas fa-database"></i></div>
+                <div class="setup-banner-body">
+                    <h3>Database Setup Required</h3>
+                    <p>The <code>pull_registry</code> table needs to be created in Supabase. Copy the SQL below and run it in <strong>Supabase Dashboard &gt; SQL Editor &gt; New Query</strong>.</p>
+                    <div class="setup-sql-box">
+                        <pre id="pull-setup-sql"></pre>
+                        <button class="btn btn-small btn-secondary" id="copy-setup-sql-btn"><i class="fas fa-copy"></i> Copy SQL</button>
+                    </div>
+                    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                        <button class="btn btn-primary" id="auto-create-table-btn"><i class="fas fa-magic"></i> Auto-Create Table</button>
+                        <button class="btn btn-secondary" id="verify-pull-setup-btn"><i class="fas fa-check"></i> I've Run It — Verify</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pull Stats Bar -->
+            <div class="pull-stats-bar" id="pull-stats-bar">
+                <div class="pull-stat-chip">
+                    <i class="fas fa-layer-group"></i>
+                    <span id="pull-stat-total">0</span> Total
+                </div>
+                <div class="pull-stat-chip chip-success">
+                    <i class="fas fa-check-circle"></i>
+                    <span id="pull-stat-uptodate">0</span> Up to Date
+                </div>
+                <div class="pull-stat-chip chip-warning">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <span id="pull-stat-needsupdate">0</span> Needs Update
+                </div>
+
+                <div class="pull-stat-chip chip-muted">
+                    <i class="fas fa-circle"></i>
+                    <span id="pull-stat-never">0</span> Never Pulled
+                </div>
+                <div class="pull-stat-chip chip-danger">
+                    <i class="fas fa-times-circle"></i>
+                    <span id="pull-stat-failed">0</span> Failed
+                </div>
+            </div>
+
+            <!-- Toolbar -->
+            <div class="pull-toolbar">
+                <div class="pull-toolbar-left">
+                    <button class="btn btn-primary" id="pull-sync-btn">
+                        <i class="fas fa-sync-alt"></i> Sync Source List
+                    </button>
+                    <button class="btn btn-success" id="pull-selected-btn" disabled>
+                        <i class="fas fa-cloud-download-alt"></i> Pull Selected (<span id="pull-selected-count">0</span>)
+                    </button>
+                </div>
+                <div class="pull-toolbar-right">
+                    <div class="pull-search-wrap">
+                        <i class="fas fa-search"></i>
+                        <input type="text" id="pull-search-input" class="pull-search-input" placeholder="Search articles..." aria-label="Search articles">
+                    </div>
+                    <select id="pull-status-filter" class="pull-filter-select" aria-label="Filter by status">
+                        <option value="">All Statuses</option>
+                        <option value="up_to_date">Up to Date</option>
+                        <option value="needs_update">Needs Update</option>
+                        <option value="never_pulled">Never Pulled</option>
+                        <option value="failed">Failed</option>
+                    </select>
+                    <select id="pull-page-size" class="pull-filter-select" aria-label="Page size">
+                        <option value="10">10 / page</option>
+                        <option value="25" selected>25 / page</option>
+                        <option value="50">50 / page</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Article Table -->
+            <div class="card pull-table-card">
+                <div class="pull-table-wrap">
+                    <table class="pull-table">
+                        <thead>
+                            <tr>
+                                <th class="pull-th-check">
+                                    <input type="checkbox" id="pull-select-all" title="Select all on this page" aria-label="Select all articles on this page">
+                                </th>
+                                <th>Article Title</th>
+                                <th>Status</th>
+                                <th>State</th>
+                                <th>Last Synced On</th>
+                                <th>Source Updated</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pull-table-body">
+                            <tr><td colspan="6" class="empty-cell">Loading articles...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Pagination -->
+            <div class="pull-pagination" id="pull-pagination">
+                <span class="pull-page-info" id="pull-page-info">Page 1</span>
+                <div class="pull-page-btns">
+                    <button class="btn btn-small btn-secondary" id="pull-prev-btn" disabled><i class="fas fa-chevron-left"></i> Prev</button>
+                    <button class="btn btn-small btn-secondary" id="pull-next-btn" disabled>Next <i class="fas fa-chevron-right"></i></button>
+                </div>
+            </div>
+
+            <!-- Pull Confirmation Modal -->
+            <div class="pull-confirm-overlay hidden" id="pull-confirm-overlay">
+                <div class="pull-confirm-modal">
+                    <div class="pull-confirm-header">
+                        <h3><i class="fas fa-cloud-download-alt"></i> Confirm Pull</h3>
+                        <button class="pull-confirm-close" id="pull-confirm-close">&times;</button>
+                    </div>
+                    <div class="pull-confirm-body" id="pull-confirm-body"></div>
+                    <div class="pull-confirm-footer">
+                        <button class="btn btn-secondary" id="pull-confirm-cancel">Cancel</button>
+                        <button class="btn btn-primary" id="pull-confirm-go"><i class="fas fa-cloud-download-alt"></i> OK</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pull Progress Toast -->
+            <div id="pull-toast" class="pull-toast hidden">
+                <div class="pull-toast-inner">
+                    <i class="fas fa-spinner fa-spin" id="pull-toast-icon"></i>
+                    <span id="pull-toast-text">Pulling articles...</span>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- ========================================== -->
+        <!-- SECTION: Translate                         -->
+        <!-- ========================================== -->
+        <section class="page-section" id="section-translate">
+
+            <!-- Header -->
+            <div class="tr-header">
+                <div class="tr-header-text">
+                    <h2><i class="fas fa-exchange-alt"></i> Translate</h2>
+                    <span class="tr-subtitle">Translation Operations</span>
+                </div>
+                <div class="tr-header-stats">
+                    <span class="tr-global-stat">
+                        <i class="fas fa-file-alt"></i> <strong id="tr-stat-articles">--</strong> articles
+                    </span>
+                </div>
+            </div>
+
+            <!-- Filter Bar -->
+            <div class="tr-filter-bar" id="tr-filter-bar">
+                <button class="tr-filter-btn active" data-status="ALL">
+                    <span class="tr-filter-icon">📋</span> All <span class="tr-filter-count" id="tr-count-ALL">--</span>
+                </button>
+                <button class="tr-filter-btn" data-status="NEEDS_TRANSLATION">
+                    <span class="tr-filter-icon">🌍</span> Needs Translation <span class="tr-filter-count" id="tr-count-NEEDS">0</span>
+                </button>
+                <button class="tr-filter-btn" data-status="OUTDATED">
+                    <span class="tr-filter-icon">⚠️</span> Outdated <span class="tr-filter-count" id="tr-count-OUTDATED">0</span>
+                </button>
+                <button class="tr-filter-btn" data-status="IN_PROGRESS">
+                    <span class="tr-filter-icon">🔄</span> In Progress <span class="tr-filter-count" id="tr-count-INPROGRESS">0</span>
+                </button>
+                <button class="tr-filter-btn" data-status="TRANSLATED">
+                    <span class="tr-filter-icon">✅</span> Completed <span class="tr-filter-count" id="tr-count-TRANSLATED">0</span>
+                </button>
+                <button class="tr-filter-btn" data-status="FAILED">
+                    <span class="tr-filter-icon">❌</span> Failed <span class="tr-filter-count" id="tr-count-FAILED">0</span>
+                </button>
+            </div>
+
+            <!-- Toolbar -->
+            <div class="tr-toolbar">
+                <div class="tr-toolbar-left">
+                    <div class="tr-search-wrap">
+                        <i class="fas fa-search"></i>
+                        <input type="text" id="tr-search-input" class="tr-search-input" placeholder="Search articles by title...">
+                    </div>
+                    <select id="tr-lang-filter" class="tr-select">
+                        <option value="">All Languages</option>
+                    </select>
+                </div>
+                <div class="tr-toolbar-right">
+                    <select id="tr-sort-select" class="tr-select">
+                        <option value="attention">Needs Attention First</option>
+                        <option value="title_asc">Title A–Z</option>
+                        <option value="updated_desc">Recently Updated</option>
+                    </select>
+                    <select id="tr-page-size" class="tr-select">
+                        <option value="10">10 / page</option>
+                        <option value="25" selected>25 / page</option>
+                        <option value="50">50 / page</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Action Bar -->
+            <div class="tr-action-bar" id="tr-action-bar">
+                <div class="tr-action-left">
+                    <span class="tr-action-info">
+                        <strong id="tr-sel-article-count">0</strong> articles ×
+                        <strong id="tr-sel-lang-count">0</strong> languages =
+                        <strong id="tr-sel-combo-count">0</strong> jobs
+                    </span>
+                </div>
+                <div class="tr-action-right">
+                    <div class="tr-lang-picker-wrap">
+                        <button class="btn btn-small btn-secondary" id="tr-lang-picker-btn">
+                            <i class="fas fa-globe"></i> Select Languages <span id="tr-lang-badge" class="tr-lang-badge">0</span>
+                        </button>
+                        <div class="tr-lang-dropdown hidden" id="tr-lang-dropdown">
+                            <div class="tr-lang-dropdown-header">
+                                <label><input type="checkbox" id="tr-lang-select-all"> Select All</label>
+                            </div>
+                            <div class="tr-lang-dropdown-list" id="tr-lang-dropdown-list"></div>
+                        </div>
+                    </div>
+                    <button class="btn btn-small btn-primary" id="tr-translate-btn" disabled>
+                        <i class="fas fa-exchange-alt"></i> Translate Selected
+                    </button>
+                    <button class="btn btn-small btn-success" id="tr-translate-missing-btn">
+                        <i class="fas fa-magic"></i> Translate All Missing
+                    </button>
+                </div>
+            </div>
+
+            <!-- Matrix Table -->
+            <div class="card tr-table-card">
+                <div class="tr-table-wrap">
+                    <table class="tr-table" id="tr-matrix-table">
+                        <thead id="tr-table-head">
+                            <tr>
+                                <th class="tr-th-check"><input type="checkbox" id="tr-select-all" title="Select all" aria-label="Select all articles"></th>
+                                <th class="tr-th-title">Title</th>
+                                <!-- Language columns inserted by JS -->
+                            </tr>
+                        </thead>
+                        <tbody id="tr-table-body">
+                            <tr><td colspan="13" class="empty-cell">Navigate to Translate to load articles.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Pagination -->
+            <div class="tr-pagination">
+                <span class="tr-page-info" id="tr-page-info">Page 1</span>
+                <div class="tr-page-btns">
+                    <button class="btn btn-small btn-secondary" id="tr-prev-btn" disabled><i class="fas fa-chevron-left"></i> Prev</button>
+                    <button class="btn btn-small btn-secondary" id="tr-next-btn" disabled>Next <i class="fas fa-chevron-right"></i></button>
+                </div>
+            </div>
+
+            <!-- Details Drawer -->
+            <div class="tr-drawer-overlay hidden" id="tr-drawer-overlay"></div>
+            <aside class="tr-drawer hidden" id="tr-drawer">
+                <div class="tr-drawer-header">
+                    <h3 id="tr-drawer-title">Article Details</h3>
+                    <button class="btn btn-icon tr-drawer-close" id="tr-drawer-close"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="tr-drawer-body" id="tr-drawer-body"></div>
+            </aside>
+
+            <!-- Confirmation Modal -->
+            <div class="tr-modal-overlay hidden" id="tr-confirm-overlay">
+                <div class="tr-modal">
+                    <h3><i class="fas fa-exchange-alt"></i> Confirm Translation</h3>
+                    <div class="tr-modal-body" id="tr-confirm-body"></div>
+                    <div class="tr-modal-footer">
+                        <button class="btn btn-secondary" id="tr-confirm-cancel">Cancel</button>
+                        <button class="btn btn-primary" id="tr-confirm-ok"><i class="fas fa-play"></i> Start Translation</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Toast -->
+            <div id="tr-toast" class="pull-toast hidden">
+                <div class="pull-toast-inner">
+                    <i class="fas fa-spinner fa-spin" id="tr-toast-icon"></i>
+                    <span id="tr-toast-text">Translating...</span>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- ========================================== -->
+        <!-- SECTION: Push                              -->
+        <!-- ========================================== -->
+        <section class="page-section" id="section-push">
+
+            <!-- Header -->
+            <div class="tr-header">
+                <div class="tr-header-text">
+                    <h2><i class="fas fa-cloud-upload-alt"></i> Push</h2>
+                    <span class="tr-subtitle">Deployment Control Panel</span>
+                </div>
+                <div class="tr-header-stats">
+                    <span class="tr-global-stat">
+                        <i class="fas fa-file-alt"></i> <strong id="push-stat-articles">--</strong> articles
+                    </span>
+                </div>
+            </div>
+
+            <!-- Toolbar (search + page size + refresh) -->
+            <div class="tr-toolbar">
+                <div class="tr-toolbar-left">
+                    <div class="push-search-wrap">
+                        <i class="fas fa-search"></i>
+                        <input type="text" id="push-search-input" class="push-search-input" placeholder="Search articles by title...">
+                    </div>
+                </div>
+                <div class="tr-toolbar-right">
+                    <select id="push-page-size" class="tr-select" aria-label="Page size">
+                        <option value="10">10 / page</option>
+                        <option value="25" selected>25 / page</option>
+                        <option value="50">50 / page</option>
+                        <option value="100">100 / page</option>
+                    </select>
+                    <button class="btn btn-small btn-secondary" id="push-refresh-btn" title="Refresh statuses">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Action Bar (mirrors Translate section) -->
+            <div class="tr-action-bar" id="push-action-bar">
+                <div class="tr-action-left">
+                    <span class="tr-action-info">
+                        <strong id="push-sel-article-count">0</strong> articles ×
+                        <strong id="push-sel-lang-count">0</strong> languages =
+                        <strong id="push-sel-combo-count">0</strong> jobs
+                    </span>
+                </div>
+                <div class="tr-action-right">
+                    <!-- Language picker (same as Translate) -->
+                    <div class="tr-lang-picker-wrap" id="push-lang-picker-wrap">
+                        <button class="btn btn-small btn-secondary" id="push-lang-picker-btn">
+                            <i class="fas fa-globe"></i> Select Languages
+                            <span id="push-lang-badge" class="tr-lang-badge">0</span>
+                        </button>
+                        <div class="tr-lang-dropdown hidden" id="push-lang-dropdown">
+                            <div class="tr-lang-dropdown-header">
+                                <label><input type="checkbox" id="push-lang-select-all"> Select All</label>
+                            </div>
+                            <div class="tr-lang-dropdown-list" id="push-lang-dropdown-list"></div>
+                        </div>
+                    </div>
+                    <button class="btn btn-small btn-primary" id="push-selected-btn" disabled>
+                        <i class="fas fa-cloud-upload-alt"></i> Push Selected
+                    </button>
+                    <button class="btn btn-small btn-success" id="push-all-ready-btn" disabled>
+                        <i class="fas fa-rocket"></i> Push All Ready
+                    </button>
+                </div>
+            </div>
+
+            <!-- Matrix Table -->
+            <div class="card push-table-card">
+                <div class="push-table-wrap">
+                    <table class="push-table" id="push-main-table">
+                        <thead>
+                            <tr id="push-thead-row">
+                                <th class="push-th-check">
+                                    <input type="checkbox" id="push-select-all" title="Select all" aria-label="Select all">
+                                </th>
+                                <th class="push-th-title">Article Title</th>
+                                <!-- Language columns added dynamically by JS -->
+                            </tr>
+                        </thead>
+                        <tbody id="push-table-body">
+                            <tr><td colspan="2" class="empty-cell"><i class="fas fa-spinner fa-spin"></i> Loading articles…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Pagination -->
+            <div class="tr-pagination">
+                <span class="tr-page-info" id="push-page-info">Page 1</span>
+                <div class="tr-page-btns">
+                    <button class="btn btn-small btn-secondary" id="push-prev-btn" disabled><i class="fas fa-chevron-left"></i> Prev</button>
+                    <button class="btn btn-small btn-secondary" id="push-next-btn" disabled>Next <i class="fas fa-chevron-right"></i></button>
+                </div>
+            </div>
+
+            <!-- Push Confirmation Modal -->
+            <div class="push-confirm-overlay hidden" id="push-confirm-overlay">
+                <div class="push-confirm-modal">
+                    <div class="push-confirm-header">
+                        <h3><i class="fas fa-cloud-upload-alt"></i> Confirm Push</h3>
+                        <button class="push-confirm-close" id="push-confirm-close">&times;</button>
+                    </div>
+                    <div class="push-confirm-body" id="push-confirm-body"></div>
+                    <div class="push-confirm-footer">
+                        <button class="btn btn-secondary" id="push-confirm-cancel">Cancel</button>
+                        <button class="btn btn-primary" id="push-confirm-go"><i class="fas fa-rocket"></i> Push Now</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Preview Drawer -->
+            <div class="push-drawer-overlay hidden" id="push-drawer-overlay"></div>
+            <div class="push-drawer hidden" id="push-drawer">
+                <div class="push-drawer-header">
+                    <div>
+                        <h3 id="push-drawer-title">Article Preview</h3>
+                        <div id="push-drawer-lang-tabs" class="push-drawer-lang-tabs"></div>
+                    </div>
+                    <button class="push-drawer-close" id="push-drawer-close">&times;</button>
+                </div>
+                <div class="push-drawer-body" id="push-drawer-body"></div>
+                <div class="push-drawer-footer" id="push-drawer-footer">
+                    <button class="btn btn-secondary" id="push-drawer-close-btn">Close</button>
+                    <button class="btn btn-primary hidden" id="push-drawer-push-btn"><i class="fas fa-cloud-upload-alt"></i> Push This</button>
+                </div>
+            </div>
+
+            <!-- Toast -->
+            <div id="push-toast" class="push-toast hidden"></div>
+
+        </section>
+
+        <!-- ========================================== -->
+        <!-- SECTION: Automation                        -->
+        <!-- ========================================== -->
+        <section class="page-section" id="section-automation">
+            <div class="placeholder-page">
+                <div class="placeholder-icon"><i class="fas fa-robot"></i></div>
+                <h2>Automation</h2>
+                <p>Set up automatic translation workflows. Schedule pulls, translations, and pushes on a regular basis without manual intervention.</p>
+                <span class="badge-coming-soon">Coming Soon</span>
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- SECTION: Fundee Update                     -->
+        <!-- ========================================== -->
+        <section class="page-section" id="section-fundee-update">
+            <div class="placeholder-page">
+                <div class="placeholder-icon"><i class="fas fa-bullhorn"></i></div>
+                <h2>Fundee Update</h2>
+                <p>Track and manage updates specific to FundedNext. Monitor article changes, version history, and stakeholder notifications.</p>
+                <span class="badge-coming-soon">Coming Soon</span>
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- SECTION: Language                          -->
+        <!-- ========================================== -->
+        <section class="page-section" id="section-language">
+            <div class="placeholder-page">
+                <div class="placeholder-icon"><i class="fas fa-globe"></i></div>
+                <h2>Language</h2>
+                <p>Configure supported languages, manage locale settings, and set translation priorities per language pair.</p>
+                <span class="badge-coming-soon">Coming Soon</span>
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- SECTION: Glossary                          -->
+        <!-- ========================================== -->
+        <section class="page-section" id="section-glossary">
+
+            <!-- Setup Banner (shown if tables missing) -->
+            <div id="gl-setup-banner" class="pull-setup hidden">
+                <div class="pull-setup-inner">
+                    <div class="setup-banner-body">
+                        <h3><i class="fas fa-database"></i> Glossary Tables Required</h3>
+                        <p>The glossary tables need to be created in Supabase. Copy the SQL below and run it in <strong>Supabase Dashboard &gt; SQL Editor &gt; New Query</strong>.</p>
+                        <div class="setup-sql-box">
+                            <pre id="gl-setup-sql"></pre>
+                            <button class="btn btn-small btn-secondary" id="gl-copy-sql-btn"><i class="fas fa-copy"></i> Copy SQL</button>
+                        </div>
+                        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:12px;">
+                            <button class="btn btn-primary" id="gl-create-tables-btn"><i class="fas fa-magic"></i> Auto-Create Tables</button>
+                            <span style="font-size:12px; color:#64748b;">or paste the SQL above into your Supabase SQL Editor</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Glossary Content -->
+            <div id="gl-main-content">
+
+                <!-- Header -->
+                <div class="tr-header">
+                    <div class="tr-header-text">
+                        <h2><i class="fas fa-book"></i> Glossary</h2>
+                        <span class="tr-subtitle">Terminology Management</span>
+                    </div>
+                    <div class="tr-header-stats">
+                        <span class="tr-global-stat">
+                            <i class="fas fa-layer-group"></i> <strong id="gl-stat-glossaries">0</strong> glossaries
+                        </span>
+                        <span class="tr-global-stat" id="gl-stat-terms-wrap" style="display:none;">
+                            <i class="fas fa-list"></i> <strong id="gl-stat-terms">0</strong> terms
+                        </span>
+                    </div>
+                </div>
+
+                <!-- ========== GLOSSARY LIST VIEW ========== -->
+                <div id="gl-list-view">
+                    <!-- Filter Bar -->
+                    <div class="tr-filter-bar">
+                        <button class="tr-filter-btn active" data-filter="ALL" id="gl-filter-all">All</button>
+                        <button class="tr-filter-btn" data-filter="ACTIVE" id="gl-filter-active">Active</button>
+                        <button class="tr-filter-btn" data-filter="INACTIVE" id="gl-filter-inactive">Inactive</button>
+                    </div>
+
+                    <div class="tr-toolbar">
+                        <div class="tr-toolbar-left">
+                            <button class="btn btn-primary btn-small" id="gl-create-btn">
+                                <i class="fas fa-plus"></i> Create New Glossary
+                            </button>
+                            <div class="tr-search-wrap">
+                                <i class="fas fa-search"></i>
+                                <input type="text" id="gl-search-input" class="tr-search-input" placeholder="Search glossaries..." aria-label="Search glossaries">
+                            </div>
+                        </div>
+                        <div class="tr-toolbar-right" style="gap:6px;">
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <table class="ch-table" id="gl-glossary-table">
+                            <thead>
+                                <tr>
+                                    <th style="width:25%;text-align:left;padding-left:16px;">Name</th>
+                                    <th style="width:8%">Source</th>
+                                    <th style="width:22%">Target Languages</th>
+                                    <th style="width:7%;text-align:center">Terms</th>
+                                    <th style="width:12%">Created By</th>
+                                    <th style="width:12%">Created</th>
+                                    <th style="width:14%;text-align:center;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="gl-glossary-tbody">
+                                <tr><td colspan="7" class="empty-cell"><i class="fas fa-spinner fa-spin"></i> Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Pagination -->
+                    <div class="tr-pagination">
+                        <span class="tr-page-info" id="gl-glossary-page-info">Page 1</span>
+                        <div class="tr-page-btns">
+                            <button class="btn btn-small btn-secondary" id="gl-glossary-prev-btn" disabled><i class="fas fa-chevron-left"></i> Prev</button>
+                            <button class="btn btn-small btn-secondary" id="gl-glossary-next-btn" disabled>Next <i class="fas fa-chevron-right"></i></button>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- ========== TERM GRID VIEW ========== -->
+                <div id="gl-term-view" class="hidden">
+
+                    <!-- Back + Glossary Info + Action Icons -->
+                    <div class="gl-term-header">
+                        <div class="gl-term-header-left">
+                            <button class="btn btn-small btn-secondary" id="gl-back-btn"><i class="fas fa-arrow-left"></i> Back</button>
+                            <span class="gl-current-name" id="gl-current-name"></span>
+                        </div>
+                        <div class="gl-term-header-right">
+                            <input type="file" id="gl-import-file" accept=".xlsx" style="display:none;">
+                            <button class="gl-header-icon-btn" id="gl-import-btn" title="Import XLSX">
+                                <i class="fas fa-file-upload"></i>
+                            </button>
+                            <button class="gl-header-icon-btn" id="gl-export-btn" title="Export XLSX">
+                                <i class="fas fa-file-download"></i>
+                            </button>
+                            <button class="gl-header-icon-btn" id="gl-edit-glossary-btn" title="Settings">
+                                <i class="fas fa-cog"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Term Toolbar -->
+                    <div class="tr-toolbar" style="margin-top:8px;">
+                        <div class="tr-toolbar-left">
+                            <div class="tr-search-wrap">
+                                <i class="fas fa-search"></i>
+                                <input type="text" id="gl-term-search" class="tr-search-input" placeholder="Search terms..." aria-label="Search terms">
+                            </div>
+                        </div>
+                        <div class="tr-toolbar-right" style="gap:8px;">
+                            <button class="btn btn-small btn-secondary" id="gl-selected-count-btn" style="display:none;">
+                                <span id="gl-sel-count-display">0</span> selected
+                            </button>
+                            <button class="btn btn-primary btn-small" id="gl-add-term-btn"><i class="fas fa-plus"></i> Add Term</button>
+                            <button class="btn btn-small btn-danger" id="gl-bulk-delete-btn" disabled><i class="fas fa-trash"></i> Delete Selected (<span id="gl-sel-count">0</span>)</button>
+                        </div>
+                    </div>
+
+                    <!-- Term Matrix Table -->
+                    <div class="card tr-table-card">
+                        <div class="tr-table-wrap">
+                            <table class="tr-table" id="gl-term-table">
+                                <thead id="gl-term-thead">
+                                    <tr>
+                                        <th class="tr-th-check"><input type="checkbox" id="gl-select-all" title="Select all" aria-label="Select all terms"></th>
+                                        <th class="tr-th-title">Source Term</th>
+                                        <!-- Language columns inserted by JS -->
+                                        <th style="width:60px;text-align:center">Usage</th>
+                                        <th style="width:60px;text-align:center">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="gl-term-tbody">
+                                    <tr><td colspan="15" class="empty-cell">Select a glossary to view terms.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Pagination -->
+                    <div class="tr-pagination">
+                        <span class="tr-page-info" id="gl-page-info">Page 1 of 1</span>
+                        <div class="tr-page-btns">
+                            <button class="btn btn-small btn-secondary" id="gl-prev-btn" disabled><i class="fas fa-chevron-left"></i> Prev</button>
+                            <button class="btn btn-small btn-secondary" id="gl-next-btn" disabled>Next <i class="fas fa-chevron-right"></i></button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- ========== Edit Glossary Modal (for editing existing) ========== -->
+            <div class="tr-modal-overlay hidden" id="gl-glossary-modal-overlay">
+                <div class="tr-modal" style="max-width:500px;">
+                    <h3 id="gl-modal-title"><i class="fas fa-book"></i> Edit Glossary</h3>
+                    <div class="tr-modal-body">
+                        <div class="gl-form-group">
+                            <label>Glossary Name <span style="color:#ef4444">*</span></label>
+                            <input type="text" id="gl-modal-name" class="gl-input" placeholder="e.g. Product Glossary">
+                        </div>
+                        <div class="gl-form-group">
+                            <label for="gl-modal-source">Source Language</label>
+                            <select id="gl-modal-source" class="gl-input" style="max-height:200px;" aria-label="Source language">
+                                <option value="en">English (en)</option>
+                                <option value="en-GB">English - United Kingdom (en-GB)</option>
+                                <option value="en-US">English - United States (en-US)</option>
+                                <option value="ar">Arabic - UAE (ar)</option>
+                                <option value="zh-CN">Chinese - Simplified (zh-CN)</option>
+                                <option value="fr">French (fr)</option>
+                                <option value="de">German (de)</option>
+                                <option value="hi">Hindi (hi)</option>
+                                <option value="it">Italian (it)</option>
+                                <option value="ja">Japanese - Japan (ja)</option>
+                                <option value="fa">Persian (fa)</option>
+                                <option value="pt-BR">Portuguese - Brazil (pt-BR)</option>
+                                <option value="es">Spanish (es)</option>
+                                <option value="th">Thai (th)</option>
+                            </select>
+                        </div>
+                        <div class="gl-form-group">
+                            <label>Target Languages</label>
+                            <div class="gl-lang-checks" id="gl-modal-targets"></div>
+                        </div>
+                    </div>
+                    <div class="tr-modal-footer">
+                        <button class="btn btn-secondary" id="gl-modal-cancel">Cancel</button>
+                        <button class="btn btn-primary" id="gl-modal-save"><i class="fas fa-save"></i> Save</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========== Create New Glossary Left Drawer ========== -->
+            <div class="gl-drawer-overlay hidden" id="gl-glossary-drawer-overlay"></div>
+            <aside class="gl-drawer-left hidden" id="gl-glossary-drawer">
+                <div class="gl-drawer-header">
+                    <h3 id="gl-drawer-title">Creating New Glossary</h3>
+                    <button class="btn btn-icon gl-drawer-close" id="gl-drawer-close" aria-label="Close">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="gl-drawer-body" id="gl-drawer-body">
+                    <!-- Glossary Name -->
+                    <div class="gl-form-group">
+                        <label for="gl-drawer-name">Add Glossary Name <span style="color:#ef4444">*</span></label>
+                        <input type="text" id="gl-drawer-name" class="gl-input" placeholder="e.g. Product Glossary" aria-required="true">
+                        <span class="gl-error-msg" id="gl-error-name" style="display:none;color:#ef4444;font-size:12px;margin-top:4px;">Glossary name is required</span>
+                    </div>
+
+                    <!-- Term Language (Source) -->
+                    <div class="gl-form-group">
+                        <label for="gl-drawer-source">Choose Term Language <span style="color:#ef4444">*</span></label>
+                        <select id="gl-drawer-source" class="gl-input" aria-required="true">
+                            <option value="">-- Select --</option>
+                            <option value="en">English (en)</option>
+                            <option value="en-GB">English - United Kingdom (en-GB)</option>
+                            <option value="en-US">English - United States (en-US)</option>
+                            <option value="ar">Arabic - UAE (ar)</option>
+                            <option value="zh-CN">Chinese - Simplified (zh-CN)</option>
+                            <option value="fr">French (fr)</option>
+                            <option value="de">German (de)</option>
+                            <option value="hi">Hindi (hi)</option>
+                            <option value="it">Italian (it)</option>
+                            <option value="ja">Japanese - Japan (ja)</option>
+                            <option value="fa">Persian (fa)</option>
+                            <option value="pt-BR">Portuguese - Brazil (pt-BR)</option>
+                            <option value="es">Spanish (es)</option>
+                            <option value="th">Thai (th)</option>
+                        </select>
+                        <span class="gl-error-msg" id="gl-error-source" style="display:none;color:#ef4444;font-size:12px;margin-top:4px;">Term language is required</span>
+                    </div>
+
+                    <!-- Target Languages - Dual List -->
+                    <div class="gl-form-group">
+                        <label>Choose Target Language(s) <span style="color:#ef4444">*</span></label>
+                        <div class="gl-dual-list-container">
+                            <!-- Left: Available Languages -->
+                            <div class="gl-dual-list-left">
+                                <div class="gl-dual-list-header">
+                                    <span>Available Languages</span>
+                                    <div class="gl-search-wrap-small">
+                                        <i class="fas fa-search"></i>
+                                        <input type="text" id="gl-available-search" class="gl-search-input-small" placeholder="Search..." aria-label="Search available languages">
+                                    </div>
+                                </div>
+                                <div class="gl-dual-list-content" id="gl-available-languages">
+                                    <!-- Populated by JS -->
+                                </div>
+                            </div>
+                            <!-- Right: Selected Languages -->
+                            <div class="gl-dual-list-right">
+                                <div class="gl-dual-list-header">
+                                    <span>Selected Languages</span>
+                                    <div class="gl-search-wrap-small">
+                                        <i class="fas fa-search"></i>
+                                        <input type="text" id="gl-selected-search" class="gl-search-input-small" placeholder="Search..." aria-label="Search selected languages">
+                                    </div>
+                                </div>
+                                <div class="gl-dual-list-content" id="gl-selected-languages">
+                                    <div class="gl-empty-selection">No languages selected</div>
+                                </div>
+                            </div>
+                        </div>
+                        <span class="gl-error-msg" id="gl-error-targets" style="display:none;color:#ef4444;font-size:12px;margin-top:4px;">At least one target language is required</span>
+                    </div>
+                </div>
+                <div class="gl-drawer-footer">
+                    <button class="btn btn-primary" id="gl-drawer-create">
+                        <i class="fas fa-plus"></i> Create Glossary
+                    </button>
+                </div>
+            </aside>
+
+            <!-- ========== Add/Edit Term Drawer ========== -->
+            <div class="tr-drawer-overlay hidden" id="gl-term-drawer-overlay"></div>
+            <aside class="tr-drawer hidden" id="gl-term-drawer" style="width:520px;">
+                <div class="tr-drawer-header">
+                    <h3 id="gl-term-drawer-title">Add Term</h3>
+                    <button class="btn btn-icon tr-drawer-close" id="gl-term-drawer-close"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="tr-drawer-body" id="gl-term-drawer-body">
+                    <div class="gl-form-group">
+                        <label>Source Term <span style="color:#ef4444">*</span></label>
+                        <input type="text" id="gl-term-source" class="gl-input" placeholder="Enter source term...">
+                    </div>
+                    <div class="gl-form-group">
+                        <label>Part of Speech</label>
+                        <select id="gl-term-pos" class="gl-input">
+                            <option value="">-- Select --</option>
+                            <option value="noun">Noun</option>
+                            <option value="verb">Verb</option>
+                            <option value="adjective">Adjective</option>
+                            <option value="adverb">Adverb</option>
+                            <option value="phrase">Phrase</option>
+                            <option value="abbreviation">Abbreviation</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    <div class="gl-form-group">
+                        <label>Description</label>
+                        <textarea id="gl-term-desc" class="gl-input" rows="2" placeholder="Optional description..."></textarea>
+                    </div>
+                    <div class="gl-form-group">
+                        <label>Image URL</label>
+                        <input type="text" id="gl-term-image" class="gl-input" placeholder="https://example.com/image.png">
+                    </div>
+                    <hr style="margin:12px 0;border-color:#e2e8f0;">
+                    <h4 style="font-size:13px;margin-bottom:8px;"><i class="fas fa-globe"></i> Translations</h4>
+                    <div id="gl-term-translations-fields"></div>
+                </div>
+                <div class="tr-drawer-footer" style="padding:12px 16px;border-top:1px solid #e2e8f0;display:flex;gap:8px;justify-content:flex-end;">
+                    <button class="btn btn-secondary" id="gl-term-drawer-cancel">Cancel</button>
+                    <button class="btn btn-primary" id="gl-term-drawer-save"><i class="fas fa-save"></i> Save Term</button>
+                </div>
+            </aside>
+
+            <!-- Toast -->
+            <div id="gl-toast" class="pull-toast hidden">
+                <div class="pull-toast-inner">
+                    <i class="fas fa-spinner fa-spin" id="gl-toast-icon"></i>
+                    <span id="gl-toast-text">Working...</span>
+                </div>
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- Results Modal (kept for translate flow) -->
+        <div id="results-modal" class="modal hidden">
+            <div class="modal-content">
+                <span class="close">&times;</span>
+                <h2>Translation Results</h2>
+                <div id="results-content"></div>
+            </div>
+        </div>
+
+        <!-- Saved Translation View Modal -->
+        <div id="saved-translation-modal" class="modal hidden">
+            <div class="modal-content modal-content-wide">
+                <span class="close-saved-translation">&times;</span>
+                <h2>Saved Translation</h2>
+                <div id="saved-translation-view" class="saved-translation-view"></div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
