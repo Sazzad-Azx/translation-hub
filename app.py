@@ -16,19 +16,67 @@ if sys.platform == "win32":
         pass
 from flask import Flask, render_template, jsonify, request, send_file
 from flask_cors import CORS
+from functools import wraps
 from intercom_client import IntercomClient
 from translator import GPTTranslator
 from workflow import TranslationWorkflow
 from config import TARGET_LANGUAGES, BASE_LANGUAGE
+import auth_service
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, supports_credentials=True)
 
 
 @app.before_request
 def log_request():
     """Log method and path for every request (server-side debug)."""
     print(f"{request.method} {request.path}", flush=True)
+
+
+# ─── Auth helpers ──────────────────────────────────────────────
+PUBLIC_PATHS = {'/', '/favicon.ico', '/api/health', '/api/auth/login'}
+PUBLIC_PREFIXES = ('/static/',)
+
+
+def _get_token():
+    """Extract bearer token from Authorization header or cookie."""
+    auth = request.headers.get('Authorization', '')
+    if auth.startswith('Bearer '):
+        return auth[7:]
+    return request.cookies.get('auth_token', '')
+
+
+@app.before_request
+def require_auth():
+    """Block unauthenticated access to API and pages."""
+    path = request.path
+    # Allow public paths
+    if path in PUBLIC_PATHS:
+        return None
+    for prefix in PUBLIC_PREFIXES:
+        if path.startswith(prefix):
+            return None
+    # Check token
+    token = _get_token()
+    session = auth_service.validate_session(token)
+    if not session:
+        if path.startswith('/api/'):
+            return jsonify({'success': False, 'error': 'Unauthorized'}), 401
+        # For page requests, the frontend will show login
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
+    # Store session in request context
+    request.auth_session = session
+
+
+def require_super_admin(f):
+    """Decorator: only super_admin can access this route."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        session = getattr(request, 'auth_session', None)
+        if not session or session.get('role') != 'super_admin':
+            return jsonify({'success': False, 'error': 'Forbidden: super admin only'}), 403
+        return f(*args, **kwargs)
+    return decorated
 
 
 @app.errorhandler(404)
@@ -85,6 +133,102 @@ def favicon():
 def health():
     """Health check: returns JSON {ok: true} for monitoring/curl tests."""
     return jsonify({'ok': True})
+
+
+# ─── Auth API routes ──────────────────────────────────────────
+@app.route('/api/auth/login', methods=['POST'])
+def auth_login():
+    """Login with email and password."""
+    data = request.get_json(force=True)
+    email = data.get('email', '')
+    password = data.get('password', '')
+    if not email or not password:
+        return jsonify({'success': False, 'error': 'Email and password required'}), 400
+    result = auth_service.login(email, password)
+    if not result:
+        return jsonify({'success': False, 'error': 'Invalid email or password'}), 401
+    resp = jsonify({'success': True, **result})
+    resp.set_cookie('auth_token', result['token'], httponly=True, samesite='Lax', max_age=86400)
+    return resp
+
+
+@app.route('/api/auth/logout', methods=['POST'])
+def auth_logout():
+    """Logout and invalidate session."""
+    token = _get_token()
+    auth_service.logout(token)
+    resp = jsonify({'success': True})
+    resp.delete_cookie('auth_token')
+    return resp
+
+
+@app.route('/api/auth/me', methods=['GET'])
+def auth_me():
+    """Get current user info."""
+    session = getattr(request, 'auth_session', None)
+    if not session:
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    return jsonify({
+        'success': True,
+        'email': session['email'],
+        'name': session['name'],
+        'role': session['role'],
+    })
+
+
+@app.route('/api/auth/admins', methods=['GET'])
+@require_super_admin
+def auth_list_admins():
+    """List all admins (super admin only)."""
+    admins = auth_service.list_admins()
+    return jsonify({'success': True, 'admins': admins})
+
+
+@app.route('/api/auth/admins', methods=['POST'])
+@require_super_admin
+def auth_create_admin():
+    """Create a new admin (super admin only)."""
+    data = request.get_json(force=True)
+    email = data.get('email', '')
+    password = data.get('password', '')
+    name = data.get('name', '')
+    role = data.get('role', 'admin')
+    if not email or not password or not name:
+        return jsonify({'success': False, 'error': 'Email, password, and name are required'}), 400
+    result = auth_service.create_admin(email, password, name, role)
+    if result.get('success'):
+        return jsonify(result), 201
+    return jsonify(result), 400
+
+
+@app.route('/api/auth/admins/<int:admin_id>', methods=['PUT'])
+@require_super_admin
+def auth_update_admin(admin_id):
+    """Update an admin (super admin only)."""
+    data = request.get_json(force=True)
+    result = auth_service.update_admin(admin_id, data)
+    if result.get('success'):
+        return jsonify(result)
+    return jsonify(result), 400
+
+
+@app.route('/api/auth/admins/<int:admin_id>', methods=['DELETE'])
+@require_super_admin
+def auth_delete_admin(admin_id):
+    """Delete an admin (super admin only)."""
+    result = auth_service.delete_admin(admin_id)
+    if result.get('success'):
+        return jsonify(result)
+    return jsonify(result), 400
+
+
+@app.route('/api/auth/admins-table', methods=['GET'])
+@require_super_admin
+def auth_check_admins_table():
+    """Check if admins table exists."""
+    exists = auth_service.ensure_admins_table()
+    return jsonify({'success': True, 'exists': exists, 'sql': auth_service.get_admins_table_sql()})
+
 
 def _format_articles_for_frontend(articles):
     """Format article dicts for frontend."""

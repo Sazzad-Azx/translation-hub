@@ -2,6 +2,37 @@
 // FundedNext Translation Hub - Frontend Application
 // ============================================================
 
+// ─── Auth state ────────────────────────────────────────────
+let authState = {
+    token: localStorage.getItem('auth_token') || '',
+    user: null,   // {email, name, role}
+    authenticated: false,
+};
+
+function authHeaders() {
+    const h = { 'Content-Type': 'application/json' };
+    if (authState.token) h['Authorization'] = `Bearer ${authState.token}`;
+    return h;
+}
+
+// Intercept all fetch calls to /api/ to add auth header automatically
+const _originalFetch = window.fetch;
+window.fetch = function(url, options = {}) {
+    if (typeof url === 'string' && url.startsWith('/api/') && url !== '/api/auth/login') {
+        options = options || {};
+        options.headers = options.headers || {};
+        // If headers is a Headers object, convert
+        if (options.headers instanceof Headers) {
+            if (authState.token) options.headers.set('Authorization', `Bearer ${authState.token}`);
+        } else {
+            if (authState.token && !options.headers['Authorization']) {
+                options.headers['Authorization'] = `Bearer ${authState.token}`;
+            }
+        }
+    }
+    return _originalFetch.call(this, url, options);
+};
+
 // Global state
 let state = {
     articles: [],
@@ -116,10 +147,347 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 async function initializeApp() {
-    setupNavigation();
-    setupEventListeners();
-    testConnection();
-    await loadDashboardData();
+    setupLoginListeners();
+
+    // Check if user has a saved token
+    if (authState.token) {
+        const valid = await authCheckSession();
+        if (valid) {
+            showApp();
+            return;
+        }
+    }
+    // Show login screen
+    showLogin();
+}
+
+function showLogin() {
+    document.getElementById('login-screen').classList.remove('hidden');
+    document.getElementById('app-wrapper').classList.add('hidden');
+}
+
+function showApp() {
+    document.getElementById('login-screen').classList.add('hidden');
+    document.getElementById('app-wrapper').classList.remove('hidden');
+    authUpdateUI();
+
+    // Boot the main app once
+    if (!state._appBooted) {
+        state._appBooted = true;
+        setupNavigation();
+        setupEventListeners();
+        testConnection();
+        loadDashboardData();
+    }
+}
+
+// ─── Login listeners ──────────────────────────────────────
+function setupLoginListeners() {
+    const form = document.getElementById('login-form');
+    if (form) {
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('login-email').value.trim();
+            const password = document.getElementById('login-password').value;
+            const errEl = document.getElementById('login-error');
+            const btn = document.getElementById('login-btn');
+            const btnText = btn.querySelector('.login-btn-text');
+            const btnLoading = btn.querySelector('.login-btn-loading');
+
+            errEl.classList.add('hidden');
+            btn.disabled = true;
+            btnText.classList.add('hidden');
+            btnLoading.classList.remove('hidden');
+
+            try {
+                const resp = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password }),
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    authState.token = data.token;
+                    authState.user = { email: data.email, name: data.name, role: data.role };
+                    authState.authenticated = true;
+                    localStorage.setItem('auth_token', data.token);
+                    showApp();
+                } else {
+                    errEl.textContent = data.error || 'Login failed';
+                    errEl.classList.remove('hidden');
+                }
+            } catch (err) {
+                errEl.textContent = 'Network error. Please try again.';
+                errEl.classList.remove('hidden');
+            }
+
+            btn.disabled = false;
+            btnText.classList.remove('hidden');
+            btnLoading.classList.add('hidden');
+        });
+    }
+
+    // Password toggle
+    const toggle = document.getElementById('password-toggle');
+    if (toggle) {
+        toggle.addEventListener('click', () => {
+            const inp = document.getElementById('login-password');
+            const isPassword = inp.type === 'password';
+            inp.type = isPassword ? 'text' : 'password';
+            toggle.innerHTML = isPassword ? '<i class="fas fa-eye-slash"></i>' : '<i class="fas fa-eye"></i>';
+        });
+    }
+}
+
+async function authCheckSession() {
+    try {
+        const resp = await fetch('/api/auth/me', {
+            headers: authHeaders(),
+        });
+        if (resp.ok) {
+            const data = await resp.json();
+            if (data.success) {
+                authState.user = { email: data.email, name: data.name, role: data.role };
+                authState.authenticated = true;
+                return true;
+            }
+        }
+    } catch (e) { /* ignore */ }
+    // Invalid token
+    authState.token = '';
+    authState.authenticated = false;
+    localStorage.removeItem('auth_token');
+    return false;
+}
+
+function authUpdateUI() {
+    const user = authState.user;
+    if (!user) return;
+
+    // Avatar initials
+    const initials = (user.name || user.email || 'A')
+        .split(' ')
+        .map(w => w[0])
+        .join('')
+        .substring(0, 2)
+        .toUpperCase();
+    const avatarEl = document.getElementById('user-avatar');
+    if (avatarEl) avatarEl.textContent = initials;
+
+    const nameEl = document.getElementById('user-name');
+    if (nameEl) nameEl.textContent = user.name || user.email;
+
+    const ddName = document.getElementById('dropdown-user-name');
+    if (ddName) ddName.textContent = user.name || 'Admin';
+    const ddEmail = document.getElementById('dropdown-user-email');
+    if (ddEmail) ddEmail.textContent = user.email;
+    const ddRole = document.getElementById('dropdown-user-role');
+    if (ddRole) {
+        const roleLabel = user.role === 'super_admin' ? 'Super Admin' : user.role;
+        ddRole.textContent = roleLabel;
+    }
+
+    // Show admin nav for super admin
+    const adminNav = document.getElementById('admin-nav-item');
+    const adminDivider = document.getElementById('admin-nav-divider');
+    if (user.role === 'super_admin') {
+        if (adminNav) adminNav.style.display = '';
+        if (adminDivider) adminDivider.style.display = '';
+    } else {
+        if (adminNav) adminNav.style.display = 'none';
+        if (adminDivider) adminDivider.style.display = 'none';
+    }
+}
+
+async function authLogout() {
+    try {
+        await fetch('/api/auth/logout', {
+            method: 'POST',
+            headers: authHeaders(),
+        });
+    } catch (e) { /* ignore */ }
+    authState.token = '';
+    authState.user = null;
+    authState.authenticated = false;
+    localStorage.removeItem('auth_token');
+    // Reset app booted state
+    state._appBooted = false;
+    showLogin();
+    // Clear login form
+    const emailInp = document.getElementById('login-email');
+    const passInp = document.getElementById('login-password');
+    if (emailInp) emailInp.value = '';
+    if (passInp) passInp.value = '';
+}
+
+// ─── Admin panel ──────────────────────────────────────────
+let adminState = { loaded: false, admins: [], tableExists: true };
+
+async function initAdminSection() {
+    if (adminState.loaded) { loadAdmins(); return; }
+    adminState.loaded = true;
+
+    // Check table
+    try {
+        const resp = await fetch('/api/auth/admins-table', { headers: authHeaders() });
+        const data = await resp.json();
+        if (!data.exists) {
+            adminState.tableExists = false;
+            const banner = document.getElementById('admin-setup-banner');
+            const sqlPre = document.getElementById('admin-setup-sql');
+            if (banner) banner.classList.remove('hidden');
+            if (sqlPre) sqlPre.textContent = data.sql || '';
+        }
+    } catch (e) { /* ignore */ }
+
+    // Copy SQL button
+    const copyBtn = document.getElementById('admin-copy-sql');
+    if (copyBtn) {
+        copyBtn.addEventListener('click', () => {
+            const sql = document.getElementById('admin-setup-sql').textContent;
+            navigator.clipboard.writeText(sql);
+            copyBtn.innerHTML = '<i class="fas fa-check"></i> Copied!';
+            setTimeout(() => { copyBtn.innerHTML = '<i class="fas fa-copy"></i> Copy SQL'; }, 2000);
+        });
+    }
+
+    // Add admin button
+    const addBtn = document.getElementById('admin-add-btn');
+    if (addBtn) {
+        addBtn.addEventListener('click', async () => {
+            const name = document.getElementById('admin-add-name').value.trim();
+            const email = document.getElementById('admin-add-email').value.trim();
+            const password = document.getElementById('admin-add-password').value;
+            const role = document.getElementById('admin-add-role').value;
+            const errEl = document.getElementById('admin-add-error');
+
+            errEl.classList.add('hidden');
+            if (!name || !email || !password) {
+                errEl.textContent = 'All fields are required.';
+                errEl.classList.remove('hidden');
+                return;
+            }
+            if (password.length < 6) {
+                errEl.textContent = 'Password must be at least 6 characters.';
+                errEl.classList.remove('hidden');
+                return;
+            }
+
+            addBtn.disabled = true;
+            addBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Adding...';
+
+            try {
+                const resp = await fetch('/api/auth/admins', {
+                    method: 'POST',
+                    headers: authHeaders(),
+                    body: JSON.stringify({ name, email, password, role }),
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    document.getElementById('admin-add-name').value = '';
+                    document.getElementById('admin-add-email').value = '';
+                    document.getElementById('admin-add-password').value = '';
+                    loadAdmins();
+                } else {
+                    errEl.textContent = data.error || 'Failed to create admin.';
+                    errEl.classList.remove('hidden');
+                }
+            } catch (e) {
+                errEl.textContent = 'Network error.';
+                errEl.classList.remove('hidden');
+            }
+
+            addBtn.disabled = false;
+            addBtn.innerHTML = '<i class="fas fa-plus"></i> Add Admin';
+        });
+    }
+
+    await loadAdmins();
+}
+
+async function loadAdmins() {
+    const tbody = document.getElementById('admin-table-body');
+    if (!tbody) return;
+
+    try {
+        const resp = await fetch('/api/auth/admins', { headers: authHeaders() });
+        const data = await resp.json();
+        adminState.admins = data.admins || [];
+    } catch (e) {
+        adminState.admins = [];
+    }
+
+    // Always show super admin row at top
+    const superAdmin = authState.user && authState.user.role === 'super_admin' ? authState.user : null;
+
+    let html = '';
+
+    // Super admin row (not deletable)
+    if (superAdmin) {
+        html += `<tr>
+            <td><strong>${escapeHtml(superAdmin.name)}</strong></td>
+            <td>${escapeHtml(superAdmin.email)}</td>
+            <td><span class="admin-role-badge super_admin">Super Admin</span></td>
+            <td><span class="admin-status-badge active">Active</span></td>
+            <td>—</td>
+            <td><span style="color:#94a3b8;font-size:12px;">Protected</span></td>
+        </tr>`;
+    }
+
+    // Other admins
+    if (adminState.admins.length === 0) {
+        html += `<tr><td colspan="6" style="text-align:center;padding:20px;color:#94a3b8;">No other admins yet. Add one above.</td></tr>`;
+    } else {
+        for (const admin of adminState.admins) {
+            const created = admin.created_at ? new Date(admin.created_at).toLocaleDateString() : '—';
+            const statusClass = admin.is_active ? 'active' : 'inactive';
+            const statusText = admin.is_active ? 'Active' : 'Inactive';
+            html += `<tr data-admin-id="${admin.id}">
+                <td>${escapeHtml(admin.name || '')}</td>
+                <td>${escapeHtml(admin.email)}</td>
+                <td><span class="admin-role-badge ${admin.role}">${admin.role}</span></td>
+                <td><span class="admin-status-badge ${statusClass}">${statusText}</span></td>
+                <td>${created}</td>
+                <td>
+                    <button class="admin-action-btn" title="Toggle Active" onclick="adminToggleActive(${admin.id}, ${!admin.is_active})">
+                        <i class="fas fa-${admin.is_active ? 'ban' : 'check-circle'}"></i>
+                    </button>
+                    <button class="admin-action-btn delete" title="Delete" onclick="adminDelete(${admin.id})">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            </tr>`;
+        }
+    }
+
+    tbody.innerHTML = html;
+}
+
+async function adminToggleActive(adminId, newStatus) {
+    try {
+        await fetch(`/api/auth/admins/${adminId}`, {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify({ is_active: newStatus }),
+        });
+        loadAdmins();
+    } catch (e) { alert('Failed to update admin.'); }
+}
+
+async function adminDelete(adminId) {
+    if (!confirm('Are you sure you want to delete this admin?')) return;
+    try {
+        await fetch(`/api/auth/admins/${adminId}`, {
+            method: 'DELETE',
+            headers: authHeaders(),
+        });
+        loadAdmins();
+    } catch (e) { alert('Failed to delete admin.'); }
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 // ---- Navigation ----
@@ -163,7 +531,8 @@ function switchSection(sectionId) {
         'automation': 'Automation',
         'fundee-update': 'Fundee Update',
         'language': 'Language',
-        'glossary': 'Glossary'
+        'glossary': 'Glossary',
+        'admin': 'Admin Panel'
     };
     const topbarTitle = document.getElementById('topbar-title');
     if (topbarTitle) topbarTitle.textContent = titleMap[sectionId] || sectionId;
@@ -186,6 +555,9 @@ function switchSection(sectionId) {
     }
     if (sectionId === 'push' && !state.push.loaded) {
         initPushSection();
+    }
+    if (sectionId === 'admin') {
+        initAdminSection();
     }
 }
 
@@ -231,6 +603,25 @@ function setupEventListeners() {
                     await loadDashboardData();
                     break;
             }
+        });
+    }
+
+    // ── User menu & logout ──
+    const userMenuBtn = document.getElementById('user-menu-btn');
+    const userDropdown = document.getElementById('user-dropdown');
+    if (userMenuBtn && userDropdown) {
+        userMenuBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            userDropdown.classList.toggle('hidden');
+        });
+        document.addEventListener('click', () => {
+            userDropdown.classList.add('hidden');
+        });
+    }
+    const logoutBtn = document.getElementById('logout-btn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', () => {
+            authLogout();
         });
     }
 

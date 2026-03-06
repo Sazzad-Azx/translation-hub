@@ -48,3 +48,7 @@ SUPABASE_URL = os.getenv("SUPABASE_URL", "https://reiacekmluvuguqfswac.supabase.
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJlaWFjZWttbHV2dWd1cWZzd2FjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MDAxMTE3NywiZXhwIjoyMDg1NTg3MTc3fQ.dAHUSTH5XhAS6WAGFA1YyqBcIFzjGCWWwsRj1jH8ruo")
 # Optional: Postgres connection URI for running migrations (create table). From Dashboard > Database > Connection string (URI).
 SUPABASE_DB_URL = os.getenv("SUPABASE_DB_URL", "")
+
+# Super Admin Configuration (stored in environment variables)
+SUPER_ADMIN_EMAIL = os.getenv("SUPER_ADMIN_EMAIL", "")
+SUPER_ADMIN_PASSWORD = os.getenv("SUPER_ADMIN_PASSWORD", "")
