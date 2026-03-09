@@ -1062,16 +1062,16 @@ def import_glossary_xlsx(glossary_id: str, file_bytes: bytes) -> Dict:
     updated = 0
     errors = []
 
+    # ── Phase 1: Parse all rows ──────────────────────────────────────────
+    parsed_rows = []  # list of (source_term, pos, desc, translations)
     for row_idx, row in enumerate(rows[1:], start=2):
         try:
-            # Convert row to list if it's a tuple
             if isinstance(row, tuple):
                 row = list(row)
-            
-            # Ensure row has enough elements
-            while len(row) <= max([source_idx, pos_idx or 0, desc_idx or 0] + [c for c in locale_cols.values()]):
+            max_col = max([source_idx, pos_idx or 0, desc_idx or 0] + list(locale_cols.values()))
+            while len(row) <= max_col:
                 row.append(None)
-            
+
             source_term = str(row[source_idx] or "").strip() if source_idx < len(row) and row[source_idx] is not None else ""
             if not source_term or source_term.lower() in ("", "none", "null"):
                 continue
@@ -1079,7 +1079,7 @@ def import_glossary_xlsx(glossary_id: str, file_bytes: bytes) -> Dict:
             pos = ""
             if pos_idx is not None and pos_idx < len(row) and row[pos_idx] is not None:
                 pos = str(row[pos_idx] or "").strip()
-            
+
             desc = ""
             if desc_idx is not None and desc_idx < len(row) and row[desc_idx] is not None:
                 desc = str(row[desc_idx] or "").strip()
@@ -1091,39 +1091,127 @@ def import_glossary_xlsx(glossary_id: str, file_bytes: bytes) -> Dict:
                     if val and val.lower() not in ("", "none", "null"):
                         translations[loc] = val
 
-            key = source_term.lower()
-            if key in existing_by_source:
-                # Update existing term
-                existing = existing_by_source[key]
-                term_id = existing.get("id", "")
-                if term_id:
-                    # Merge translations (don't wipe unspecified ones)
-                    existing_trans = existing.get("translations", {})
-                    merged = {**existing_trans, **translations}
-                    update_term(term_id, {
-                        "source_term": source_term,
-                        "part_of_speech": pos or existing.get("part_of_speech", ""),
-                        "description": desc or existing.get("description", ""),
-                    }, merged)
-                    updated += 1
-            else:
-                # Create new term
-                create_term(
-                    glossary_id=glossary_id,
-                    source_term=source_term,
-                    translations=translations,
-                    part_of_speech=pos,
-                    description=desc,
-                )
-                created += 1
-                existing_by_source[key] = {"source_term": source_term}
-
+            parsed_rows.append((source_term, pos, desc, translations, row_idx))
         except Exception as e:
-            import traceback
-            error_msg = f"Row {row_idx}: {str(e)}"
-            if len(errors) < 10:  # Limit error messages
-                errors.append(error_msg)
+            if len(errors) < 10:
+                errors.append(f"Row {row_idx}: {str(e)}")
             elif len(errors) == 10:
-                errors.append(f"... and more errors (showing first 10)")
+                errors.append("... and more errors (showing first 10)")
+
+    # ── Phase 2: Batch-create new terms (without translations) ───────────
+    new_term_rows = []   # Supabase rows to insert
+    new_term_meta = []   # (index, translations) for later
+    update_items = []    # (term_id, source_term, pos, desc, translations)
+
+    for source_term, pos, desc, translations, row_idx in parsed_rows:
+        key = source_term.lower()
+        if key in existing_by_source:
+            existing = existing_by_source[key]
+            term_id = existing.get("id", "")
+            if term_id:
+                update_items.append((term_id, source_term, pos, desc, translations, existing))
+        else:
+            new_term_rows.append({
+                "glossary_id": glossary_id,
+                "source_term": source_term.strip(),
+                "part_of_speech": pos,
+                "description": desc,
+                "is_active": True,
+                "created_at": _now_iso(),
+                "updated_at": _now_iso(),
+            })
+            new_term_meta.append(translations)
+            existing_by_source[key] = {"source_term": source_term}
+
+    # Batch-insert new terms in chunks of 50
+    created_term_ids = []
+    BATCH = 50
+    for i in range(0, len(new_term_rows), BATCH):
+        chunk = new_term_rows[i : i + BATCH]
+        try:
+            h = _headers("return=representation")
+            resp = requests.post(f"{REST_BASE}/{TERMS_TABLE}", json=chunk, headers=h, timeout=30)
+            if resp.ok:
+                data = resp.json()
+                for item in data:
+                    created_term_ids.append(item.get("id", ""))
+                created += len(data)
+            else:
+                if len(errors) < 10:
+                    errors.append(f"Batch insert failed ({resp.status_code}): {resp.text[:200]}")
+        except Exception as e:
+            if len(errors) < 10:
+                errors.append(f"Batch insert error: {str(e)}")
+
+    # ── Phase 3: Batch-insert translations for new terms ─────────────────
+    all_translation_rows = []
+    for idx, term_id in enumerate(created_term_ids):
+        if not term_id or idx >= len(new_term_meta):
+            continue
+        translations = new_term_meta[idx]
+        for locale, translated in translations.items():
+            if locale and translated:
+                all_translation_rows.append({
+                    "term_id": term_id,
+                    "locale": locale,
+                    "translated_term": translated,
+                    "updated_at": _now_iso(),
+                })
+
+    # Insert translations in batches of 200
+    TRANS_BATCH = 200
+    for i in range(0, len(all_translation_rows), TRANS_BATCH):
+        chunk = all_translation_rows[i : i + TRANS_BATCH]
+        try:
+            h = _headers("resolution=merge-duplicates,return=minimal")
+            resp = requests.post(f"{REST_BASE}/{TERM_TRANSLATIONS_TABLE}", json=chunk, headers=h, timeout=30)
+            if not resp.ok:
+                if len(errors) < 10:
+                    errors.append(f"Translation batch insert failed ({resp.status_code}): {resp.text[:200]}")
+        except Exception as e:
+            if len(errors) < 10:
+                errors.append(f"Translation batch error: {str(e)}")
+
+    # ── Phase 4: Handle updates for existing terms ───────────────────────
+    update_translation_rows = []
+    for term_id, source_term, pos, desc, translations, existing in update_items:
+        try:
+            existing_trans = existing.get("translations", {})
+            merged = {**existing_trans, **translations}
+            # Update term metadata
+            patch = {
+                "source_term": source_term,
+                "part_of_speech": pos or existing.get("part_of_speech", ""),
+                "description": desc or existing.get("description", ""),
+                "updated_at": _now_iso(),
+            }
+            h = _headers("return=minimal")
+            requests.patch(f"{REST_BASE}/{TERMS_TABLE}?id=eq.{term_id}", json=patch, headers=h, timeout=10)
+            # Collect translations for batch upsert
+            for locale, translated in merged.items():
+                if locale and translated:
+                    update_translation_rows.append({
+                        "term_id": term_id,
+                        "locale": locale,
+                        "translated_term": translated,
+                        "updated_at": _now_iso(),
+                    })
+            updated += 1
+        except Exception as e:
+            if len(errors) < 10:
+                errors.append(f"Update term {source_term}: {str(e)}")
+
+    # Batch-upsert translations for updated terms
+    for i in range(0, len(update_translation_rows), TRANS_BATCH):
+        chunk = update_translation_rows[i : i + TRANS_BATCH]
+        try:
+            h = _headers("resolution=merge-duplicates,return=minimal")
+            resp = requests.post(f"{REST_BASE}/{TERM_TRANSLATIONS_TABLE}", json=chunk, headers=h, timeout=30)
+            if not resp.ok:
+                if len(errors) < 10:
+                    errors.append(f"Update translation batch failed ({resp.status_code}): {resp.text[:200]}")
+        except Exception as e:
+            if len(errors) < 10:
+                errors.append(f"Update translation batch error: {str(e)}")
 
     return {"created": created, "updated": updated, "errors": errors}
