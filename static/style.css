@@ -2565,29 +2565,26 @@ textarea.gl-input { resize: vertical; }
 .gl-drawer-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.45);
     z-index: 1000;
     opacity: 0;
-    transition: opacity 1s ease;
+    transition: opacity .3s ease;
     pointer-events: none;
-    visibility: hidden;
 }
 .gl-drawer-overlay:not(.hidden) {
     opacity: 1;
     pointer-events: auto;
-    visibility: visible;
 }
 .gl-drawer-overlay.hidden {
     opacity: 0;
     pointer-events: none;
-    visibility: hidden;
 }
 
 .gl-drawer-left {
     position: fixed;
     top: 0;
     right: 0;
-    width: 520px;
+    width: 420px;
     max-width: 90vw;
     height: 100vh;
     background: var(--card-bg);
@@ -2596,10 +2593,9 @@ textarea.gl-input { resize: vertical; }
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    pointer-events: none;
     will-change: transform;
     transform: translateX(100%);
-    transition: transform 1s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform .35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .gl-drawer-left:not(.hidden) {
     transform: translateX(0);
