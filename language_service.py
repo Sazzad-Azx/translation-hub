@@ -79,18 +79,36 @@ def _read_supabase() -> Dict[str, str] | None:
 
 
 def _write_supabase(langs: Dict[str, str]) -> bool:
-    """Upsert the active_languages row in automation_settings."""
+    """Write the active_languages row in automation_settings (PATCH if exists, POST if not)."""
     if not REST_BASE:
         return False
+    msg = json.dumps(langs, ensure_ascii=False)
     try:
+        # Try PATCH first (update existing row)
+        h = _headers("return=minimal")
+        r = requests.patch(
+            f"{REST_BASE}/{TABLE}?key=eq.{LANG_KEY}",
+            json={"last_run_message": msg},
+            headers=h,
+            timeout=15,
+        )
+        if r.status_code in (200, 204):
+            # PATCH returns 200/204 even if 0 rows matched — check via Content-Range or just verify
+            # If the row existed, we're done. If not, fall through to POST.
+            # Quick check: read it back
+            existing = _read_supabase()
+            if existing is not None:
+                return True
+
+        # Row doesn't exist — INSERT
         payload = {
             "key": LANG_KEY,
             "enabled": True,
-            "last_run_message": json.dumps(langs, ensure_ascii=False),
+            "last_run_message": msg,
         }
-        h = _headers("return=minimal,resolution=merge-duplicates")
-        r = requests.post(f"{REST_BASE}/{TABLE}", json=payload, headers=h, timeout=15)
-        return r.status_code in (200, 201, 204)
+        h2 = _headers("return=minimal")
+        r2 = requests.post(f"{REST_BASE}/{TABLE}", json=payload, headers=h2, timeout=15)
+        return r2.status_code in (200, 201, 204)
     except Exception:
         return False
 
