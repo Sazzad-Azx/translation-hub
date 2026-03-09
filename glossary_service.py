@@ -184,23 +184,26 @@ def list_glossaries(
     except Exception:
         return {"glossaries": [], "total": 0, "page": page, "page_size": page_size}
 
-    # Get term counts per glossary
+    # Get term counts per glossary (use Prefer: count=exact to avoid 1000-row cap)
+    count_headers = dict(h)
+    count_headers["Prefer"] = "count=exact"
     for g in all_glossaries:
         gid = g.get("id", "")
         try:
             t_resp = requests.get(
                 f"{REST_BASE}/{TERMS_TABLE}",
-                headers=h,
+                headers=count_headers,
                 params={
                     "select": "id",
                     "glossary_id": f"eq.{gid}",
                     "is_active": "eq.true",
+                    "limit": "1",
                 },
                 timeout=10,
             )
             if t_resp.ok:
-                terms = t_resp.json()
-                g["term_count"] = len(terms) if isinstance(terms, list) else 0
+                cr = t_resp.headers.get("Content-Range", "")
+                g["term_count"] = int(cr.split("/")[-1]) if "/" in cr else 0
             else:
                 g["term_count"] = 0
         except Exception:
@@ -394,23 +397,33 @@ def list_terms(
     h = _headers()
     h.pop("Prefer", None)
 
-    # Fetch all active terms for this glossary
-    params: Dict = {
-        "select": "*",
-        "glossary_id": f"eq.{glossary_id}",
-        "is_active": "eq.true",
-        "order": "source_term.asc",
-        "limit": "5000",
-    }
+    # Fetch all active terms for this glossary (paginate past Supabase 1000-row limit)
+    all_terms = []
+    FETCH_BATCH = 1000
+    offset = 0
     try:
-        resp = requests.get(f"{REST_BASE}/{TERMS_TABLE}", headers=h, params=params, timeout=15)
-        if not resp.ok:
-            return {"terms": [], "total": 0, "page": 1, "page_size": page_size}
-        all_terms = resp.json()
-        if not isinstance(all_terms, list):
-            all_terms = []
+        while True:
+            params: Dict = {
+                "select": "*",
+                "glossary_id": f"eq.{glossary_id}",
+                "is_active": "eq.true",
+                "order": "source_term.asc",
+                "limit": str(FETCH_BATCH),
+                "offset": str(offset),
+            }
+            resp = requests.get(f"{REST_BASE}/{TERMS_TABLE}", headers=h, params=params, timeout=20)
+            if not resp.ok:
+                break
+            batch = resp.json()
+            if not isinstance(batch, list):
+                break
+            all_terms.extend(batch)
+            if len(batch) < FETCH_BATCH:
+                break  # Last page
+            offset += FETCH_BATCH
     except Exception:
-        return {"terms": [], "total": 0, "page": 1, "page_size": page_size}
+        if not all_terms:
+            return {"terms": [], "total": 0, "page": 1, "page_size": page_size}
 
     # Fetch translations for these terms (in batches to handle Supabase row limits)
     term_ids = [t["id"] for t in all_terms if t.get("id")]
