@@ -2584,7 +2584,7 @@ textarea.gl-input { resize: vertical; }
     position: fixed;
     top: 0;
     right: 0;
-    width: 420px;
+    width: 520px;
     max-width: 90vw;
     height: 100vh;
     background: var(--card-bg);
