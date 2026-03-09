@@ -978,11 +978,48 @@
         <!-- SECTION: Language                          -->
         <!-- ========================================== -->
         <section class="page-section" id="section-language">
-            <div class="placeholder-page">
-                <div class="placeholder-icon"><i class="fas fa-globe"></i></div>
-                <h2>Language</h2>
-                <p>Configure supported languages, manage locale settings, and set translation priorities per language pair.</p>
-                <span class="badge-coming-soon">Coming Soon</span>
+            <!-- Header -->
+            <div class="lang-header">
+                <div class="lang-header-left">
+                    <h2><i class="fas fa-globe"></i> Languages</h2>
+                    <span class="lang-base-badge">English</span>
+                    <span class="lang-info-tip" title="Base language is English. Translations are created for each target language below."><i class="fas fa-info-circle"></i></span>
+                </div>
+                <div class="lang-header-right">
+                    <div class="lang-search-box">
+                        <i class="fas fa-search"></i>
+                        <input type="text" id="lang-search" placeholder="Search languages..." />
+                    </div>
+                </div>
+            </div>
+
+            <!-- Language Grid -->
+            <div class="lang-grid" id="lang-grid">
+                <!-- Cards rendered by JS -->
+            </div>
+
+            <!-- Add Language Modal -->
+            <div class="lang-modal-overlay hidden" id="lang-modal-overlay">
+                <div class="lang-modal">
+                    <div class="lang-modal-header">
+                        <h3><i class="fas fa-plus-circle"></i> Add Language(s)</h3>
+                        <button class="lang-modal-close" onclick="langCloseModal()"><i class="fas fa-times"></i></button>
+                    </div>
+                    <div class="lang-modal-search">
+                        <i class="fas fa-search"></i>
+                        <input type="text" id="lang-modal-search" placeholder="Search available languages..." />
+                    </div>
+                    <div class="lang-modal-list" id="lang-modal-list">
+                        <!-- Rendered by JS -->
+                    </div>
+                    <div class="lang-modal-footer">
+                        <span class="lang-modal-count" id="lang-modal-count">0 selected</span>
+                        <div class="lang-modal-actions">
+                            <button class="btn-secondary" onclick="langCloseModal()">Cancel</button>
+                            <button class="btn-primary" id="lang-modal-add-btn" onclick="langConfirmAdd()" disabled>Add Selected</button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </section>
 

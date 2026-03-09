@@ -30,7 +30,10 @@ CORS(app, supports_credentials=True)
 @app.before_request
 def log_request():
     """Log method and path for every request (server-side debug)."""
-    print(f"{request.method} {request.path}", flush=True)
+    try:
+        print(f"{request.method} {request.path}", flush=True)
+    except OSError:
+        pass
 
 
 # ─── Auth helpers ──────────────────────────────────────────────
@@ -485,12 +488,130 @@ def translate_articles():
 
 @app.route('/api/languages', methods=['GET'])
 def get_languages():
-    """Get available target languages"""
+    """Get available target languages (refreshes from Supabase)."""
+    import language_service
+    language_service.load_active_languages()
     return jsonify({
         'success': True,
         'languages': TARGET_LANGUAGES,
         'base_language': BASE_LANGUAGE
     })
+
+
+@app.route('/api/languages/available', methods=['GET'])
+def languages_available():
+    """Return the full catalogue of languages that can be added."""
+    from config import ALL_AVAILABLE_LANGUAGES
+    import language_service
+    active = language_service.load_active_languages()
+    available = {c: n for c, n in ALL_AVAILABLE_LANGUAGES.items() if c not in active}
+    return jsonify({'success': True, 'available': available, 'active_codes': list(active.keys())})
+
+
+@app.route('/api/languages/add', methods=['POST'])
+def languages_add():
+    """Add one or more languages. Body: {codes: ["ko", "ru", ...]}"""
+    import language_service
+    data = request.get_json(force=True)
+    codes = data.get('codes', [])
+    if not codes:
+        return jsonify({'success': False, 'error': 'No language codes provided'}), 400
+
+    result = language_service.add_languages(codes)
+    return jsonify(result)
+
+
+@app.route('/api/languages/<code>/remove', methods=['DELETE'])
+def languages_remove(code):
+    """Remove (deactivate) a language."""
+    import language_service
+    result = language_service.remove_language(code)
+    if result.get('success'):
+        return jsonify(result)
+    return jsonify(result), 500
+
+
+@app.route('/api/languages/table-setup', methods=['GET'])
+def languages_table_check():
+    """Check if the target_languages table exists."""
+    import language_service
+    exists = language_service.table_exists()
+    return jsonify({'success': True, 'exists': exists})
+
+
+@app.route('/api/languages/create-table', methods=['POST'])
+def languages_create_table():
+    """Auto-create the target_languages table and seed defaults."""
+    import language_service
+    result = language_service.auto_create_table()
+    if result.get('success'):
+        language_service._seed_defaults()
+        language_service.load_active_languages()
+    return jsonify(result)
+
+
+@app.route('/api/languages/stats', methods=['GET'])
+def language_stats():
+    """
+    Per-language translation statistics.
+    Returns translated / total counts for each target locale.
+    """
+    try:
+        from translation_supabase import list_article_translations
+        from pull_service import list_pull_articles
+        import language_service
+        language_service.load_active_languages()
+
+        # Total pulled articles (denominator for each language)
+        total_articles = 0
+        try:
+            result = list_pull_articles(page=1, page_size=1)
+            total_articles = result.get('total', 0)
+        except Exception:
+            pass
+
+        # All translations
+        translations = []
+        try:
+            translations = list_article_translations()
+        except Exception:
+            pass
+
+        # Count per locale
+        per_locale = {}
+        for code, name in TARGET_LANGUAGES.items():
+            per_locale[code] = {
+                'code': code,
+                'name': name,
+                'translated': 0,
+                'pushed': 0,
+                'outdated': 0,
+                'failed': 0,
+                'total': total_articles,
+            }
+
+        for t in translations:
+            locale = t.get('target_locale', '')
+            status = (t.get('status') or '').lower()
+            if locale not in per_locale:
+                continue
+            if status in ('translated', 'pushed'):
+                per_locale[locale]['translated'] += 1
+            if status == 'pushed':
+                per_locale[locale]['pushed'] += 1
+            if status == 'outdated':
+                per_locale[locale]['outdated'] += 1
+            if status == 'failed':
+                per_locale[locale]['failed'] += 1
+
+        return jsonify({
+            'success': True,
+            'total_articles': total_articles,
+            'base_language': BASE_LANGUAGE,
+            'languages': per_locale,
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 def _make_json_serializable(obj):
@@ -1918,8 +2039,24 @@ if __name__ == '__main__':
     # Load environment variables
     from dotenv import load_dotenv
     load_dotenv()
-    
+
     port = int(os.getenv('PORT', 5000))
     debug = os.getenv('FLASK_DEBUG', 'False').lower() == 'true'
-    
-    app.run(host='0.0.0.0', port=port, debug=debug)
+
+    # On Windows the default 'stat' reloader causes [Errno 22] Invalid argument.
+    # Use 'watchdog' if installed, otherwise disable the reloader.
+    reloader_type = None
+    if debug and sys.platform == 'win32':
+        try:
+            import watchdog  # noqa: F401
+            reloader_type = 'watchdog'
+        except ImportError:
+            reloader_type = None  # disable reloader below
+
+    if reloader_type:
+        app.run(host='0.0.0.0', port=port, debug=debug, reloader_type=reloader_type)
+    elif debug and sys.platform == 'win32':
+        # Run with debug but without reloader to avoid Errno 22
+        app.run(host='0.0.0.0', port=port, debug=True, use_reloader=False)
+    else:
+        app.run(host='0.0.0.0', port=port, debug=debug)

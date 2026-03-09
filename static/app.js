@@ -114,6 +114,13 @@ let state = {
         usage: {},
         drawerSelectedLanguages: new Set(),
     },
+    // Language module state
+    lang: {
+        loaded: false,
+        languages: {},
+        totalArticles: 0,
+        search: '',
+    },
     // Push module state
     push: {
         loaded: false,
@@ -931,6 +938,9 @@ function switchSection(sectionId) {
     if (sectionId === 'push' && !state.push.loaded) {
         initPushSection();
     }
+    if (sectionId === 'language' && !state.lang.loaded) {
+        initLanguageSection();
+    }
     if (sectionId === 'automation') {
         initAutomationSection();
     }
@@ -972,6 +982,9 @@ function setupEventListeners() {
                     break;
                 case 'push':
                     await pushLoadArticles();
+                    break;
+                case 'language':
+                    await langLoadStats();
                     break;
                 case 'glossary':
                     await glLoadGlossaries();
@@ -4210,9 +4223,9 @@ function glShowToast(msg, iconClass) {
 }
 
 
-// --- Expose TARGET_LANGUAGES for glossary modal ---
-const TARGET_LANGUAGES = {
-    "ar": "Arabic (UAE)",
+// --- TARGET_LANGUAGES – mutable; refreshed from /api/languages on load ---
+let TARGET_LANGUAGES = {
+    "ar": "Arabic",
     "zh-CN": "Chinese - Simplified",
     "fr": "French",
     "de": "German",
@@ -4224,6 +4237,20 @@ const TARGET_LANGUAGES = {
     "th": "Thai",
     "pt-BR": "Portuguese - Brazil"
 };
+
+// Fetch active languages from backend and update TARGET_LANGUAGES
+async function refreshTargetLanguages() {
+    try {
+        const resp = await fetch('/api/languages');
+        const data = await resp.json();
+        if (data.success && data.languages) {
+            TARGET_LANGUAGES = data.languages;
+        }
+    } catch (_) {}
+}
+
+// Auto-refresh on page load
+document.addEventListener('DOMContentLoaded', () => { refreshTargetLanguages(); });
 
 
 
@@ -4240,9 +4267,10 @@ const TARGET_LANGUAGES = {
 //   • "Push All Ready" → all rows × selected langs (READY/OUTDATED)
 //   • Status cells: badge only (no inline push buttons)
 
-function initPushSection() {
+async function initPushSection() {
     if (state.push.loaded) return;
     state.push.loaded = true;
+    await refreshTargetLanguages();
     pushPopulateLangDropdown();
     pushSetupEventListeners();
     pushLoadArticles();
@@ -4827,3 +4855,337 @@ function pushShowToast(msg, type = 'info') {
     clearTimeout(toast._t);
     toast._t = setTimeout(() => { toast.style.opacity = '0'; }, 5000);
 }
+
+// ===========================================================================
+// Language Section
+// ===========================================================================
+
+// Map language codes → ISO 3166-1 alpha-2 country codes for flag images
+const LANG_COUNTRY = {
+    'ar': 'ae', 'bn-IN': 'in', 'bs': 'ba', 'pt-BR': 'br', 'bg': 'bg',
+    'ca': 'es', 'hr': 'hr', 'cs': 'cz', 'da': 'dk', 'nl': 'nl',
+    'et': 'ee', 'fi': 'fi', 'fr': 'fr', 'de': 'de', 'el': 'gr',
+    'he': 'il', 'hi': 'in', 'hu': 'hu', 'id': 'id', 'it': 'it',
+    'ja': 'jp', 'ko': 'kr', 'lv': 'lv', 'lt': 'lt', 'ms': 'my',
+    'mn': 'mn', 'nb': 'no', 'fa': 'ir', 'pl': 'pl', 'pt': 'pt',
+    'ro': 'ro', 'ru': 'ru', 'sr': 'rs', 'zh-CN': 'cn', 'sl': 'si',
+    'es': 'es', 'sw': 'ke', 'sv': 'se', 'th': 'th', 'zh-TW': 'tw',
+    'tr': 'tr', 'uk': 'ua', 'ur': 'pk', 'vi': 'vn',
+};
+
+function langFlagImg(code, size = 28) {
+    const cc = LANG_COUNTRY[code] || '';
+    if (!cc) return `<span style="font-size:${size}px">\u{1F310}</span>`;
+    return `<img src="https://flagcdn.com/w40/${cc}.png" srcset="https://flagcdn.com/w80/${cc}.png 2x" width="${size}" height="${Math.round(size * 0.7)}" alt="${cc}" style="border-radius:3px;object-fit:cover;vertical-align:middle" />`;
+}
+
+function initLanguageSection() {
+    state.lang.loaded = true;
+
+    // Search handler
+    const searchInput = document.getElementById('lang-search');
+    if (searchInput) {
+        searchInput.addEventListener('input', () => {
+            state.lang.search = searchInput.value.trim().toLowerCase();
+            langRenderGrid();
+        });
+    }
+
+    // Close any open dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.lang-card-menu') && !e.target.closest('.lang-dropdown')) {
+            document.querySelectorAll('.lang-dropdown.open').forEach(d => d.classList.remove('open'));
+        }
+    });
+
+    langLoadStats();
+}
+
+async function langLoadStats() {
+    const grid = document.getElementById('lang-grid');
+    if (!grid) return;
+    grid.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Loading languages...</div>';
+
+    try {
+        const resp = await fetch('/api/languages/stats');
+        const data = await resp.json();
+        if (!data.success) throw new Error(data.error || 'Failed to load');
+        state.lang.languages = data.languages || {};
+        state.lang.totalArticles = data.total_articles || 0;
+
+        // Sync the global TARGET_LANGUAGES so push/translate/glossary see new languages
+        await refreshTargetLanguages();
+        // Re-populate push language dropdown if already initialized
+        if (state.push.loaded) pushPopulateLangDropdown();
+
+        langRenderGrid();
+    } catch (err) {
+        grid.innerHTML = `<div style="text-align:center;padding:40px;color:#991b1b"><i class="fas fa-exclamation-triangle"></i> ${escapeHtml(err.message)}</div>`;
+    }
+}
+
+function langRenderGrid() {
+    const grid = document.getElementById('lang-grid');
+    if (!grid) return;
+
+    const langs = state.lang.languages;
+    const search = state.lang.search;
+    const total = state.lang.totalArticles || 1;
+
+    let entries = Object.values(langs);
+    if (search) {
+        entries = entries.filter(l =>
+            l.name.toLowerCase().includes(search) ||
+            l.code.toLowerCase().includes(search)
+        );
+    }
+    entries.sort((a, b) => a.name.localeCompare(b.name));
+
+    // Build "Add Language(s)" card first
+    const addCard = `
+    <div class="lang-card-add" onclick="langOpenModal()">
+        <i class="fas fa-plus-circle"></i>
+        <span>Add Language(s)</span>
+    </div>`;
+
+    const cards = entries.map(l => {
+        const translatedPct = total > 0 ? Math.round((l.translated / total) * 100) : 0;
+        const pushedPct = total > 0 ? Math.round((l.pushed / total) * 100) : 0;
+        const flag = langFlagImg(l.code, 32);
+
+        return `
+        <div class="lang-card" data-code="${escapeHtml(l.code)}">
+            <div class="lang-card-top">
+                <span class="lang-card-flag">${flag}</span>
+                <button class="lang-card-menu" onclick="langToggleMenu(this, event)" title="Actions">
+                    <i class="fas fa-ellipsis-v"></i>
+                </button>
+                <div class="lang-dropdown" id="lang-menu-${escapeHtml(l.code)}">
+                    <button class="lang-dropdown-item" onclick="langAction('translate','${escapeHtml(l.code)}')">
+                        <i class="fas fa-language"></i> Translate All
+                    </button>
+                    <button class="lang-dropdown-item" onclick="langAction('push','${escapeHtml(l.code)}')">
+                        <i class="fas fa-upload"></i> Push All
+                    </button>
+                    <button class="lang-dropdown-item" onclick="langAction('details','${escapeHtml(l.code)}')">
+                        <i class="fas fa-chart-bar"></i> View Details
+                    </button>
+                    <button class="lang-dropdown-item" onclick="langAction('remove','${escapeHtml(l.code)}')" style="color:#991b1b">
+                        <i class="fas fa-trash-alt" style="color:#991b1b"></i> Remove
+                    </button>
+                </div>
+            </div>
+            <div class="lang-card-name">${escapeHtml(l.name)}<span class="lang-card-code">${escapeHtml(l.code)}</span></div>
+            <div class="lang-progress-row">
+                <div class="lang-progress-item">
+                    <span class="lang-progress-label">Translated</span>
+                    <div class="lang-progress-track">
+                        <div class="lang-progress-bar translated" style="width:${translatedPct}%"></div>
+                    </div>
+                    <span class="lang-progress-pct">${translatedPct}%</span>
+                </div>
+                <div class="lang-progress-item">
+                    <span class="lang-progress-label">Pushed</span>
+                    <div class="lang-progress-track">
+                        <div class="lang-progress-bar pushed" style="width:${pushedPct}%"></div>
+                    </div>
+                    <span class="lang-progress-pct">${pushedPct}%</span>
+                </div>
+            </div>
+            <div class="lang-card-stats">
+                <span class="lang-stat"><strong>${l.translated}</strong> / ${l.total} translated</span>
+                <span class="lang-stat"><strong>${l.pushed}</strong> pushed</span>
+                ${l.outdated ? `<span class="lang-stat" style="color:#b45309"><strong>${l.outdated}</strong> outdated</span>` : ''}
+                ${l.failed ? `<span class="lang-stat" style="color:#991b1b"><strong>${l.failed}</strong> failed</span>` : ''}
+            </div>
+        </div>`;
+    }).join('');
+
+    grid.innerHTML = addCard + cards;
+}
+
+function langToggleMenu(btn, event) {
+    event.stopPropagation();
+    const dropdown = btn.nextElementSibling;
+    // Close all others first
+    document.querySelectorAll('.lang-dropdown.open').forEach(d => {
+        if (d !== dropdown) d.classList.remove('open');
+    });
+    dropdown.classList.toggle('open');
+}
+
+function langAction(action, code) {
+    document.querySelectorAll('.lang-dropdown.open').forEach(d => d.classList.remove('open'));
+
+    switch (action) {
+        case 'translate':
+            switchSection('translate');
+            break;
+        case 'push':
+            switchSection('push');
+            break;
+        case 'details':
+            langShowDetails(code);
+            break;
+        case 'remove':
+            langRemoveLanguage(code);
+            break;
+    }
+}
+
+function langShowDetails(code) {
+    const l = state.lang.languages[code];
+    if (!l) return;
+    const total = l.total || 0;
+    const translatedPct = total > 0 ? Math.round((l.translated / total) * 100) : 0;
+    const pushedPct = total > 0 ? Math.round((l.pushed / total) * 100) : 0;
+    const missing = total - l.translated - l.outdated - l.failed;
+
+    alert(
+        `${l.name} (${code})\n\n` +
+        `Total Articles: ${total}\n` +
+        `Translated: ${l.translated} (${translatedPct}%)\n` +
+        `Pushed: ${l.pushed} (${pushedPct}%)\n` +
+        `Outdated: ${l.outdated}\n` +
+        `Failed: ${l.failed}\n` +
+        `Missing: ${missing > 0 ? missing : 0}`
+    );
+}
+
+async function langRemoveLanguage(code) {
+    const l = state.lang.languages[code];
+    const name = l ? l.name : code;
+    if (!confirm(`Remove "${name}" (${code}) from active languages?\n\nExisting translations will not be deleted.`)) return;
+
+    try {
+        const resp = await fetch(`/api/languages/${encodeURIComponent(code)}/remove`, { method: 'DELETE' });
+        const data = await resp.json();
+        if (!data.success) throw new Error(data.error || 'Failed');
+        await langLoadStats();
+    } catch (err) {
+        alert('Error removing language: ' + err.message);
+    }
+}
+
+// ─── Add Language Modal ─────────────────────────────────────────────────
+
+let _langAvailable = {};       // {code: name} of languages not yet active
+let _langModalSelected = new Set();
+
+async function langOpenModal() {
+    const overlay = document.getElementById('lang-modal-overlay');
+    if (!overlay) return;
+
+    // Fetch available languages
+    try {
+        const resp = await fetch('/api/languages/available');
+        const data = await resp.json();
+        if (!data.success) throw new Error(data.error || 'Failed');
+        _langAvailable = data.available || {};
+    } catch (err) {
+        alert('Error loading available languages: ' + err.message);
+        return;
+    }
+
+    _langModalSelected.clear();
+    document.getElementById('lang-modal-search').value = '';
+    overlay.classList.remove('hidden');
+    langRenderModalList();
+    langUpdateModalCount();
+    document.getElementById('lang-modal-search').focus();
+}
+
+function langCloseModal() {
+    document.getElementById('lang-modal-overlay')?.classList.add('hidden');
+    _langModalSelected.clear();
+}
+
+function langRenderModalList(filter = '') {
+    const listEl = document.getElementById('lang-modal-list');
+    if (!listEl) return;
+
+    let entries = Object.entries(_langAvailable).map(([code, name]) => ({ code, name }));
+    if (filter) {
+        entries = entries.filter(l =>
+            l.name.toLowerCase().includes(filter) ||
+            l.code.toLowerCase().includes(filter)
+        );
+    }
+    entries.sort((a, b) => a.name.localeCompare(b.name));
+
+    if (entries.length === 0) {
+        listEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text-muted)">No available languages found.</div>';
+        return;
+    }
+
+    listEl.innerHTML = entries.map(l => {
+        const flag = langFlagImg(l.code, 24);
+        const checked = _langModalSelected.has(l.code) ? 'checked' : '';
+        const selectedClass = _langModalSelected.has(l.code) ? ' selected' : '';
+        return `
+        <div class="lang-modal-item${selectedClass}" onclick="langModalToggle('${escapeHtml(l.code)}')">
+            <input type="checkbox" ${checked} onclick="event.stopPropagation(); langModalToggle('${escapeHtml(l.code)}')" />
+            <span class="lang-modal-item-flag">${flag}</span>
+            <div class="lang-modal-item-info">
+                <div class="lang-modal-item-name">${escapeHtml(l.name)}</div>
+                <div class="lang-modal-item-code">${escapeHtml(l.code)}</div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function langModalToggle(code) {
+    if (_langModalSelected.has(code)) {
+        _langModalSelected.delete(code);
+    } else {
+        _langModalSelected.add(code);
+    }
+    const filter = (document.getElementById('lang-modal-search')?.value || '').trim().toLowerCase();
+    langRenderModalList(filter);
+    langUpdateModalCount();
+}
+
+function langUpdateModalCount() {
+    const countEl = document.getElementById('lang-modal-count');
+    const btn = document.getElementById('lang-modal-add-btn');
+    const n = _langModalSelected.size;
+    if (countEl) countEl.textContent = `${n} selected`;
+    if (btn) {
+        btn.disabled = n === 0;
+        btn.textContent = n > 0 ? `Add ${n} Language${n > 1 ? 's' : ''}` : 'Add Selected';
+    }
+}
+
+async function langConfirmAdd() {
+    if (_langModalSelected.size === 0) return;
+    const btn = document.getElementById('lang-modal-add-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Adding...'; }
+
+    try {
+        const resp = await fetch('/api/languages/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ codes: [..._langModalSelected] }),
+        });
+        const data = await resp.json();
+        if (data.errors && data.errors.length) {
+            alert('Some languages could not be added:\n' + data.errors.join('\n'));
+        }
+        langCloseModal();
+        await langLoadStats();
+    } catch (err) {
+        alert('Error adding languages: ' + err.message);
+        if (btn) { btn.disabled = false; btn.textContent = 'Add Selected'; }
+    }
+}
+
+// Wire up modal search
+document.addEventListener('DOMContentLoaded', () => {
+    const searchInput = document.getElementById('lang-modal-search');
+    if (searchInput) {
+        searchInput.addEventListener('input', () => {
+            const filter = searchInput.value.trim().toLowerCase();
+            langRenderModalList(filter);
+        });
+    }
+});

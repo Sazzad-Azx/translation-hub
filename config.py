@@ -8,9 +8,57 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
-# Target languages based on the UI (11 languages)
-TARGET_LANGUAGES: Dict[str, str] = {
-    "ar": "Arabic (UAE)",
+# Master catalogue of every language the user can choose from.
+ALL_AVAILABLE_LANGUAGES: Dict[str, str] = {
+    "ar": "Arabic",
+    "bn-IN": "Bengali - India",
+    "bs": "Bosnian",
+    "pt-BR": "Portuguese - Brazil",
+    "bg": "Bulgarian",
+    "ca": "Catalan",
+    "hr": "Croatian",
+    "cs": "Czech",
+    "da": "Danish - Denmark",
+    "nl": "Dutch",
+    "et": "Estonian",
+    "fi": "Finnish",
+    "fr": "French",
+    "de": "German",
+    "el": "Greek",
+    "he": "Hebrew",
+    "hi": "Hindi",
+    "hu": "Hungarian",
+    "id": "Indonesian",
+    "it": "Italian",
+    "ja": "Japanese - Japan",
+    "ko": "Korean",
+    "lv": "Latvian",
+    "lt": "Lithuanian",
+    "ms": "Malay",
+    "mn": "Mongolian",
+    "nb": "Norwegian",
+    "fa": "Persian",
+    "pl": "Polish",
+    "pt": "Portuguese - Portugal",
+    "ro": "Romanian",
+    "ru": "Russian",
+    "sr": "Serbian",
+    "zh-CN": "Chinese - Simplified",
+    "sl": "Slovenian",
+    "es": "Spanish",
+    "sw": "Swahili",
+    "sv": "Swedish",
+    "th": "Thai",
+    "zh-TW": "Chinese - Traditional",
+    "tr": "Turkish",
+    "uk": "Ukrainian",
+    "ur": "Urdu",
+    "vi": "Vietnamese",
+}
+
+# Default active target languages (used as seed if Supabase table is empty)
+DEFAULT_TARGET_LANGUAGES: Dict[str, str] = {
+    "ar": "Arabic",
     "zh-CN": "Chinese - Simplified",
     "fr": "French",
     "de": "German",
@@ -20,8 +68,11 @@ TARGET_LANGUAGES: Dict[str, str] = {
     "fa": "Persian",
     "es": "Spanish",
     "th": "Thai",
-    "pt-BR": "Portuguese - Brazil"
+    "pt-BR": "Portuguese - Brazil",
 }
+
+# Mutable dict – updated at runtime from Supabase by language_service.
+TARGET_LANGUAGES: Dict[str, str] = dict(DEFAULT_TARGET_LANGUAGES)
 
 # Base language
 BASE_LANGUAGE = "en"
