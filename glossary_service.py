@@ -412,30 +412,35 @@ def list_terms(
     except Exception:
         return {"terms": [], "total": 0, "page": 1, "page_size": page_size}
 
-    # Fetch all translations for these terms
+    # Fetch translations for these terms (in batches to handle Supabase row limits)
     term_ids = [t["id"] for t in all_terms if t.get("id")]
     trans_map: Dict[str, List[Dict]] = {}
     if term_ids:
-        try:
-            # Batch fetch (might be large)
-            t_resp = requests.get(
-                f"{REST_BASE}/{TERM_TRANSLATIONS_TABLE}",
-                headers=h,
-                params={
-                    "select": "id,term_id,locale,translated_term",
-                    "limit": "50000",
-                },
-                timeout=20,
-            )
-            if t_resp.ok:
-                all_trans = t_resp.json()
-                if isinstance(all_trans, list):
-                    for tr in all_trans:
-                        tid = tr.get("term_id", "")
-                        if tid:
-                            trans_map.setdefault(tid, []).append(tr)
-        except Exception:
-            pass
+        # Fetch in batches of 100 term_ids to stay within URL length limits
+        BATCH_SIZE = 100
+        for i in range(0, len(term_ids), BATCH_SIZE):
+            batch_ids = term_ids[i : i + BATCH_SIZE]
+            ids_str = ",".join(batch_ids)
+            try:
+                t_resp = requests.get(
+                    f"{REST_BASE}/{TERM_TRANSLATIONS_TABLE}",
+                    headers=h,
+                    params={
+                        "select": "id,term_id,locale,translated_term",
+                        "term_id": f"in.({ids_str})",
+                        "limit": "5000",
+                    },
+                    timeout=20,
+                )
+                if t_resp.ok:
+                    all_trans = t_resp.json()
+                    if isinstance(all_trans, list):
+                        for tr in all_trans:
+                            tid = tr.get("term_id", "")
+                            if tid:
+                                trans_map.setdefault(tid, []).append(tr)
+            except Exception:
+                pass
 
     # Enrich terms with translations dict
     for term in all_terms:
