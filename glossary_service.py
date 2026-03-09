@@ -1167,6 +1167,12 @@ def import_glossary_xlsx(glossary_id: str, file_bytes: bytes) -> Dict:
                     "updated_at": _now_iso(),
                 })
 
+    # Deduplicate: keep last translation for each (term_id, locale) pair
+    deduped = {}
+    for row in all_translation_rows:
+        deduped[(row["term_id"], row["locale"])] = row
+    all_translation_rows = list(deduped.values())
+
     # Insert translations in batches of 200 (upsert on term_id+locale)
     TRANS_BATCH = 200
     upsert_url = f"{REST_BASE}/{TERM_TRANSLATIONS_TABLE}?on_conflict=term_id,locale"
@@ -1210,6 +1216,12 @@ def import_glossary_xlsx(glossary_id: str, file_bytes: bytes) -> Dict:
         except Exception as e:
             if len(errors) < 10:
                 errors.append(f"Update term {source_term}: {str(e)}")
+
+    # Deduplicate update translations
+    deduped2 = {}
+    for row in update_translation_rows:
+        deduped2[(row["term_id"], row["locale"])] = row
+    update_translation_rows = list(deduped2.values())
 
     # Batch-upsert translations for updated terms
     for i in range(0, len(update_translation_rows), TRANS_BATCH):
