@@ -105,7 +105,7 @@ let state = {
         terms: [],
         selectedTermIds: new Set(),
         termPage: 1,
-        termPageSize: 25,
+        termPageSize: 100,
         termTotal: 0,
         termSearch: '',
         termSearchTimeout: null,
