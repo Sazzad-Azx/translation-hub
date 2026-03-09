@@ -1,7 +1,8 @@
 """
 Language management service.
-Stores active target languages in Supabase `target_languages` table.
-Falls back to a local JSON file when the table doesn't exist.
+Stores active target languages in Supabase `automation_settings` table
+under the key 'active_languages' (as JSON in last_run_message).
+Falls back to a local JSON file for local development.
 Mutates config.TARGET_LANGUAGES so all other services pick up changes.
 """
 import os
@@ -18,10 +19,11 @@ from config import (
     TARGET_LANGUAGES,
 )
 
-TABLE = "target_languages"
+TABLE = "automation_settings"
+LANG_KEY = "active_languages"
 REST_BASE = f"{SUPABASE_URL.rstrip('/')}/rest/v1" if SUPABASE_URL else ""
 
-# Local JSON fallback – stored next to this file
+# Local JSON fallback – stored next to this file (for local dev)
 _LOCAL_FILE = Path(__file__).parent / "active_languages.json"
 
 
@@ -34,68 +36,68 @@ def _headers(prefer: str = "return=representation") -> Dict[str, str]:
     }
 
 
-# ── Table helpers ────────────────────────────────────────────────────────
-
+# ── Kept for backward compat with app.py routes ─────────────────────────
 def get_table_sql() -> str:
-    return """
-CREATE TABLE IF NOT EXISTS target_languages (
-    code TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    is_active BOOLEAN NOT NULL DEFAULT true,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-"""
+    return "-- No separate table needed. Uses automation_settings with key='active_languages'."
+
+def table_exists() -> bool:
+    return True  # We use automation_settings which already exists
+
+def auto_create_table() -> dict:
+    return {"success": True, "message": "Uses existing automation_settings table."}
 
 
-def _supabase_table_exists() -> bool:
+# ── Supabase helpers (automation_settings row) ───────────────────────────
+
+def _read_supabase() -> Dict[str, str] | None:
+    """Read the active_languages row from automation_settings."""
+    if not REST_BASE:
+        return None
+    try:
+        h = dict(_headers())
+        h.pop("Prefer", None)
+        r = requests.get(
+            f"{REST_BASE}/{TABLE}",
+            headers=h,
+            params={"select": "last_run_message", "key": f"eq.{LANG_KEY}"},
+            timeout=15,
+        )
+        if not r.ok:
+            return None
+        rows = r.json()
+        if not rows:
+            return None  # Row doesn't exist yet
+        raw = rows[0].get("last_run_message", "")
+        if not raw:
+            return None
+        data = json.loads(raw)
+        if isinstance(data, dict) and data:
+            return data
+    except Exception:
+        pass
+    return None
+
+
+def _write_supabase(langs: Dict[str, str]) -> bool:
+    """Upsert the active_languages row in automation_settings."""
     if not REST_BASE:
         return False
     try:
-        r = requests.get(
-            f"{REST_BASE}/{TABLE}?select=code&limit=1",
-            headers=_headers(),
-            timeout=10,
-        )
-        return r.status_code == 200
+        payload = {
+            "key": LANG_KEY,
+            "enabled": True,
+            "last_run_message": json.dumps(langs, ensure_ascii=False),
+        }
+        h = _headers("return=minimal,resolution=merge-duplicates")
+        r = requests.post(f"{REST_BASE}/{TABLE}", json=payload, headers=h, timeout=15)
+        return r.status_code in (200, 201, 204)
     except Exception:
         return False
 
 
-def table_exists() -> bool:
-    return _supabase_table_exists()
-
-
-def auto_create_table() -> dict:
-    sql = get_table_sql()
-    db_url = os.getenv("SUPABASE_DB_URL", "")
-    if db_url:
-        try:
-            import pg8000
-            import urllib.parse as urlparse
-            parsed = urlparse.urlparse(db_url)
-            conn = pg8000.connect(
-                host=parsed.hostname,
-                port=parsed.port or 5432,
-                database=parsed.path.lstrip("/"),
-                user=parsed.username,
-                password=parsed.password,
-                ssl_context=True,
-            )
-            cur = conn.cursor()
-            cur.execute(sql)
-            conn.commit()
-            cur.close()
-            conn.close()
-            return {"success": True, "method": "pg8000"}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-    return {"success": False, "error": "SUPABASE_DB_URL not set", "sql": sql}
-
-
-# ── Local JSON fallback ─────────────────────────────────────────────────
+# ── Local JSON fallback (for local dev) ──────────────────────────────────
 
 def _load_local() -> Dict[str, str]:
-    """Load active languages from local JSON file."""
     if _LOCAL_FILE.exists():
         try:
             data = json.loads(_LOCAL_FILE.read_text(encoding="utf-8"))
@@ -107,71 +109,35 @@ def _load_local() -> Dict[str, str]:
 
 
 def _save_local(langs: Dict[str, str]) -> None:
-    """Persist active languages to local JSON file."""
     try:
         _LOCAL_FILE.write_text(json.dumps(langs, indent=2, ensure_ascii=False), encoding="utf-8")
     except Exception:
         pass
 
 
-# ── Supabase CRUD ────────────────────────────────────────────────────────
-
-def _seed_defaults_supabase() -> None:
-    rows = [{"code": c, "name": n, "is_active": True} for c, n in DEFAULT_TARGET_LANGUAGES.items()]
-    if not rows:
-        return
-    h = _headers("return=minimal,resolution=merge-duplicates")
-    requests.post(f"{REST_BASE}/{TABLE}", json=rows, headers=h, timeout=15)
-
-
-def _load_from_supabase() -> Dict[str, str] | None:
-    """Try loading from Supabase. Returns None if table doesn't exist."""
-    if not REST_BASE:
-        return None
-    try:
-        h = dict(_headers())
-        h.pop("Prefer", None)
-        r = requests.get(
-            f"{REST_BASE}/{TABLE}",
-            headers=h,
-            params={"select": "code,name", "is_active": "eq.true", "order": "name.asc"},
-            timeout=15,
-        )
-        if r.status_code == 404 or r.status_code == 406:
-            return None  # table doesn't exist
-        if r.ok:
-            rows = r.json()
-            if not rows:
-                _seed_defaults_supabase()
-                return dict(DEFAULT_TARGET_LANGUAGES)
-            return {row["code"]: row["name"] for row in rows}
-    except Exception:
-        pass
-    return None
-
-
 # ── Public API ───────────────────────────────────────────────────────────
-
-def _use_supabase() -> bool:
-    """Check if we should use Supabase (table exists) or local fallback."""
-    return _supabase_table_exists()
-
 
 def load_active_languages() -> Dict[str, str]:
     """
-    Fetch active languages (Supabase first, local JSON fallback).
+    Fetch active languages. Tries Supabase first, then local file.
+    Seeds defaults if nothing stored yet.
     Updates config.TARGET_LANGUAGES in place.
     """
     # Try Supabase
-    result = _load_from_supabase()
+    result = _read_supabase()
     if result is not None:
         TARGET_LANGUAGES.clear()
         TARGET_LANGUAGES.update(result)
-        _save_local(result)  # keep local in sync
+        _save_local(result)
         return result
 
-    # Fallback to local file
+    # No row in Supabase yet – try local file
     result = _load_local()
+
+    # Seed to Supabase so future requests find it
+    if REST_BASE:
+        _write_supabase(result)
+
     TARGET_LANGUAGES.clear()
     TARGET_LANGUAGES.update(result)
     return result
@@ -182,64 +148,47 @@ def add_languages(codes: List[str]) -> dict:
     added = []
     errors = []
 
-    use_sb = _use_supabase()
+    # Load current
+    current = _read_supabase()
+    if current is None:
+        current = _load_local()
 
     for code in codes:
         name = ALL_AVAILABLE_LANGUAGES.get(code)
         if not name:
             errors.append(f"Unknown language code: {code}")
             continue
+        current[code] = name
+        added.append(code)
 
-        if use_sb:
-            # Supabase upsert
-            row = {"code": code, "name": name, "is_active": True}
-            h = _headers("return=representation,resolution=merge-duplicates")
-            try:
-                r = requests.post(f"{REST_BASE}/{TABLE}", json=row, headers=h, timeout=10)
-                if r.ok:
-                    added.append(code)
-                else:
-                    errors.append(f"{code}: {r.text}")
-            except Exception as e:
-                errors.append(f"{code}: {e}")
-        else:
-            # Local fallback
-            added.append(code)
-
-    if not use_sb and added:
-        # Update local file
-        current = _load_local()
-        for code in added:
-            current[code] = ALL_AVAILABLE_LANGUAGES[code]
+    # Persist
+    if not _write_supabase(current):
         _save_local(current)
 
-    # Refresh in-memory dict
-    load_active_languages()
+    # Refresh in-memory
+    TARGET_LANGUAGES.clear()
+    TARGET_LANGUAGES.update(current)
+    _save_local(current)
+
     return {"success": True, "added": added, "errors": errors}
 
 
 def remove_language(code: str) -> dict:
-    """Remove (deactivate) a language."""
-    use_sb = _use_supabase()
-
-    if use_sb:
-        try:
-            h = _headers("return=minimal")
-            r = requests.patch(
-                f"{REST_BASE}/{TABLE}?code=eq.{code}",
-                json={"is_active": False},
-                headers=h,
-                timeout=10,
-            )
-            if r.status_code not in (200, 204):
-                return {"success": False, "error": r.text}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-    else:
-        # Local fallback
+    """Remove a language."""
+    current = _read_supabase()
+    if current is None:
         current = _load_local()
-        current.pop(code, None)
+
+    if code not in current:
+        return {"success": False, "error": f"Language {code} not found"}
+
+    del current[code]
+
+    if not _write_supabase(current):
         _save_local(current)
 
-    load_active_languages()
+    TARGET_LANGUAGES.clear()
+    TARGET_LANGUAGES.update(current)
+    _save_local(current)
+
     return {"success": True}
