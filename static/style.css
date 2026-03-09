@@ -4017,6 +4017,78 @@ textarea.gl-input { resize: vertical; }
     color: var(--text-muted);
 }
 
+/* Remove Language confirm modal */
+.lang-confirm-modal {
+    background: var(--card-bg);
+    border-radius: 14px;
+    width: 440px;
+    max-width: 95vw;
+    box-shadow: 0 20px 60px rgba(0,0,0,.18);
+    animation: langSlideUp .2s ease;
+}
+.lang-confirm-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+}
+.lang-confirm-header h3 {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.lang-confirm-header h3 i {
+    color: #991b1b;
+}
+.lang-confirm-body {
+    padding: 20px 24px;
+}
+.lang-confirm-body p {
+    margin: 0 0 8px;
+    font-size: 14px;
+    color: var(--text);
+    line-height: 1.5;
+}
+.lang-confirm-note {
+    font-size: 13px !important;
+    color: var(--text-muted) !important;
+    font-style: italic;
+}
+.lang-confirm-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 14px 24px;
+    border-top: 1px solid var(--border);
+}
+.btn-danger {
+    padding: 8px 18px;
+    border-radius: var(--radius);
+    border: none;
+    background: #dc2626;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: background .15s;
+}
+.btn-danger:hover {
+    background: #b91c1c;
+}
+.btn-danger:disabled {
+    opacity: .5;
+    cursor: not-allowed;
+}
+
 /* Add Language card (dashed) */
 .lang-card-add {
     background: var(--card-bg);

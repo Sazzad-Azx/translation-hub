@@ -5052,17 +5052,39 @@ function langShowDetails(code) {
     );
 }
 
-async function langRemoveLanguage(code) {
+let _langRemoveCode = null;
+
+function langRemoveLanguage(code) {
     const l = state.lang.languages[code];
     const name = l ? l.name : code;
-    if (!confirm(`Remove "${name}" (${code}) from active languages?\n\nExisting translations will not be deleted.`)) return;
+    _langRemoveCode = code;
+
+    const flag = langFlagImg(code, 22);
+    document.getElementById('lang-confirm-text').innerHTML =
+        `<strong>Remove ${flag} ${escapeHtml(name)}</strong> <span style="color:var(--text-muted)">(${escapeHtml(code)})</span> from active languages?`;
+    document.getElementById('lang-confirm-btn').disabled = false;
+    document.getElementById('lang-confirm-btn').innerHTML = '<i class="fas fa-trash-alt"></i> Remove';
+    document.getElementById('lang-confirm-overlay').classList.remove('hidden');
+}
+
+function langCloseConfirm() {
+    document.getElementById('lang-confirm-overlay')?.classList.add('hidden');
+    _langRemoveCode = null;
+}
+
+async function langDoRemove() {
+    if (!_langRemoveCode) return;
+    const btn = document.getElementById('lang-confirm-btn');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Removing...'; }
 
     try {
-        const resp = await fetch(`/api/languages/${encodeURIComponent(code)}/remove`, { method: 'DELETE' });
+        const resp = await fetch(`/api/languages/${encodeURIComponent(_langRemoveCode)}/remove`, { method: 'DELETE' });
         const data = await resp.json();
         if (!data.success) throw new Error(data.error || 'Failed');
+        langCloseConfirm();
         await langLoadStats();
     } catch (err) {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-trash-alt"></i> Remove'; }
         alert('Error removing language: ' + err.message);
     }
 }
