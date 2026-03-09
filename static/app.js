@@ -4862,7 +4862,7 @@ function pushShowToast(msg, type = 'info') {
 
 // Map language codes → ISO 3166-1 alpha-2 country codes for flag images
 const LANG_COUNTRY = {
-    'ar': 'ae', 'bn-IN': 'in', 'bs': 'ba', 'pt-BR': 'br', 'bg': 'bg',
+    'ar': 'ae', 'bn-BD': 'bd', 'bs': 'ba', 'pt-BR': 'br', 'bg': 'bg',
     'ca': 'es', 'hr': 'hr', 'cs': 'cz', 'da': 'dk', 'nl': 'nl',
     'et': 'ee', 'fi': 'fi', 'fr': 'fr', 'de': 'de', 'el': 'gr',
     'he': 'il', 'hi': 'in', 'hu': 'hu', 'id': 'id', 'it': 'it',

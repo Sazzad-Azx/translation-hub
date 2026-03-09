@@ -11,7 +11,7 @@ load_dotenv()
 # Master catalogue of every language the user can choose from.
 ALL_AVAILABLE_LANGUAGES: Dict[str, str] = {
     "ar": "Arabic",
-    "bn-IN": "Bengali - India",
+    "bn-BD": "Bengali - Bangladesh",
     "bs": "Bosnian",
     "pt-BR": "Portuguese - Brazil",
     "bg": "Bulgarian",
