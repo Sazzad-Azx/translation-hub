@@ -564,33 +564,42 @@ def delete_terms(term_ids: List[str]) -> int:
 
 def _save_term_translations(term_id: str, translations: Dict[str, str]):
     """Upsert translations for a term."""
-    h = _headers("resolution=merge-duplicates,return=minimal")
+    if not translations:
+        return
+    rows = []
     for locale, translated in translations.items():
         if not locale:
             continue
-        row = {
+        rows.append({
             "term_id": term_id,
             "locale": locale,
             "translated_term": translated or "",
             "updated_at": _now_iso(),
-        }
-        try:
-            resp = requests.post(
-                f"{REST_BASE}/{TERM_TRANSLATIONS_TABLE}",
-                json=row,
-                headers=h,
-                timeout=10,
-            )
-            if not resp.ok and resp.status_code == 409:
-                # Update existing
-                requests.patch(
-                    f"{REST_BASE}/{TERM_TRANSLATIONS_TABLE}?term_id=eq.{term_id}&locale=eq.{locale}",
-                    json={"translated_term": translated or "", "updated_at": _now_iso()},
-                    headers=_headers(),
-                    timeout=10,
-                )
-        except Exception:
-            pass
+        })
+    if not rows:
+        return
+    try:
+        h = _headers("resolution=merge-duplicates,return=minimal")
+        resp = requests.post(
+            f"{REST_BASE}/{TERM_TRANSLATIONS_TABLE}?on_conflict=term_id,locale",
+            json=rows,
+            headers=h,
+            timeout=15,
+        )
+        if not resp.ok:
+            # Fallback: update one by one
+            for row in rows:
+                try:
+                    requests.patch(
+                        f"{REST_BASE}/{TERM_TRANSLATIONS_TABLE}?term_id=eq.{row['term_id']}&locale=eq.{row['locale']}",
+                        json={"translated_term": row["translated_term"], "updated_at": row["updated_at"]},
+                        headers=_headers("return=minimal"),
+                        timeout=10,
+                    )
+                except Exception:
+                    pass
+    except Exception:
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -1158,13 +1167,14 @@ def import_glossary_xlsx(glossary_id: str, file_bytes: bytes) -> Dict:
                     "updated_at": _now_iso(),
                 })
 
-    # Insert translations in batches of 200
+    # Insert translations in batches of 200 (upsert on term_id+locale)
     TRANS_BATCH = 200
+    upsert_url = f"{REST_BASE}/{TERM_TRANSLATIONS_TABLE}?on_conflict=term_id,locale"
     for i in range(0, len(all_translation_rows), TRANS_BATCH):
         chunk = all_translation_rows[i : i + TRANS_BATCH]
         try:
             h = _headers("resolution=merge-duplicates,return=minimal")
-            resp = requests.post(f"{REST_BASE}/{TERM_TRANSLATIONS_TABLE}", json=chunk, headers=h, timeout=30)
+            resp = requests.post(upsert_url, json=chunk, headers=h, timeout=30)
             if not resp.ok:
                 if len(errors) < 10:
                     errors.append(f"Translation batch insert failed ({resp.status_code}): {resp.text[:200]}")
@@ -1206,7 +1216,7 @@ def import_glossary_xlsx(glossary_id: str, file_bytes: bytes) -> Dict:
         chunk = update_translation_rows[i : i + TRANS_BATCH]
         try:
             h = _headers("resolution=merge-duplicates,return=minimal")
-            resp = requests.post(f"{REST_BASE}/{TERM_TRANSLATIONS_TABLE}", json=chunk, headers=h, timeout=30)
+            resp = requests.post(upsert_url, json=chunk, headers=h, timeout=30)
             if not resp.ok:
                 if len(errors) < 10:
                     errors.append(f"Update translation batch failed ({resp.status_code}): {resp.text[:200]}")
