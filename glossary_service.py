@@ -1114,14 +1114,38 @@ def import_glossary_xlsx(glossary_id: str, file_bytes: bytes) -> Dict:
             elif len(errors) == 10:
                 errors.append("... and more errors (showing first 10)")
 
-    # ── Phase 2: Batch-create all terms ──────────────────────────────────
+    # ── Phase 2: Deduplicate terms by source_term within the file ────────
+    # DB has a unique constraint on (glossary_id, source_term).
+    # If the file has duplicate source_terms, keep the last occurrence.
+    seen: Dict[str, int] = {}
+    for idx, row in enumerate(new_term_rows):
+        key = row["source_term"]
+        if key in seen:
+            # Mark the earlier one for removal by setting to None
+            prev_idx = seen[key]
+            new_term_rows[prev_idx] = None  # type: ignore
+            new_term_meta[prev_idx] = None  # type: ignore
+        seen[key] = idx
+
+    # Filter out None entries
+    deduped_rows = []
+    deduped_meta = []
+    for row, meta in zip(new_term_rows, new_term_meta):
+        if row is not None:
+            deduped_rows.append(row)
+            deduped_meta.append(meta)
+    new_term_rows = deduped_rows
+    new_term_meta = deduped_meta
+
+    # ── Phase 3: Batch-upsert all terms ──────────────────────────────────
     created_term_ids = []
     BATCH = 50
+    upsert_terms_url = f"{REST_BASE}/{TERMS_TABLE}?on_conflict=glossary_id,source_term"
     for i in range(0, len(new_term_rows), BATCH):
         chunk = new_term_rows[i : i + BATCH]
         try:
-            h = _headers("return=representation")
-            resp = requests.post(f"{REST_BASE}/{TERMS_TABLE}", json=chunk, headers=h, timeout=30)
+            h = _headers("resolution=merge-duplicates,return=representation")
+            resp = requests.post(upsert_terms_url, json=chunk, headers=h, timeout=30)
             if resp.ok:
                 data = resp.json()
                 for item in data:
