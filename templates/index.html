@@ -805,12 +805,97 @@
         <!-- SECTION: Automation                        -->
         <!-- ========================================== -->
         <section class="page-section" id="section-automation">
-            <div class="placeholder-page">
-                <div class="placeholder-icon"><i class="fas fa-robot"></i></div>
-                <h2>Automation</h2>
-                <p>Set up automatic translation workflows. Schedule pulls, translations, and pushes on a regular basis without manual intervention.</p>
-                <span class="badge-coming-soon">Coming Soon</span>
+            <!-- Setup banner (shown if table doesn't exist) -->
+            <div id="auto-setup-banner" class="auto-setup-banner hidden">
+                <div class="auto-setup-icon"><i class="fas fa-database"></i></div>
+                <h3>Setup Required</h3>
+                <p>The <code>automation_settings</code> table needs to be created in Supabase.</p>
+                <div class="auto-setup-actions">
+                    <button class="btn btn-primary" id="auto-create-table-btn"><i class="fas fa-magic"></i> Auto-Create Table</button>
+                    <button class="btn btn-outline" id="auto-copy-sql-btn"><i class="fas fa-copy"></i> Copy SQL</button>
+                </div>
+                <pre id="auto-setup-sql" class="hidden" style="margin-top:12px;font-size:12px;max-height:200px;overflow:auto;background:#1e293b;color:#e2e8f0;padding:12px;border-radius:8px;"></pre>
             </div>
+
+            <!-- Main automation content -->
+            <div id="auto-main-content" class="hidden">
+                <div class="auto-header">
+                    <div class="auto-header-left">
+                        <i class="fas fa-robot auto-header-icon"></i>
+                        <div>
+                            <h2>Automation</h2>
+                            <p class="auto-subtitle">Schedule automatic tasks to keep your translations in sync.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Auto Sync Card -->
+                <div class="auto-card">
+                    <div class="auto-card-header">
+                        <div class="auto-card-title-area">
+                            <div class="auto-card-icon"><i class="fas fa-sync-alt"></i></div>
+                            <div>
+                                <h3>Auto Sync Source List</h3>
+                                <p class="auto-card-desc">Automatically sync articles from Intercom into the Pull registry every 24 hours at approximately <strong>00:00 UTC</strong>.</p>
+                            </div>
+                        </div>
+                        <div class="auto-toggle-area">
+                            <label class="auto-toggle" for="auto-sync-toggle">
+                                <input type="checkbox" id="auto-sync-toggle">
+                                <span class="auto-toggle-slider"></span>
+                            </label>
+                            <span class="auto-toggle-label" id="auto-sync-status-label">Disabled</span>
+                        </div>
+                    </div>
+
+                    <div class="auto-card-body">
+                        <div class="auto-info-grid">
+                            <div class="auto-info-item">
+                                <span class="auto-info-label"><i class="fas fa-clock"></i> Status</span>
+                                <span class="auto-info-value" id="auto-sync-status-badge">
+                                    <span class="auto-badge auto-badge-disabled">Disabled</span>
+                                </span>
+                            </div>
+                            <div class="auto-info-item">
+                                <span class="auto-info-label"><i class="fas fa-history"></i> Last Run</span>
+                                <span class="auto-info-value" id="auto-last-run">Never</span>
+                            </div>
+                            <div class="auto-info-item">
+                                <span class="auto-info-label"><i class="fas fa-check-circle"></i> Last Result</span>
+                                <span class="auto-info-value" id="auto-last-result">—</span>
+                            </div>
+                            <div class="auto-info-item">
+                                <span class="auto-info-label"><i class="fas fa-forward"></i> Next Run</span>
+                                <span class="auto-info-value" id="auto-next-run">—</span>
+                            </div>
+                        </div>
+
+                        <div class="auto-actions">
+                            <button class="btn btn-outline btn-sm" id="auto-run-now-btn">
+                                <i class="fas fa-play"></i> Run Now
+                            </button>
+                            <button class="btn btn-outline btn-sm" id="auto-refresh-btn">
+                                <i class="fas fa-sync-alt"></i> Refresh Status
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- How it works -->
+                    <div class="auto-card-footer">
+                        <h4><i class="fas fa-info-circle"></i> How it works</h4>
+                        <ul class="auto-how-list">
+                            <li><i class="fas fa-check"></i> When enabled, a scheduled job runs every day at <strong>~00:00 UTC</strong>.</li>
+                            <li><i class="fas fa-check"></i> It calls the same "Sync Source List" function from the <strong>Pull</strong> section.</li>
+                            <li><i class="fas fa-check"></i> New articles from Intercom are added to the Pull registry automatically.</li>
+                            <li><i class="fas fa-check"></i> Existing articles are updated if their metadata changed.</li>
+                            <li><i class="fas fa-check"></i> You can still manually sync at any time from the Pull section.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Toast -->
+            <div id="auto-toast" class="tr-toast hidden"></div>
         </section>
 
         <!-- ========================================== -->
@@ -1225,7 +1310,7 @@
                     <button class="btn btn-primary admin-add-btn" id="admin-add-btn"><i class="fas fa-plus"></i> Add Admin</button>
                 </div>
                 <div class="admin-form-error hidden" id="admin-add-error"></div>
-            </div>
+        </div>
 
             <!-- Admins Table -->
             <div class="admin-table-card">

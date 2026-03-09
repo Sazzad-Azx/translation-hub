@@ -333,6 +333,214 @@ async function authLogout() {
     if (passInp) passInp.value = '';
 }
 
+// ─── Automation section ──────────────────────────────────
+let autoState = { loaded: false, settings: null, tableExists: false };
+
+async function initAutomationSection() {
+    if (autoState.loaded) {
+        autoRefreshStatus();
+        return;
+    }
+    autoState.loaded = true;
+    setupAutomationListeners();
+    await autoCheckTable();
+}
+
+function setupAutomationListeners() {
+    // Toggle switch
+    const toggle = document.getElementById('auto-sync-toggle');
+    if (toggle) {
+        toggle.addEventListener('change', async () => {
+            const enabled = toggle.checked;
+            toggle.disabled = true;
+            try {
+                const resp = await fetch('/api/automation/toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled }),
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    showAutoToast(enabled ? 'Auto-sync enabled! Next run at ~00:00 UTC.' : 'Auto-sync disabled.', 'success');
+                    await autoRefreshStatus();
+                } else {
+                    showAutoToast('Failed to toggle: ' + (data.error || 'Unknown error'), 'error');
+                    toggle.checked = !enabled; // Revert
+                }
+            } catch (err) {
+                showAutoToast('Error: ' + err.message, 'error');
+                toggle.checked = !enabled;
+            }
+            toggle.disabled = false;
+        });
+    }
+
+    // Run Now button
+    document.getElementById('auto-run-now-btn')?.addEventListener('click', async () => {
+        const btn = document.getElementById('auto-run-now-btn');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Running…'; }
+        try {
+            const resp = await fetch('/api/automation/run-now', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+            });
+            const data = await resp.json();
+            if (data.success) {
+                showAutoToast(data.message || `Synced ${data.synced} articles.`, 'success');
+            } else if (data.skipped) {
+                showAutoToast('Auto-sync is disabled. Enable it first or use Pull > Sync Source List.', 'warning');
+            } else {
+                showAutoToast('Sync failed: ' + (data.error || 'Unknown'), 'error');
+            }
+            await autoRefreshStatus();
+        } catch (err) {
+            showAutoToast('Error: ' + err.message, 'error');
+        }
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-play"></i> Run Now'; }
+    });
+
+    // Refresh button
+    document.getElementById('auto-refresh-btn')?.addEventListener('click', () => autoRefreshStatus());
+
+    // Auto-create table
+    document.getElementById('auto-create-table-btn')?.addEventListener('click', async () => {
+        const btn = document.getElementById('auto-create-table-btn');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating…'; }
+        try {
+            const resp = await fetch('/api/automation/create-table', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+            const data = await resp.json();
+            if (data.success) {
+                showAutoToast('Table created successfully!', 'success');
+                await autoCheckTable();
+            } else {
+                showAutoToast('Failed: ' + (data.error || 'Unknown'), 'error');
+            }
+        } catch (err) {
+            showAutoToast('Error: ' + err.message, 'error');
+        }
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-magic"></i> Auto-Create Table'; }
+    });
+
+    // Copy SQL
+    document.getElementById('auto-copy-sql-btn')?.addEventListener('click', async () => {
+        const sqlEl = document.getElementById('auto-setup-sql');
+        if (sqlEl) {
+            sqlEl.classList.toggle('hidden');
+            if (!sqlEl.classList.contains('hidden')) {
+                try {
+                    const resp = await fetch('/api/automation/table-status');
+                    const data = await resp.json();
+                    sqlEl.textContent = data.setup_sql || 'No SQL available.';
+                    await navigator.clipboard.writeText(data.setup_sql || '');
+                    showAutoToast('SQL copied to clipboard!', 'success');
+                } catch (e) { /* ignore */ }
+            }
+        }
+    });
+}
+
+async function autoCheckTable() {
+    try {
+        const resp = await fetch('/api/automation/table-status');
+        const data = await resp.json();
+        autoState.tableExists = data.table_exists;
+
+        const banner = document.getElementById('auto-setup-banner');
+        const main = document.getElementById('auto-main-content');
+
+        if (data.table_exists) {
+            if (banner) banner.classList.add('hidden');
+            if (main) main.classList.remove('hidden');
+            await autoRefreshStatus();
+        } else {
+            if (banner) banner.classList.remove('hidden');
+            if (main) main.classList.add('hidden');
+            const sqlEl = document.getElementById('auto-setup-sql');
+            if (sqlEl) sqlEl.textContent = data.setup_sql || '';
+        }
+    } catch (err) {
+        console.warn('Automation table check failed:', err);
+    }
+}
+
+async function autoRefreshStatus() {
+    try {
+        const resp = await fetch('/api/automation/settings');
+        const data = await resp.json();
+        if (!data.success) return;
+
+        const s = data.settings;
+        autoState.settings = s;
+
+        // Update toggle
+        const toggle = document.getElementById('auto-sync-toggle');
+        if (toggle) toggle.checked = !!s.enabled;
+
+        // Status label
+        const label = document.getElementById('auto-sync-status-label');
+        if (label) {
+            label.textContent = s.enabled ? 'Enabled' : 'Disabled';
+            label.classList.toggle('enabled', !!s.enabled);
+        }
+
+        // Status badge
+        const badge = document.getElementById('auto-sync-status-badge');
+        if (badge) {
+            if (s.enabled) {
+                badge.innerHTML = '<span class="auto-badge auto-badge-enabled"><i class="fas fa-check-circle"></i> Active</span>';
+            } else {
+                badge.innerHTML = '<span class="auto-badge auto-badge-disabled"><i class="fas fa-pause-circle"></i> Disabled</span>';
+            }
+        }
+
+        // Last run
+        const lastRunEl = document.getElementById('auto-last-run');
+        if (lastRunEl) {
+            if (s.last_run_at) {
+                const d = new Date(s.last_run_at);
+                lastRunEl.textContent = d.toLocaleString();
+            } else {
+                lastRunEl.textContent = 'Never';
+            }
+        }
+
+        // Last result
+        const lastResultEl = document.getElementById('auto-last-result');
+        if (lastResultEl) {
+            if (s.last_run_status === 'success') {
+                lastResultEl.innerHTML = `<span class="auto-badge auto-badge-success"><i class="fas fa-check"></i> Success</span> <span style="font-size:12px;color:var(--text-muted);margin-left:6px;">${escapeHtml(s.last_run_message || '')}</span>`;
+            } else if (s.last_run_status === 'error') {
+                lastResultEl.innerHTML = `<span class="auto-badge auto-badge-error"><i class="fas fa-times"></i> Error</span> <span style="font-size:12px;color:#dc2626;margin-left:6px;">${escapeHtml(s.last_run_message || '')}</span>`;
+            } else {
+                lastResultEl.textContent = '—';
+            }
+        }
+
+        // Next run
+        const nextRunEl = document.getElementById('auto-next-run');
+        if (nextRunEl) {
+            if (s.enabled && s.next_run_at) {
+                const d = new Date(s.next_run_at);
+                nextRunEl.textContent = d.toLocaleString();
+            } else {
+                nextRunEl.textContent = s.enabled ? '~00:00 UTC (next midnight)' : '—';
+            }
+        }
+    } catch (err) {
+        console.warn('Automation status refresh failed:', err);
+    }
+}
+
+function showAutoToast(msg, type = 'info') {
+    const toast = document.getElementById('auto-toast');
+    if (!toast) return;
+    const iconMap = { success: 'check-circle', error: 'exclamation-circle', warning: 'exclamation-triangle', info: 'info-circle' };
+    toast.className = `tr-toast tr-toast-${type}`;
+    toast.innerHTML = `<i class="fas fa-${iconMap[type] || 'info-circle'}"></i> ${msg}`;
+    toast.classList.remove('hidden');
+    setTimeout(() => toast.classList.add('hidden'), 5000);
+}
+
 // ─── Admin panel ──────────────────────────────────────────
 let adminState = { loaded: false, admins: [], tableExists: true };
 
@@ -596,6 +804,9 @@ function switchSection(sectionId) {
     if (sectionId === 'push' && !state.push.loaded) {
         initPushSection();
     }
+    if (sectionId === 'automation') {
+        initAutomationSection();
+    }
     if (sectionId === 'admin') {
         initAdminSection();
     }
@@ -637,6 +848,9 @@ function setupEventListeners() {
                     break;
                 case 'glossary':
                     await glLoadGlossaries();
+                    break;
+                case 'automation':
+                    await autoRefreshStatus();
                     break;
                 default:
                     // For other sections, try to refresh dashboard as fallback

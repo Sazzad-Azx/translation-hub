@@ -34,7 +34,7 @@ def log_request():
 
 
 # ─── Auth helpers ──────────────────────────────────────────────
-PUBLIC_PATHS = {'/', '/favicon.ico', '/api/health', '/api/auth/login'}
+PUBLIC_PATHS = {'/', '/favicon.ico', '/api/health', '/api/auth/login', '/api/cron/sync'}
 PUBLIC_PREFIXES = ('/static/',)
 
 
@@ -1778,6 +1778,109 @@ def push_bulk():
             concurrency=3,
         )
         return jsonify({'success': True, **result})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ============================================================
+# AUTOMATION MODULE API
+# ============================================================
+
+@app.route('/api/automation/settings', methods=['GET'])
+def automation_get_settings():
+    """Get automation settings (auto-sync toggle state, last run, etc.)."""
+    import automation_service
+    try:
+        settings = automation_service.get_settings("auto_sync_pull")
+        return jsonify({'success': True, 'settings': settings})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/automation/toggle', methods=['POST'])
+def automation_toggle():
+    """Toggle auto-sync on or off."""
+    import automation_service
+    try:
+        data = request.get_json(silent=True) or {}
+        enabled = bool(data.get('enabled', False))
+        result = automation_service.set_enabled("auto_sync_pull", enabled)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/automation/logs', methods=['GET'])
+def automation_logs():
+    """Get recent automation run logs."""
+    import automation_service
+    try:
+        logs = automation_service.get_logs("auto_sync_pull")
+        return jsonify({'success': True, 'logs': logs})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/automation/table-status', methods=['GET'])
+def automation_table_status():
+    """Check if automation_settings table exists."""
+    import automation_service
+    exists = automation_service.table_exists()
+    return jsonify({
+        'success': True,
+        'table_exists': exists,
+        'setup_sql': automation_service.SETUP_SQL if not exists else None,
+    })
+
+
+@app.route('/api/automation/create-table', methods=['POST'])
+def automation_create_table():
+    """Auto-create automation_settings table."""
+    import automation_service
+    result = automation_service.auto_create_table()
+    return jsonify(result)
+
+
+@app.route('/api/automation/run-now', methods=['POST'])
+def automation_run_now():
+    """Manually trigger the auto-sync (for testing)."""
+    import automation_service
+    try:
+        init_clients()
+        result = automation_service.run_auto_sync(intercom_client)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/cron/sync', methods=['GET', 'POST'])
+def cron_sync():
+    """
+    Cron endpoint called by Vercel Cron at UTC 00:00.
+    Checks if auto-sync is enabled, then runs the Pull sync.
+    Protected by a cron secret or auth token.
+    """
+    import automation_service
+
+    # Verify cron authorization
+    # Vercel cron sends Authorization header automatically
+    cron_secret = os.getenv('CRON_SECRET', '').strip()
+    auth_header = request.headers.get('Authorization', '')
+
+    # Allow if: valid auth token (from before_request), OR matching cron secret
+    has_auth = hasattr(request, 'auth_session') and request.auth_session
+    has_cron_secret = cron_secret and auth_header == f'Bearer {cron_secret}'
+
+    if not has_auth and not has_cron_secret:
+        # On Vercel, cron requests include a special header
+        vercel_cron = request.headers.get('x-vercel-cron')
+        if not vercel_cron:
+            return jsonify({'success': False, 'error': 'Unauthorized cron request'}), 401
+
+    try:
+        init_clients()
+        result = automation_service.run_auto_sync(intercom_client)
+        return jsonify(result)
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
