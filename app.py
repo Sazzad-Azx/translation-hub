@@ -34,7 +34,7 @@ def log_request():
 
 
 # ─── Auth helpers ──────────────────────────────────────────────
-PUBLIC_PATHS = {'/', '/favicon.ico', '/api/health', '/api/auth/login', '/api/cron/sync'}
+PUBLIC_PATHS = {'/', '/favicon.ico', '/api/health', '/api/auth/login', '/api/cron/sync', '/api/cron/pull'}
 PUBLIC_PREFIXES = ('/static/',)
 
 
@@ -1788,10 +1788,11 @@ def push_bulk():
 
 @app.route('/api/automation/settings', methods=['GET'])
 def automation_get_settings():
-    """Get automation settings (auto-sync toggle state, last run, etc.)."""
+    """Get automation settings. Query param: key (default: auto_sync_pull)."""
     import automation_service
     try:
-        settings = automation_service.get_settings("auto_sync_pull")
+        key = request.args.get('key', 'auto_sync_pull')
+        settings = automation_service.get_settings(key)
         return jsonify({'success': True, 'settings': settings})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -1799,12 +1800,13 @@ def automation_get_settings():
 
 @app.route('/api/automation/toggle', methods=['POST'])
 def automation_toggle():
-    """Toggle auto-sync on or off."""
+    """Toggle an automation task on or off."""
     import automation_service
     try:
         data = request.get_json(silent=True) or {}
+        key = data.get('key', 'auto_sync_pull')
         enabled = bool(data.get('enabled', False))
-        result = automation_service.set_enabled("auto_sync_pull", enabled)
+        result = automation_service.set_enabled(key, enabled)
         return jsonify(result)
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -1843,11 +1845,16 @@ def automation_create_table():
 
 @app.route('/api/automation/run-now', methods=['POST'])
 def automation_run_now():
-    """Manually trigger the auto-sync (for testing)."""
+    """Manually trigger an automation task (for testing)."""
     import automation_service
     try:
+        data = request.get_json(silent=True) or {}
+        key = data.get('key', 'auto_sync_pull')
         init_clients()
-        result = automation_service.run_auto_sync(intercom_client)
+        if key == 'auto_pull_articles':
+            result = automation_service.run_auto_pull(intercom_client)
+        else:
+            result = automation_service.run_auto_sync(intercom_client)
         return jsonify(result)
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -1858,21 +1865,16 @@ def cron_sync():
     """
     Cron endpoint called by Vercel Cron at UTC 00:00.
     Checks if auto-sync is enabled, then runs the Pull sync.
-    Protected by a cron secret or auth token.
     """
     import automation_service
 
     # Verify cron authorization
-    # Vercel cron sends Authorization header automatically
     cron_secret = os.getenv('CRON_SECRET', '').strip()
     auth_header = request.headers.get('Authorization', '')
-
-    # Allow if: valid auth token (from before_request), OR matching cron secret
     has_auth = hasattr(request, 'auth_session') and request.auth_session
     has_cron_secret = cron_secret and auth_header == f'Bearer {cron_secret}'
 
     if not has_auth and not has_cron_secret:
-        # On Vercel, cron requests include a special header
         vercel_cron = request.headers.get('x-vercel-cron')
         if not vercel_cron:
             return jsonify({'success': False, 'error': 'Unauthorized cron request'}), 401
@@ -1880,6 +1882,33 @@ def cron_sync():
     try:
         init_clients()
         result = automation_service.run_auto_sync(intercom_client)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/cron/pull', methods=['GET', 'POST'])
+def cron_pull():
+    """
+    Cron endpoint called by Vercel Cron at UTC 01:30.
+    Auto-pulls all articles with 'Never Pulled' or 'Needs Update' status.
+    """
+    import automation_service
+
+    # Verify cron authorization
+    cron_secret = os.getenv('CRON_SECRET', '').strip()
+    auth_header = request.headers.get('Authorization', '')
+    has_auth = hasattr(request, 'auth_session') and request.auth_session
+    has_cron_secret = cron_secret and auth_header == f'Bearer {cron_secret}'
+
+    if not has_auth and not has_cron_secret:
+        vercel_cron = request.headers.get('x-vercel-cron')
+        if not vercel_cron:
+            return jsonify({'success': False, 'error': 'Unauthorized cron request'}), 401
+
+    try:
+        init_clients()
+        result = automation_service.run_auto_pull(intercom_client)
         return jsonify(result)
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500

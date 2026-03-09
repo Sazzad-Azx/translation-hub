@@ -811,8 +811,8 @@
                 <h3>Setup Required</h3>
                 <p>The <code>automation_settings</code> table needs to be created in Supabase.</p>
                 <div class="auto-setup-actions">
-                    <button class="btn btn-primary" id="auto-create-table-btn"><i class="fas fa-magic"></i> Auto-Create Table</button>
-                    <button class="btn btn-outline" id="auto-copy-sql-btn"><i class="fas fa-copy"></i> Copy SQL</button>
+                    <button class="btn btn-primary" id="auto-create-settings-table-btn"><i class="fas fa-magic"></i> Auto-Create Table</button>
+                    <button class="btn btn-outline" id="auto-copy-settings-sql-btn"><i class="fas fa-copy"></i> Copy SQL</button>
                 </div>
                 <pre id="auto-setup-sql" class="hidden" style="margin-top:12px;font-size:12px;max-height:200px;overflow:auto;background:#1e293b;color:#e2e8f0;padding:12px;border-radius:8px;"></pre>
             </div>
@@ -889,6 +889,70 @@
                             <li><i class="fas fa-check"></i> New articles from Intercom are added to the Pull registry automatically.</li>
                             <li><i class="fas fa-check"></i> Existing articles are updated if their metadata changed.</li>
                             <li><i class="fas fa-check"></i> You can still manually sync at any time from the Pull section.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Auto Pull Card -->
+                <div class="auto-card" style="margin-top: 20px;">
+                    <div class="auto-card-header">
+                        <div class="auto-card-title-area">
+                            <div class="auto-card-icon" style="background:rgba(16,185,129,0.1);color:#10b981;"><i class="fas fa-cloud-download-alt"></i></div>
+                            <div>
+                                <h3>Auto Pull Articles</h3>
+                                <p class="auto-card-desc">Automatically pull full content for all articles with <strong>"Needs Update"</strong> or <strong>"Never Pulled"</strong> status every day at <strong>01:30 UTC</strong>.</p>
+                            </div>
+                        </div>
+                        <div class="auto-toggle-area">
+                            <label class="auto-toggle" for="auto-pull-toggle">
+                                <input type="checkbox" id="auto-pull-toggle">
+                                <span class="auto-toggle-slider"></span>
+                            </label>
+                            <span class="auto-toggle-label" id="auto-pull-status-label">Disabled</span>
+                        </div>
+                    </div>
+
+                    <div class="auto-card-body">
+                        <div class="auto-info-grid">
+                            <div class="auto-info-item">
+                                <span class="auto-info-label"><i class="fas fa-clock"></i> Status</span>
+                                <span class="auto-info-value" id="auto-pull-status-badge">
+                                    <span class="auto-badge auto-badge-disabled">Disabled</span>
+                                </span>
+                            </div>
+                            <div class="auto-info-item">
+                                <span class="auto-info-label"><i class="fas fa-history"></i> Last Run</span>
+                                <span class="auto-info-value" id="auto-pull-last-run">Never</span>
+                            </div>
+                            <div class="auto-info-item">
+                                <span class="auto-info-label"><i class="fas fa-check-circle"></i> Last Result</span>
+                                <span class="auto-info-value" id="auto-pull-last-result">—</span>
+                            </div>
+                            <div class="auto-info-item">
+                                <span class="auto-info-label"><i class="fas fa-forward"></i> Next Run</span>
+                                <span class="auto-info-value" id="auto-pull-next-run">—</span>
+                            </div>
+                        </div>
+
+                        <div class="auto-actions">
+                            <button class="btn btn-outline btn-sm" id="auto-pull-run-now-btn">
+                                <i class="fas fa-play"></i> Run Now
+                            </button>
+                            <button class="btn btn-outline btn-sm" id="auto-pull-refresh-btn">
+                                <i class="fas fa-sync-alt"></i> Refresh Status
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- How it works -->
+                    <div class="auto-card-footer">
+                        <h4><i class="fas fa-info-circle"></i> How it works</h4>
+                        <ul class="auto-how-list">
+                            <li><i class="fas fa-check"></i> When enabled, a scheduled job runs every day at <strong>~01:30 UTC</strong> (after the source list sync).</li>
+                            <li><i class="fas fa-check"></i> It finds all articles in the Pull registry with <strong>"Never Pulled"</strong> or <strong>"Needs Update"</strong> status.</li>
+                            <li><i class="fas fa-check"></i> It pulls the full content (title + body) from Intercom for each article.</li>
+                            <li><i class="fas fa-check"></i> Articles already up-to-date are skipped.</li>
+                            <li><i class="fas fa-check"></i> You can still manually pull articles from the Pull section at any time.</li>
                         </ul>
                     </div>
                 </div>

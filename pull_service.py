@@ -472,6 +472,42 @@ def _store_to_content_tables(intercom_id: str, title: str, body: str):
 
 
 # ---------------------------------------------------------------------------
+# Get articles needing pull (for automation)
+# ---------------------------------------------------------------------------
+
+def get_articles_needing_pull() -> List[str]:
+    """
+    Return a list of intercom_ids for articles that are 'never_pulled' or 'updated_in_source'.
+    Used by the automation service to auto-pull pending articles.
+    """
+    if not REST_BASE:
+        return []
+    headers = _headers()
+    headers.pop("Prefer", None)
+    try:
+        resp = requests.get(
+            f"{REST_BASE}/{TABLE}",
+            headers=headers,
+            params={"select": "intercom_id,pull_status,pulled_at,source_updated_at"},
+            timeout=20,
+        )
+        if not resp.ok:
+            return []
+        rows = resp.json() if resp.text else []
+        if not isinstance(rows, list):
+            return []
+
+        ids = []
+        for r in rows:
+            status = _compute_needs_pull(r)
+            if status in ("never_pulled", "updated_in_source"):
+                ids.append(r["intercom_id"])
+        return ids
+    except Exception:
+        return []
+
+
+# ---------------------------------------------------------------------------
 # Stats for dashboard
 # ---------------------------------------------------------------------------
 

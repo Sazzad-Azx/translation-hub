@@ -339,6 +339,7 @@ let autoState = { loaded: false, settings: null, tableExists: false };
 async function initAutomationSection() {
     if (autoState.loaded) {
         autoRefreshStatus();
+        autoRefreshPullStatus();
         return;
     }
     autoState.loaded = true;
@@ -403,8 +404,8 @@ function setupAutomationListeners() {
     document.getElementById('auto-refresh-btn')?.addEventListener('click', () => autoRefreshStatus());
 
     // Auto-create table
-    document.getElementById('auto-create-table-btn')?.addEventListener('click', async () => {
-        const btn = document.getElementById('auto-create-table-btn');
+    document.getElementById('auto-create-settings-table-btn')?.addEventListener('click', async () => {
+        const btn = document.getElementById('auto-create-settings-table-btn');
         if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating…'; }
         try {
             const resp = await fetch('/api/automation/create-table', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
@@ -422,7 +423,7 @@ function setupAutomationListeners() {
     });
 
     // Copy SQL
-    document.getElementById('auto-copy-sql-btn')?.addEventListener('click', async () => {
+    document.getElementById('auto-copy-settings-sql-btn')?.addEventListener('click', async () => {
         const sqlEl = document.getElementById('auto-setup-sql');
         if (sqlEl) {
             sqlEl.classList.toggle('hidden');
@@ -437,6 +438,64 @@ function setupAutomationListeners() {
             }
         }
     });
+
+    // ── Auto Pull Card listeners ──
+
+    // Toggle switch
+    const pullToggle = document.getElementById('auto-pull-toggle');
+    if (pullToggle) {
+        pullToggle.addEventListener('change', async () => {
+            const enabled = pullToggle.checked;
+            pullToggle.disabled = true;
+            try {
+                const resp = await fetch('/api/automation/toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key: 'auto_pull_articles', enabled }),
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    showAutoToast(enabled ? 'Auto-pull enabled! Next run at ~01:30 UTC.' : 'Auto-pull disabled.', 'success');
+                    await autoRefreshPullStatus();
+                } else {
+                    showAutoToast('Failed to toggle: ' + (data.error || 'Unknown error'), 'error');
+                    pullToggle.checked = !enabled;
+                }
+            } catch (err) {
+                showAutoToast('Error: ' + err.message, 'error');
+                pullToggle.checked = !enabled;
+            }
+            pullToggle.disabled = false;
+        });
+    }
+
+    // Run Now button
+    document.getElementById('auto-pull-run-now-btn')?.addEventListener('click', async () => {
+        const btn = document.getElementById('auto-pull-run-now-btn');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Pulling…'; }
+        try {
+            const resp = await fetch('/api/automation/run-now', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: 'auto_pull_articles' }),
+            });
+            const data = await resp.json();
+            if (data.success) {
+                showAutoToast(data.message || `Pulled ${data.pulled} article(s).`, 'success');
+            } else if (data.skipped) {
+                showAutoToast('Auto-pull is disabled. Enable it first or use Pull section manually.', 'warning');
+            } else {
+                showAutoToast('Pull failed: ' + (data.error || 'Unknown'), 'error');
+            }
+            await autoRefreshPullStatus();
+        } catch (err) {
+            showAutoToast('Error: ' + err.message, 'error');
+        }
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-play"></i> Run Now'; }
+    });
+
+    // Refresh button
+    document.getElementById('auto-pull-refresh-btn')?.addEventListener('click', () => autoRefreshPullStatus());
 }
 
 async function autoCheckTable() {
@@ -452,6 +511,7 @@ async function autoCheckTable() {
             if (banner) banner.classList.add('hidden');
             if (main) main.classList.remove('hidden');
             await autoRefreshStatus();
+            await autoRefreshPullStatus();
         } else {
             if (banner) banner.classList.remove('hidden');
             if (main) main.classList.add('hidden');
@@ -528,6 +588,73 @@ async function autoRefreshStatus() {
         }
     } catch (err) {
         console.warn('Automation status refresh failed:', err);
+    }
+}
+
+async function autoRefreshPullStatus() {
+    try {
+        const resp = await fetch('/api/automation/settings?key=auto_pull_articles');
+        const data = await resp.json();
+        if (!data.success) return;
+
+        const s = data.settings;
+
+        // Update toggle
+        const toggle = document.getElementById('auto-pull-toggle');
+        if (toggle) toggle.checked = !!s.enabled;
+
+        // Status label
+        const label = document.getElementById('auto-pull-status-label');
+        if (label) {
+            label.textContent = s.enabled ? 'Enabled' : 'Disabled';
+            label.classList.toggle('enabled', !!s.enabled);
+        }
+
+        // Status badge
+        const badge = document.getElementById('auto-pull-status-badge');
+        if (badge) {
+            if (s.enabled) {
+                badge.innerHTML = '<span class="auto-badge auto-badge-enabled"><i class="fas fa-check-circle"></i> Active</span>';
+            } else {
+                badge.innerHTML = '<span class="auto-badge auto-badge-disabled"><i class="fas fa-pause-circle"></i> Disabled</span>';
+            }
+        }
+
+        // Last run
+        const lastRunEl = document.getElementById('auto-pull-last-run');
+        if (lastRunEl) {
+            if (s.last_run_at) {
+                const d = new Date(s.last_run_at);
+                lastRunEl.textContent = d.toLocaleString();
+            } else {
+                lastRunEl.textContent = 'Never';
+            }
+        }
+
+        // Last result
+        const lastResultEl = document.getElementById('auto-pull-last-result');
+        if (lastResultEl) {
+            if (s.last_run_status === 'success') {
+                lastResultEl.innerHTML = `<span class="auto-badge auto-badge-success"><i class="fas fa-check"></i> Success</span> <span style="font-size:12px;color:var(--text-muted);margin-left:6px;">${escapeHtml(s.last_run_message || '')}</span>`;
+            } else if (s.last_run_status === 'error') {
+                lastResultEl.innerHTML = `<span class="auto-badge auto-badge-error"><i class="fas fa-times"></i> Error</span> <span style="font-size:12px;color:#dc2626;margin-left:6px;">${escapeHtml(s.last_run_message || '')}</span>`;
+            } else {
+                lastResultEl.textContent = '—';
+            }
+        }
+
+        // Next run
+        const nextRunEl = document.getElementById('auto-pull-next-run');
+        if (nextRunEl) {
+            if (s.enabled && s.next_run_at) {
+                const d = new Date(s.next_run_at);
+                nextRunEl.textContent = d.toLocaleString();
+            } else {
+                nextRunEl.textContent = s.enabled ? '~01:30 UTC (daily)' : '—';
+            }
+        }
+    } catch (err) {
+        console.warn('Auto-pull status refresh failed:', err);
     }
 }
 
@@ -851,6 +978,7 @@ function setupEventListeners() {
                     break;
                 case 'automation':
                     await autoRefreshStatus();
+                    await autoRefreshPullStatus();
                     break;
                 default:
                     // For other sections, try to refresh dashboard as fallback

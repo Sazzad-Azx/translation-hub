@@ -96,15 +96,14 @@ def _ensure_row(key: str) -> Dict:
     return row
 
 
-def _compute_next_run() -> str:
-    """Compute the next UTC midnight as ISO string."""
+def _compute_next_run(hour: int = 0, minute: int = 0) -> str:
+    """Compute the next occurrence of the given UTC hour:minute as ISO string."""
+    from datetime import timedelta
     now = datetime.now(timezone.utc)
-    # Next midnight = today + 1 day at 00:00
-    tomorrow = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    if tomorrow <= now:
-        from datetime import timedelta
-        tomorrow += timedelta(days=1)
-    return tomorrow.isoformat()
+    target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if target <= now:
+        target += timedelta(days=1)
+    return target.isoformat()
 
 
 # ─── Public API ───────────────────────────────────────────────────
@@ -133,12 +132,18 @@ def set_enabled(key: str, enabled: bool) -> Dict:
 
     _ensure_row(key)  # Make sure row exists
 
+    # Determine schedule based on key
+    if key == "auto_pull_articles":
+        next_h, next_m = 1, 30
+    else:
+        next_h, next_m = 0, 0
+
     update = {
         "enabled": enabled,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
     if enabled:
-        update["next_run_at"] = _compute_next_run()
+        update["next_run_at"] = _compute_next_run(next_h, next_m)
     else:
         update["next_run_at"] = None
 
@@ -160,12 +165,17 @@ def set_enabled(key: str, enabled: bool) -> Dict:
 
 def record_run(key: str, status: str, message: str) -> None:
     """Record the result of an automation run."""
+    if key == "auto_pull_articles":
+        next_h, next_m = 1, 30
+    else:
+        next_h, next_m = 0, 0
+
     now = datetime.now(timezone.utc).isoformat()
     update = {
         "last_run_at": now,
         "last_run_status": status,
         "last_run_message": message,
-        "next_run_at": _compute_next_run(),
+        "next_run_at": _compute_next_run(next_h, next_m),
         "updated_at": now,
     }
     try:
@@ -223,6 +233,57 @@ def run_auto_sync(intercom_client) -> Dict:
         message = f"Synced {synced} articles (total: {total})"
         record_run(key, "success", message)
         return {"success": True, "synced": synced, "total": total, "message": message}
+    except Exception as e:
+        error_msg = str(e)
+        record_run(key, "error", error_msg)
+        return {"success": False, "error": error_msg}
+
+
+def run_auto_pull(intercom_client) -> Dict:
+    """
+    Automatically pull all articles that are 'Never Pulled' or 'Needs Update'.
+    Called by the cron endpoint at ~01:30 UTC.
+    """
+    from pull_service import (
+        get_articles_needing_pull,
+        pull_articles,
+        table_exists as pull_table_exists,
+    )
+
+    key = "auto_pull_articles"
+
+    # Check if automation is enabled
+    settings = get_settings(key)
+    if not settings.get("enabled"):
+        return {"success": False, "skipped": True, "reason": "Auto-pull is disabled"}
+
+    # Check pull_registry table
+    if not pull_table_exists():
+        record_run(key, "error", "pull_registry table does not exist")
+        return {"success": False, "error": "pull_registry table does not exist"}
+
+    # Find articles needing pull
+    try:
+        ids = get_articles_needing_pull()
+        if not ids:
+            message = "No articles need pulling (all up to date)"
+            record_run(key, "success", message)
+            return {"success": True, "pulled": 0, "failed": 0, "total": 0, "message": message}
+
+        # Pull them
+        results = pull_articles(ids, intercom_client)
+        success_count = sum(1 for r in results if r.get("status") == "success")
+        fail_count = sum(1 for r in results if r.get("status") == "failed")
+        message = f"Pulled {success_count} article(s), {fail_count} failed (out of {len(ids)} pending)"
+        status = "success" if fail_count == 0 else "error"
+        record_run(key, status, message)
+        return {
+            "success": True,
+            "pulled": success_count,
+            "failed": fail_count,
+            "total": len(ids),
+            "message": message,
+        }
     except Exception as e:
         error_msg = str(e)
         record_run(key, "error", error_msg)
