@@ -1012,15 +1012,36 @@ def import_glossary_xlsx(glossary_id: str, file_bytes: bytes) -> Dict:
             desc_idx = i
         else:
             # Try to match locale - check for patterns like "Arabic (ar)", "ar", "Arabic", etc.
+            # Use a scoring system to pick the best match and avoid false substring hits
+            # (e.g. "es" matching inside "Chinese" or "Japanese")
+            best_loc = None
+            best_score = 0
             for loc in target_locales:
                 lang_name = TARGET_LANGUAGES.get(loc, loc)
-                # Check multiple patterns
-                if (loc.lower() in col_lower or 
-                    lang_name.lower() in col_lower or
-                    f"({loc.lower()})" in col_lower or
-                    f"({loc.upper()})" in col_lower):
-                    locale_cols[loc] = i
-                    break
+                score = 0
+                # Exact locale code match (highest priority)
+                if col_lower == loc.lower():
+                    score = 100
+                # Exact language name match
+                elif col_lower == lang_name.lower():
+                    score = 90
+                # Header contains locale in parentheses e.g. "Arabic (ar)"
+                elif f"({loc.lower()})" in col_lower or f"({loc.upper()})" in col_lower:
+                    score = 80
+                # Language name starts with header or header starts with language name
+                elif col_lower.startswith(lang_name.lower()) or lang_name.lower().startswith(col_lower):
+                    score = 70
+                # Full language name found in header (for compound names like "Chinese - Simplified")
+                elif lang_name.lower() in col_lower:
+                    score = 60
+                # Header found in language name (only if header is long enough to avoid false matches)
+                elif len(col_lower) >= 4 and col_lower in lang_name.lower():
+                    score = 50
+                if score > best_score:
+                    best_score = score
+                    best_loc = loc
+            if best_loc and best_score > 0:
+                locale_cols[best_loc] = i
 
     if source_idx is None:
         return {
