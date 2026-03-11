@@ -1927,6 +1927,8 @@ async function pullExecuteConfirmed() {
             state.pull.selectedIds.clear();
             await loadPullStats();
             await loadPullArticles();
+            // Refresh Content Hub in background so health status updates
+            if (state.hub.loaded) loadHubArticles();
         } else {
             showPullToast('Pull failed: ' + (data.error || 'Unknown error'), 'error');
         }
@@ -2340,36 +2342,95 @@ function renderDrawerContent(article) {
 }
 
 // ---- Bulk Actions ----
-function hubBulkAction(actionType) {
+async function hubBulkAction(actionType) {
     const ids = Array.from(state.hub.selectedIds);
     if (ids.length === 0) return;
 
+    // Get article title from Content Hub to use as search filter
+    const selectedArticle = state.hub.articles.find(a => ids.includes(a.intercom_id));
+    const searchTitle = selectedArticle ? (selectedArticle.title || '').substring(0, 40) : '';
+
     if (actionType === 'pull') {
-        // Switch to Pull section and trigger pull for these IDs
         switchSection('pull');
-        // Give Pull section time to init, then set selection
-        setTimeout(() => {
-            ids.forEach(id => state.pull.selectedIds.add(id));
-            updatePullSelectedCount();
-            renderPullTable();
-        }, 500);
+
+        // Wait for pull section init to complete
+        const waitForInit = () => new Promise(resolve => {
+            const check = () => state.pull.loaded ? resolve() : setTimeout(check, 100);
+            check();
+            setTimeout(resolve, 3000);
+        });
+        await waitForInit();
+
+        // Set search to filter to the selected article
+        if (searchTitle) {
+            state.pull.search = searchTitle;
+            state.pull.page = 1;
+            const searchInput = document.getElementById('pull-search-input');
+            if (searchInput) searchInput.value = searchTitle;
+        }
+
+        // Reload and wait for it
+        await loadPullArticles();
+
+        // Now select the articles
+        ids.forEach(id => state.pull.selectedIds.add(id));
+        updatePullSelectedCount();
+        renderPullTable();
+
     } else if (actionType === 'translate') {
         switchSection('translate');
-        // Pre-select articles in translate section
-        setTimeout(() => {
-            ids.forEach(id => state.tr.selectedArticles.add(id));
-            trUpdateActionBar();
-            trRenderTable();
-        }, 500);
+
+        // Wait for translate section init to complete
+        const waitForInit = () => new Promise(resolve => {
+            const check = () => state.tr.loaded ? resolve() : setTimeout(check, 100);
+            check();
+            setTimeout(resolve, 3000);
+        });
+        await waitForInit();
+
+        // Set search to filter to the selected article
+        if (searchTitle) {
+            state.tr.search = searchTitle;
+            state.tr.page = 1;
+            const searchInput = document.getElementById('tr-search-input');
+            if (searchInput) searchInput.value = searchTitle;
+        }
+
+        // Reload and wait for it
+        await trLoadArticles();
+
+        // Now select the articles
+        ids.forEach(id => state.tr.selectedArticles.add(id));
+        trUpdateActionBar();
+        trRenderTable();
+
     } else if (actionType === 'push') {
         switchSection('push');
-        // Pre-select articles in push section
-        setTimeout(() => {
-            ids.forEach(id => state.push.selectedIds.add(id));
-            pushUpdateJobCounter();
-            pushUpdateActionButtons();
-            pushRenderTable();
-        }, 500);
+
+        // Wait for push section init to complete
+        const waitForInit = () => new Promise(resolve => {
+            const check = () => state.push.loaded ? resolve() : setTimeout(check, 100);
+            check();
+            setTimeout(resolve, 3000);
+        });
+        await waitForInit();
+
+        // Set search to filter to the selected article, then reload
+        if (searchTitle) {
+            state.push.search = searchTitle;
+            state.push.page = 1;
+            const searchInput = document.getElementById('push-search-input');
+            if (searchInput) searchInput.value = searchTitle;
+        }
+
+        // Reload articles with the search filter and wait for it
+        await pushLoadArticles();
+
+        // Now select the articles
+        ids.forEach(id => state.push.selectedIds.add(id));
+        pushUpdateJobCounter();
+        pushUpdateActionButtons();
+        pushRenderTable();
     }
 }
 
@@ -2807,6 +2868,8 @@ async function trExecuteBulkTranslate() {
     trUpdateActionBar();
     // Reload data to refresh statuses
     setTimeout(() => trLoadArticles(), 1000);
+    // Refresh Content Hub in background so health status updates
+    if (state.hub.loaded) setTimeout(() => loadHubArticles(), 1500);
     // Auto-hide toast after 6 seconds
         setTimeout(() => {
         const toast = document.getElementById('tr-toast');
@@ -4516,7 +4579,7 @@ function pushLoadArticles() {
     if (state.push.locales.length === 0) {
         // No locales → just load titles
         const params = new URLSearchParams({ search: state.push.search, page: state.push.page, page_size: state.push.pageSize });
-        fetch(`/api/push/articles?${params}`)
+        return fetch(`/api/push/articles?${params}`)
             .then(r => r.json())
             .then(data => {
                 if (!data.success) throw new Error(data.error || 'Failed');
@@ -4535,7 +4598,7 @@ function pushLoadArticles() {
     } else {
         // Multi-locale → load status matrix
         const params = new URLSearchParams({ locales: state.push.locales.join(','), search: state.push.search, page: state.push.page, page_size: state.push.pageSize });
-        fetch(`/api/push/articles-multi?${params}`)
+        return fetch(`/api/push/articles-multi?${params}`)
             .then(r => r.json())
             .then(data => {
                 if (!data.success) throw new Error(data.error || 'Failed');
@@ -4777,6 +4840,8 @@ async function pushExecuteConfirmed() {
         ? `✓ ${ok} push${ok !== 1 ? 'es' : ''} completed successfully.`
         : `${ok} succeeded, ${fail} failed.`;
     pushShowToast(msg, fail === 0 ? 'success' : 'warn');
+    // Refresh Content Hub in background so health status updates
+    if (state.hub.loaded) loadHubArticles();
 }
 
 // ---------------------------------------------------------------------------
