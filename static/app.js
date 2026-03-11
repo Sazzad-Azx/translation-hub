@@ -2351,87 +2351,98 @@ async function hubBulkAction(actionType) {
     const searchTitle = selectedArticle ? (selectedArticle.title || '').substring(0, 40) : '';
 
     if (actionType === 'pull') {
+        // Set search before switching so first-time init uses it
+        state.pull.search = searchTitle;
+        state.pull.page = 1;
+
         switchSection('pull');
 
-        // Wait for pull section init to complete
-        const waitForInit = () => new Promise(resolve => {
-            const check = () => state.pull.loaded ? resolve() : setTimeout(check, 100);
-            check();
-            setTimeout(resolve, 3000);
-        });
-        await waitForInit();
+        // If already initialized, force reload with search
+        if (state.pull.loaded && state.pull.tableExists) {
+            await loadPullArticles();
+        } else {
+            await _waitForTableLoad('pull-table-body');
+        }
 
-        // Set search to filter to the selected article
+        // Set search input value
         if (searchTitle) {
-            state.pull.search = searchTitle;
-            state.pull.page = 1;
             const searchInput = document.getElementById('pull-search-input');
             if (searchInput) searchInput.value = searchTitle;
         }
 
-        // Reload and wait for it
-        await loadPullArticles();
-
-        // Now select the articles
+        // Select the articles
         ids.forEach(id => state.pull.selectedIds.add(id));
         updatePullSelectedCount();
         renderPullTable();
 
     } else if (actionType === 'translate') {
+        // Set search before switching so first-time init uses it
+        state.tr.search = searchTitle;
+        state.tr.page = 1;
+
         switchSection('translate');
 
-        // Wait for translate section init to complete
-        const waitForInit = () => new Promise(resolve => {
-            const check = () => state.tr.loaded ? resolve() : setTimeout(check, 100);
-            check();
-            setTimeout(resolve, 3000);
-        });
-        await waitForInit();
+        // If already initialized, force reload with search
+        if (state.tr.loaded) {
+            await trLoadArticles();
+        } else {
+            await _waitForTableLoad('tr-table-body');
+        }
 
-        // Set search to filter to the selected article
+        // Set search input value
         if (searchTitle) {
-            state.tr.search = searchTitle;
-            state.tr.page = 1;
             const searchInput = document.getElementById('tr-search-input');
             if (searchInput) searchInput.value = searchTitle;
         }
 
-        // Reload and wait for it
-        await trLoadArticles();
-
-        // Now select the articles
+        // Select the articles
         ids.forEach(id => state.tr.selectedArticles.add(id));
         trUpdateActionBar();
         trRenderTable();
 
     } else if (actionType === 'push') {
+        // Set search before switching so first-time init uses it
+        state.push.search = searchTitle;
+        state.push.page = 1;
+
         switchSection('push');
 
-        // Wait for push section init to complete
-        const waitForInit = () => new Promise(resolve => {
-            const check = () => state.push.loaded ? resolve() : setTimeout(check, 100);
-            check();
-            setTimeout(resolve, 3000);
-        });
-        await waitForInit();
+        // If already initialized, force reload with search
+        if (state.push.loaded) {
+            await pushLoadArticles();
+        } else {
+            await _waitForTableLoad('push-table-body');
+        }
 
-        // Set search to filter to the selected article, then reload
+        // Set search input value
         if (searchTitle) {
-            state.push.search = searchTitle;
-            state.push.page = 1;
             const searchInput = document.getElementById('push-search-input');
             if (searchInput) searchInput.value = searchTitle;
         }
 
-        // Reload articles with the search filter and wait for it
-        await pushLoadArticles();
-
-        // Now select the articles
+        // Select the articles
         ids.forEach(id => state.push.selectedIds.add(id));
         pushUpdateJobCounter();
         pushUpdateActionButtons();
         pushRenderTable();
     }
+}
+
+// Helper: wait for a table to finish loading (spinner disappears)
+function _waitForTableLoad(tbodyId) {
+    return new Promise(resolve => {
+        const check = () => {
+            const tbody = document.getElementById(tbodyId);
+            const hasSpinner = tbody && tbody.querySelector('.fa-spinner');
+            if (tbody && !hasSpinner) {
+                resolve();
+            } else {
+                setTimeout(check, 200);
+            }
+        };
+        setTimeout(check, 500);
+        setTimeout(resolve, 8000);
+    });
 }
 
 
