@@ -808,11 +808,42 @@ def dashboard_stats():
                         changes_monthly[4 - i] += 1
                         cost_monthly[4 - i] += cost_per_translation
 
+        # ---------- Fetch English titles from pull_registry ----------
+        english_titles = {}
+        try:
+            unique_aids = set(t.get('parent_intercom_article_id', '') for t in all_translations if t.get('parent_intercom_article_id'))
+            if unique_aids:
+                import requests as _req2
+                from config import SUPABASE_URL, SUPABASE_SERVICE_KEY
+                aid_list = list(unique_aids)
+                for i in range(0, len(aid_list), 50):
+                    batch = aid_list[i:i+50]
+                    filter_str = ','.join(batch)
+                    resp = _req2.get(
+                        f"{SUPABASE_URL}/rest/v1/pull_registry",
+                        headers={
+                            "apikey": SUPABASE_SERVICE_KEY,
+                            "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+                        },
+                        params={
+                            "select": "intercom_id,title",
+                            "intercom_id": f"in.({filter_str})",
+                        },
+                        timeout=15,
+                    )
+                    if resp.status_code == 200:
+                        for row in resp.json():
+                            if row.get('title'):
+                                english_titles[row['intercom_id']] = row['title']
+        except Exception:
+            pass
+
         # ---------- Top changed articles ----------
         article_change_count = {}
         for t in all_translations:
             aid = t.get('parent_intercom_article_id', '')
-            title = t.get('translated_title', 'Untitled')
+            # Use English title from pull_registry, fallback to translated_title
+            title = english_titles.get(aid) or t.get('translated_title', 'Untitled')
             updated = t.get('updated_at') or t.get('created_at') or ''
             if aid not in article_change_count:
                 article_change_count[aid] = {'title': title, 'changes': 0, 'last_updated': updated}
@@ -836,7 +867,9 @@ def dashboard_stats():
             key=lambda t: t.get('updated_at') or t.get('created_at') or '', reverse=True)
         for t in sorted_translations[:15]:
             locale = t.get('target_locale', '??')
-            title = t.get('translated_title', 'Untitled')
+            aid = t.get('parent_intercom_article_id', '')
+            # Use English title from pull_registry, fallback to translated_title
+            title = english_titles.get(aid) or t.get('translated_title', 'Untitled')
             if len(title) > 50:
                 title = title[:47] + '...'
             updated = t.get('updated_at') or t.get('created_at') or ''
