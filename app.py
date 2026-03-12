@@ -1323,6 +1323,36 @@ def content_hub_article_detail(intercom_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/content-hub/archive', methods=['POST'])
+def content_hub_archive():
+    """Archive selected articles so they are hidden from the app."""
+    from content_hub_service import archive_articles
+    try:
+        data = request.get_json(force=True)
+        ids = data.get('intercom_ids', [])
+        if not ids:
+            return jsonify({'success': False, 'error': 'No intercom_ids provided'}), 400
+        result = archive_articles(ids)
+        return jsonify({'success': True, **result})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/content-hub/unarchive', methods=['POST'])
+def content_hub_unarchive():
+    """Unarchive articles to make them visible again."""
+    from content_hub_service import unarchive_articles
+    try:
+        data = request.get_json(force=True)
+        ids = data.get('intercom_ids', [])
+        if not ids:
+            return jsonify({'success': False, 'error': 'No intercom_ids provided'}), 400
+        result = unarchive_articles(ids)
+        return jsonify({'success': True, **result})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 # =====================================================================
 # Pull Module API Endpoints
 # =====================================================================

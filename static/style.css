@@ -1498,6 +1498,36 @@ body {
     text-align: center !important;
 }
 
+.ch-archive-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #94a3b8;
+    font-size: 14px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: color 0.2s, background 0.2s;
+}
+.ch-archive-btn:hover {
+    color: #ef4444;
+    background: #fef2f2;
+}
+
+.ch-unarchive-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #94a3b8;
+    font-size: 14px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: color 0.2s, background 0.2s;
+}
+.ch-unarchive-btn:hover {
+    color: #22c55e;
+    background: #f0fdf4;
+}
+
 .ch-table tbody td {
     padding: 11px 14px;
     font-size: 13px;

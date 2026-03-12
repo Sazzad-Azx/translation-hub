@@ -293,6 +293,10 @@
                     <span class="ch-filter-icon">✅</span>
                     Complete <span class="ch-filter-count" id="ch-count-COMPLETE">0</span>
                 </button>
+                <button class="ch-filter-btn" data-health="ARCHIVED">
+                    <span class="ch-filter-icon">📦</span>
+                    Archived <span class="ch-filter-count" id="ch-count-ARCHIVED">0</span>
+                </button>
             </div>
 
             <!-- Search & Sort Bar -->
@@ -305,9 +309,9 @@
                 </div>
                 <div class="ch-toolbar-right">
                     <select id="ch-sort-select" class="ch-sort-select" aria-label="Sort articles">
+                        <option value="title_asc" selected>Alphabetical (A–Z)</option>
+                        <option value="updated_desc">Intercom Recent Update</option>
                         <option value="attention">Needs Attention First</option>
-                        <option value="updated_desc">Most Recently Updated</option>
-                        <option value="title_asc">Title A–Z</option>
                     </select>
                     <select id="ch-page-size" class="ch-sort-select" aria-label="Page size">
                         <option value="10">10 / page</option>
@@ -342,10 +346,11 @@
                                     <th>Pulled</th>
                                     <th>Languages</th>
                                     <th class="ch-th-health">Health</th>
+                                    <th style="width:50px;text-align:center;">Archive</th>
                                 </tr>
                             </thead>
                             <tbody id="ch-table-body">
-                                <tr><td colspan="6" class="empty-cell">Navigate to Content Hub to load articles.</td></tr>
+                                <tr><td colspan="7" class="empty-cell">Navigate to Content Hub to load articles.</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -564,7 +569,7 @@
                 <div class="tr-toolbar-right">
                     <select id="tr-sort-select" class="tr-select">
                         <option value="attention">Needs Attention First</option>
-                        <option value="title_asc">Title A–Z</option>
+                        <option value="title_asc">Alphabetical (A–Z)</option>
                         <option value="updated_desc">Recently Updated</option>
                     </select>
                     <select id="tr-page-size" class="tr-select">

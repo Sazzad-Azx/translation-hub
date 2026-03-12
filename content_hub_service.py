@@ -14,15 +14,18 @@ Health priority (highest → lowest):
   FAILED      → reserved for future error tracking
 """
 
+import json
 import requests
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from config import SUPABASE_URL, SUPABASE_SERVICE_KEY, TARGET_LANGUAGES
 
 REST_BASE = f"{SUPABASE_URL.rstrip('/')}/rest/v1" if SUPABASE_URL else ""
 PULL_TABLE = "pull_registry"
 TRANSLATIONS_TABLE = "article_translations"
+SETTINGS_TABLE = "automation_settings"
+ARCHIVE_KEY = "archived_articles"
 
 # Health priority order (lower = more urgent)
 HEALTH_PRIORITY = {
@@ -218,6 +221,99 @@ def _fetch_all_translations() -> Dict[str, List[Dict]]:
 
 
 # ---------------------------------------------------------------------------
+# Archive helpers (uses automation_settings table)
+# ---------------------------------------------------------------------------
+
+def _read_archived_ids() -> Set[str]:
+    """Read set of archived intercom_ids from automation_settings."""
+    if not REST_BASE:
+        return set()
+    try:
+        h = _headers()
+        h.pop("Prefer", None)
+        r = requests.get(
+            f"{REST_BASE}/{SETTINGS_TABLE}",
+            headers=h,
+            params={"select": "last_run_message", "key": f"eq.{ARCHIVE_KEY}"},
+            timeout=15,
+        )
+        if not r.ok or not r.text:
+            return set()
+        rows = r.json()
+        if not rows:
+            return set()
+        raw = rows[0].get("last_run_message", "")
+        if not raw:
+            return set()
+        data = json.loads(raw)
+        if isinstance(data, list):
+            return set(str(x) for x in data)
+    except Exception:
+        pass
+    return set()
+
+
+def _write_archived_ids(ids: Set[str]) -> bool:
+    """Write archived IDs to automation_settings."""
+    if not REST_BASE:
+        return False
+    msg = json.dumps(sorted(ids))
+    try:
+        h = _headers("return=minimal")
+        r = requests.patch(
+            f"{REST_BASE}/{SETTINGS_TABLE}?key=eq.{ARCHIVE_KEY}",
+            json={"last_run_message": msg},
+            headers=h,
+            timeout=15,
+        )
+        if r.status_code in (200, 204):
+            # Verify write
+            check = _read_archived_ids()
+            if check:
+                return True
+        # Row doesn't exist — INSERT
+        payload = {"key": ARCHIVE_KEY, "enabled": True, "last_run_message": msg}
+        h2 = _headers("return=minimal")
+        r2 = requests.post(f"{REST_BASE}/{SETTINGS_TABLE}", json=payload, headers=h2, timeout=15)
+        return r2.status_code in (200, 201)
+    except Exception:
+        return False
+
+
+def archive_articles(intercom_ids: List[str]) -> Dict:
+    """Archive articles by adding their IDs to the archived set."""
+    ids = _read_archived_ids()
+    added = []
+    for iid in intercom_ids:
+        s = str(iid)
+        if s not in ids:
+            ids.add(s)
+            added.append(s)
+    if added:
+        _write_archived_ids(ids)
+    return {"archived": len(added), "total_archived": len(ids)}
+
+
+def unarchive_articles(intercom_ids: List[str]) -> Dict:
+    """Unarchive articles by removing their IDs from the archived set."""
+    ids = _read_archived_ids()
+    removed = []
+    for iid in intercom_ids:
+        s = str(iid)
+        if s in ids:
+            ids.discard(s)
+            removed.append(s)
+    if removed:
+        _write_archived_ids(ids)
+    return {"unarchived": len(removed), "total_archived": len(ids)}
+
+
+def list_archived_articles() -> List[str]:
+    """Return list of archived intercom_ids."""
+    return sorted(_read_archived_ids())
+
+
+# ---------------------------------------------------------------------------
 # List articles with health (paginated, searchable, filterable, sortable)
 # ---------------------------------------------------------------------------
 
@@ -265,6 +361,20 @@ def list_content_hub_articles(
     if not isinstance(all_articles, list):
         all_articles = []
 
+    # Separate archived vs active articles
+    archived_ids = _read_archived_ids()
+    archived_articles = []
+    active_articles = []
+    for a in all_articles:
+        if str(a.get("intercom_id", "")) in archived_ids:
+            archived_articles.append(a)
+        else:
+            active_articles.append(a)
+
+    # If viewing archived tab, show only archived articles
+    showing_archived = (health_filter == "ARCHIVED")
+    working_articles = archived_articles if showing_archived else active_articles
+
     # Fetch all translations for health computation
     translations_map = _fetch_all_translations()
 
@@ -277,12 +387,14 @@ def list_content_hub_articles(
         "NEEDS_PUSH": 0,
         "COMPLETE": 0,
         "FAILED": 0,
-        "ALL": len(all_articles),
+        "ALL": len(active_articles),
+        "ARCHIVED": len(archived_articles),
     }
 
-    for a in all_articles:
+    for a in working_articles:
         health, lang_statuses = _compute_health(a, translations_map)
-        counts[health] = counts.get(health, 0) + 1
+        if not showing_archived:
+            counts[health] = counts.get(health, 0) + 1
 
         word_count = _estimate_word_count(a.get("title", ""), a.get("description", ""))
         source_updated_dt = _parse_ts(a.get("source_updated_at"))
@@ -301,13 +413,13 @@ def list_content_hub_articles(
             "source_updated_relative": _relative_time(source_updated_dt),
             "pulled": bool(a.get("pulled_at")),
             "pulled_at": a.get("pulled_at"),
-            "health": health,
+            "health": "ARCHIVED" if showing_archived else health,
             "health_priority": HEALTH_PRIORITY.get(health, 99),
             "lang_statuses": lang_statuses,
         })
 
-    # Apply health filter
-    if health_filter and health_filter != "ALL":
+    # Apply health filter (skip for ARCHIVED since we already filtered above)
+    if health_filter and health_filter not in ("ALL", "ARCHIVED"):
         enriched = [a for a in enriched if a["health"] == health_filter]
 
     # Sort

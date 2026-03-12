@@ -63,13 +63,14 @@ let state = {
         loaded: false,
         articles: [],
         selectedIds: new Set(),
+        selectedMeta: {},
         page: 1,
         pageSize: 25,
         total: 0,
         totalWords: 0,
         search: '',
         healthFilter: 'ALL',
-        sortBy: 'attention',
+        sortBy: 'title_asc',
         activeTab: 'articles',
         counts: {},
         searchTimeout: null,
@@ -2027,8 +2028,14 @@ function setupHubEventListeners() {
         selectAll.addEventListener('change', () => {
             const checked = selectAll.checked;
             state.hub.articles.forEach(a => {
-                if (checked) state.hub.selectedIds.add(a.intercom_id);
-                else state.hub.selectedIds.delete(a.intercom_id);
+                const sid = String(a.intercom_id);
+                if (checked) {
+                    state.hub.selectedIds.add(sid);
+                    state.hub.selectedMeta[sid] = { title: a.title || '', intercom_id: sid };
+                } else {
+                    state.hub.selectedIds.delete(sid);
+                    delete state.hub.selectedMeta[sid];
+                }
             });
             renderHubTable();
             updateHubBulkBar();
@@ -2097,13 +2104,13 @@ function renderHubTable() {
     if (!tbody) return;
 
     if (state.hub.articles.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="empty-cell">No articles match this filter. Try syncing from the <strong>Pull</strong> section first.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="empty-cell">No articles match this filter. Try syncing from the <strong>Pull</strong> section first.</td></tr>';
         return;
     }
     
     tbody.innerHTML = '';
     state.hub.articles.forEach(article => {
-        const iid = article.intercom_id;
+        const iid = String(article.intercom_id);
         const checked = state.hub.selectedIds.has(iid);
         const health = article.health || 'NEEDS_PULL';
         const rowClass = {
@@ -2125,17 +2132,42 @@ function renderHubTable() {
             <td>${article.pulled ? '<span class="ch-pulled-yes">✓</span>' : '<span class="ch-pulled-no">—</span>'}</td>
             <td>${renderLangChips(article.lang_statuses || {})}</td>
             <td style="text-align:center">${renderHealthBadge(health)}</td>
+            <td style="text-align:center">${state.hub.healthFilter === 'ARCHIVED'
+                ? `<button class="ch-unarchive-btn" data-iid="${iid}" title="Unarchive this article"><i class="fas fa-undo-alt"></i></button>`
+                : `<button class="ch-archive-btn" data-iid="${iid}" title="Archive this article"><i class="fas fa-archive"></i></button>`
+            }</td>
         `;
+
+        // Archive / Unarchive button
+        const archiveBtn = tr.querySelector('.ch-archive-btn');
+        const unarchiveBtn = tr.querySelector('.ch-unarchive-btn');
+        if (archiveBtn) {
+            archiveBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                hubArchiveSingle(iid, article.title || 'Untitled');
+            });
+        }
+        if (unarchiveBtn) {
+            unarchiveBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                hubUnarchiveSingle(iid, article.title || 'Untitled');
+            });
+        }
 
         // Checkbox
         const cb = tr.querySelector('input[type="checkbox"]');
         cb.addEventListener('click', (e) => e.stopPropagation());
         cb.addEventListener('change', () => {
-            if (cb.checked) state.hub.selectedIds.add(iid);
-            else state.hub.selectedIds.delete(iid);
+            if (cb.checked) {
+                state.hub.selectedIds.add(iid);
+                state.hub.selectedMeta[iid] = { title: article.title || '', intercom_id: iid };
+            } else {
+                state.hub.selectedIds.delete(iid);
+                delete state.hub.selectedMeta[iid];
+            }
             updateHubBulkBar();
             const selectAll = document.getElementById('ch-select-all');
-            if (selectAll) selectAll.checked = state.hub.articles.every(a => state.hub.selectedIds.has(a.intercom_id));
+            if (selectAll) selectAll.checked = state.hub.articles.every(a => state.hub.selectedIds.has(String(a.intercom_id)));
         });
 
         // Row click → drawer
@@ -2207,6 +2239,7 @@ function updateHubFilterCounts() {
     setCount('ch-count-NEEDS_PUSH', c.NEEDS_PUSH || 0);
     setCount('ch-count-OUTDATED', c.OUTDATED || 0);
     setCount('ch-count-COMPLETE', c.COMPLETE || 0);
+    setCount('ch-count-ARCHIVED', c.ARCHIVED || 0);
 }
 
 function updateHubGlobalStats() {
@@ -2346,9 +2379,15 @@ async function hubBulkAction(actionType) {
     const ids = Array.from(state.hub.selectedIds);
     if (ids.length === 0) return;
 
-    // Get article title from Content Hub to use as search filter
-    const selectedArticle = state.hub.articles.find(a => ids.includes(a.intercom_id));
-    const searchTitle = selectedArticle ? (selectedArticle.title || '').substring(0, 40) : '';
+    // Get article title from selectedMeta (robust) or fallback to current articles
+    let searchTitle = '';
+    const firstId = ids[0];
+    if (state.hub.selectedMeta[firstId]) {
+        searchTitle = (state.hub.selectedMeta[firstId].title || '').substring(0, 40);
+    } else {
+        const selectedArticle = state.hub.articles.find(a => String(a.intercom_id) === String(firstId));
+        searchTitle = selectedArticle ? (selectedArticle.title || '').substring(0, 40) : '';
+    }
 
     if (actionType === 'pull') {
         // Set search before switching so first-time init uses it
@@ -2371,7 +2410,7 @@ async function hubBulkAction(actionType) {
         }
 
         // Select the articles
-        ids.forEach(id => state.pull.selectedIds.add(id));
+        ids.forEach(id => state.pull.selectedIds.add(String(id)));
         updatePullSelectedCount();
         renderPullTable();
 
@@ -2396,7 +2435,7 @@ async function hubBulkAction(actionType) {
         }
 
         // Select the articles
-        ids.forEach(id => state.tr.selectedArticles.add(id));
+        ids.forEach(id => state.tr.selectedArticles.add(String(id)));
         trUpdateActionBar();
         trRenderTable();
 
@@ -2405,14 +2444,20 @@ async function hubBulkAction(actionType) {
         state.push.search = searchTitle;
         state.push.page = 1;
 
+        const wasLoaded = state.push.loaded;
         switchSection('push');
 
-        // If already initialized, force reload with search
-        if (state.push.loaded) {
-            await pushLoadArticles();
-        } else {
-            await _waitForTableLoad('push-table-body');
+        // Wait for init to finish if first visit (initPushSection is async)
+        if (!wasLoaded) {
+            await new Promise(resolve => {
+                const check = () => state.push._initDone ? resolve() : setTimeout(check, 100);
+                check();
+                setTimeout(resolve, 5000);
+            });
         }
+
+        // Force reload with search
+        await pushLoadArticles();
 
         // Set search input value
         if (searchTitle) {
@@ -2420,12 +2465,102 @@ async function hubBulkAction(actionType) {
             if (searchInput) searchInput.value = searchTitle;
         }
 
-        // Select the articles
-        ids.forEach(id => state.push.selectedIds.add(id));
+        // Select the articles (normalize to string for consistent matching)
+        ids.forEach(id => state.push.selectedIds.add(String(id)));
         pushUpdateJobCounter();
         pushUpdateActionButtons();
         pushRenderTable();
     }
+}
+
+// ---- Archive Selected Articles ----
+async function hubArchiveSelected() {
+    const ids = Array.from(state.hub.selectedIds);
+    if (ids.length === 0) return;
+
+    const count = ids.length;
+    const confirmMsg = `Are you sure you want to archive ${count} article${count > 1 ? 's' : ''}? Archived articles will be hidden from the application.`;
+    if (!confirm(confirmMsg)) return;
+
+    const archiveBtn = document.getElementById('ch-bulk-archive');
+    if (archiveBtn) { archiveBtn.disabled = true; archiveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Archiving...'; }
+
+    try {
+        const resp = await fetch('/api/content-hub/archive', {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify({ intercom_ids: ids }),
+        });
+        const data = await resp.json();
+        if (data.success) {
+            // Clear selection and refresh
+            state.hub.selectedIds.clear();
+            state.hub.selectedMeta = {};
+            updateHubBulkBar();
+            await loadHubArticles();
+            showHubToast(`${data.archived} article${data.archived > 1 ? 's' : ''} archived successfully.`, 'success');
+        } else {
+            showHubToast('Archive failed: ' + (data.error || 'Unknown error'), 'error');
+        }
+    } catch (err) {
+        showHubToast('Archive failed: ' + err.message, 'error');
+    } finally {
+        if (archiveBtn) { archiveBtn.disabled = false; archiveBtn.innerHTML = '<i class="fas fa-archive"></i> Archive'; }
+    }
+}
+
+async function hubArchiveSingle(intercomId, title) {
+    if (!confirm(`Archive "${title}"? It will be hidden from the application.`)) return;
+    try {
+        const resp = await fetch('/api/content-hub/archive', {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify({ intercom_ids: [intercomId] }),
+        });
+        const data = await resp.json();
+        if (data.success) {
+            state.hub.selectedIds.delete(intercomId);
+            delete state.hub.selectedMeta[intercomId];
+            updateHubBulkBar();
+            await loadHubArticles();
+            showHubToast('Article archived successfully.', 'success');
+        } else {
+            showHubToast('Archive failed: ' + (data.error || 'Unknown error'), 'error');
+        }
+    } catch (err) {
+        showHubToast('Archive failed: ' + err.message, 'error');
+    }
+}
+
+async function hubUnarchiveSingle(intercomId, title) {
+    if (!confirm(`Unarchive "${title}"? It will be visible in the application again.`)) return;
+    try {
+        const resp = await fetch('/api/content-hub/unarchive', {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify({ intercom_ids: [intercomId] }),
+        });
+        const data = await resp.json();
+        if (data.success) {
+            await loadHubArticles();
+            showHubToast('Article unarchived successfully.', 'success');
+        } else {
+            showHubToast('Unarchive failed: ' + (data.error || 'Unknown error'), 'error');
+        }
+    } catch (err) {
+        showHubToast('Unarchive failed: ' + err.message, 'error');
+    }
+}
+
+function showHubToast(message, type) {
+    // Reuse existing toast pattern or create simple one
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'}"></i> ${message}`;
+    toast.style.cssText = 'position:fixed;top:20px;right:20px;z-index:10000;padding:12px 20px;border-radius:8px;color:#fff;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,0.15);transition:opacity 0.3s;';
+    toast.style.background = type === 'success' ? '#22c55e' : '#ef4444';
+    document.body.appendChild(toast);
+    setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 3000);
 }
 
 // Helper: wait for a table to finish loading (spinner disappears)
@@ -4421,9 +4556,11 @@ document.addEventListener('DOMContentLoaded', () => { refreshTargetLanguages(); 
 async function initPushSection() {
     if (state.push.loaded) return;
     state.push.loaded = true;
+    state.push._initDone = false;
     await refreshTargetLanguages();
     pushPopulateLangDropdown();
     pushSetupEventListeners();
+    state.push._initDone = true;
     pushLoadArticles();
 }
 
@@ -4645,8 +4782,9 @@ function pushRenderTableHeader() {
     document.getElementById('push-select-all')?.addEventListener('change', (e) => {
         const checked = e.target.checked;
         state.push.articles.forEach(a => {
-            if (checked) state.push.selectedIds.add(a.intercom_id);
-            else state.push.selectedIds.delete(a.intercom_id);
+            const sid = String(a.intercom_id);
+            if (checked) state.push.selectedIds.add(sid);
+            else state.push.selectedIds.delete(sid);
         });
         document.querySelectorAll('.push-row-cb').forEach(cb => { cb.checked = checked; });
         pushUpdateJobCounter();
@@ -4671,7 +4809,7 @@ function pushRenderTable() {
     const hasLocales = state.push.locales.length > 0;
 
     state.push.articles.forEach(article => {
-        const iid = article.intercom_id;
+        const iid = String(article.intercom_id);
         const checked = state.push.selectedIds.has(iid);
         const tr = document.createElement('tr');
         tr.dataset.id = iid;
@@ -4757,7 +4895,7 @@ function pushStartSelected() {
 
     const pairs = [];
     state.push.selectedIds.forEach(iid => {
-        const article = state.push.articles.find(a => a.intercom_id === iid);
+        const article = state.push.articles.find(a => String(a.intercom_id) === String(iid));
         if (!article) return;
         const ld = article.locale_data || {};
         state.push.locales.forEach(loc => {
