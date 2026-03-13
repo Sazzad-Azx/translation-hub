@@ -2,6 +2,39 @@
 // FundedNext Translation Hub - Frontend Application
 // ============================================================
 
+// Loader HTML helpers
+const FN_LOADER = '<span class="fn-loader"></span>';
+const FN_LOADER_INLINE = '<span class="fn-loader-inline"></span>';
+
+// ─── Generic Confirm Modal ─────────────────────────────────
+function showConfirmModal({ title, body, confirmText, confirmIcon, onConfirm }) {
+    const overlay = document.getElementById('generic-confirm-overlay');
+    const titleEl = document.getElementById('generic-confirm-title');
+    const bodyEl = document.getElementById('generic-confirm-body');
+    const okBtn = document.getElementById('generic-confirm-ok');
+    const cancelBtn = document.getElementById('generic-confirm-cancel');
+    const closeBtn = document.getElementById('generic-confirm-close');
+
+    titleEl.innerHTML = `<i class="fas ${confirmIcon || 'fa-exclamation-circle'}"></i> ${title || 'Confirm'}`;
+    bodyEl.innerHTML = body || '';
+    okBtn.innerHTML = `<i class="fas ${confirmIcon || 'fa-check'}"></i> ${confirmText || 'Confirm'}`;
+
+    overlay.classList.remove('hidden');
+
+    function cleanup() {
+        overlay.classList.add('hidden');
+        okBtn.removeEventListener('click', handleOk);
+        cancelBtn.removeEventListener('click', handleCancel);
+        closeBtn.removeEventListener('click', handleCancel);
+    }
+    function handleOk() { cleanup(); onConfirm(); }
+    function handleCancel() { cleanup(); }
+
+    okBtn.addEventListener('click', handleOk);
+    cancelBtn.addEventListener('click', handleCancel);
+    closeBtn.addEventListener('click', handleCancel);
+}
+
 // ─── Auth state ────────────────────────────────────────────
 let authState = {
     token: localStorage.getItem('auth_token') || '',
@@ -253,9 +286,14 @@ function setupLoginListeners() {
     if (toggle) {
         toggle.addEventListener('click', () => {
             const inp = document.getElementById('login-password');
-            const isPassword = inp.type === 'password';
-            inp.type = isPassword ? 'text' : 'password';
-            toggle.innerHTML = isPassword ? '<i class="fas fa-eye-slash"></i>' : '<i class="fas fa-eye"></i>';
+            const icon = document.getElementById('eye-icon');
+            if (inp.type === 'password') {
+                inp.type = 'text';
+                if (icon) icon.innerHTML = '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/>';
+            } else {
+                inp.type = 'password';
+                if (icon) icon.innerHTML = '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>';
+            }
         });
     }
 }
@@ -387,7 +425,7 @@ function setupAutomationListeners() {
     // Run Now button
     document.getElementById('auto-run-now-btn')?.addEventListener('click', async () => {
         const btn = document.getElementById('auto-run-now-btn');
-        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Running…'; }
+        if (btn) { btn.disabled = true; btn.innerHTML = '<span class="fn-loader-inline"></span> Running…'; }
         try {
             const resp = await fetch('/api/automation/run-now', {
                 method: 'POST',
@@ -414,7 +452,7 @@ function setupAutomationListeners() {
     // Auto-create table
     document.getElementById('auto-create-settings-table-btn')?.addEventListener('click', async () => {
         const btn = document.getElementById('auto-create-settings-table-btn');
-        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating…'; }
+        if (btn) { btn.disabled = true; btn.innerHTML = '<span class="fn-loader-inline"></span> Creating…'; }
         try {
             const resp = await fetch('/api/automation/create-table', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
             const data = await resp.json();
@@ -480,7 +518,7 @@ function setupAutomationListeners() {
     // Run Now button
     document.getElementById('auto-pull-run-now-btn')?.addEventListener('click', async () => {
         const btn = document.getElementById('auto-pull-run-now-btn');
-        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Pulling…'; }
+        if (btn) { btn.disabled = true; btn.innerHTML = '<span class="fn-loader-inline"></span> Pulling…'; }
         try {
             const resp = await fetch('/api/automation/run-now', {
                 method: 'POST',
@@ -687,14 +725,21 @@ async function initAdminSection() {
     try {
         const resp = await fetch('/api/auth/admins-table', { headers: authHeaders() });
         const data = await resp.json();
+        const banner = document.getElementById('admin-setup-banner');
         if (!data.exists) {
             adminState.tableExists = false;
-            const banner = document.getElementById('admin-setup-banner');
             const sqlPre = document.getElementById('admin-setup-sql');
             if (banner) banner.classList.remove('hidden');
             if (sqlPre) sqlPre.textContent = data.sql || '';
+        } else {
+            adminState.tableExists = true;
+            if (banner) banner.classList.add('hidden');
         }
-    } catch (e) { /* ignore */ }
+    } catch (e) {
+        // If the check fails but admins load OK, hide the banner
+        const banner = document.getElementById('admin-setup-banner');
+        if (banner) banner.classList.add('hidden');
+    }
 
     // Copy SQL button
     const copyBtn = document.getElementById('admin-copy-sql');
@@ -702,8 +747,8 @@ async function initAdminSection() {
         copyBtn.addEventListener('click', () => {
             const sql = document.getElementById('admin-setup-sql').textContent;
             navigator.clipboard.writeText(sql);
-            copyBtn.innerHTML = '<i class="fas fa-check"></i> Copied!';
-            setTimeout(() => { copyBtn.innerHTML = '<i class="fas fa-copy"></i> Copy SQL'; }, 2000);
+            copyBtn.innerHTML = '✅ &nbsp;Copied!';
+            setTimeout(() => { copyBtn.innerHTML = '📋 &nbsp;Copy SQL'; }, 2000);
         });
     }
 
@@ -712,7 +757,7 @@ async function initAdminSection() {
     if (autoCreateBtn) {
         autoCreateBtn.addEventListener('click', async () => {
             autoCreateBtn.disabled = true;
-            autoCreateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating...';
+            autoCreateBtn.innerHTML = '<span class="fn-loader-inline"></span> &nbsp;Creating...';
             try {
                 const resp = await fetch('/api/auth/admins-table/create', {
                     method: 'POST',
@@ -730,7 +775,7 @@ async function initAdminSection() {
                 alert('Failed to auto-create table. Please use the SQL Editor.');
             }
             autoCreateBtn.disabled = false;
-            autoCreateBtn.innerHTML = '<i class="fas fa-magic"></i> Auto-Create Table';
+            autoCreateBtn.innerHTML = '⚡ &nbsp;Auto-Create Table';
         });
     }
 
@@ -757,7 +802,7 @@ async function initAdminSection() {
             }
 
             addBtn.disabled = true;
-            addBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Adding...';
+            addBtn.innerHTML = '<span class="fn-loader-inline"></span> &nbsp;Adding...';
 
             try {
                 const resp = await fetch('/api/auth/admins', {
@@ -781,7 +826,7 @@ async function initAdminSection() {
             }
 
             addBtn.disabled = false;
-            addBtn.innerHTML = '<i class="fas fa-plus"></i> Add Admin';
+            addBtn.innerHTML = '➕ &nbsp;Add Admin';
         });
     }
 
@@ -796,6 +841,12 @@ async function loadAdmins() {
         const resp = await fetch('/api/auth/admins', { headers: authHeaders() });
         const data = await resp.json();
         adminState.admins = data.admins || [];
+        // If we successfully fetched admins, the table exists — hide the setup banner
+        if (resp.ok) {
+            adminState.tableExists = true;
+            const banner = document.getElementById('admin-setup-banner');
+            if (banner) banner.classList.add('hidden');
+        }
     } catch (e) {
         adminState.admins = [];
     }
@@ -808,36 +859,36 @@ async function loadAdmins() {
     // Super admin row (not deletable)
     if (superAdmin) {
         html += `<tr>
-            <td><strong>${escapeHtml(superAdmin.name)}</strong></td>
-            <td>${escapeHtml(superAdmin.email)}</td>
-            <td><span class="admin-role-badge super_admin">Super Admin</span></td>
-            <td><span class="admin-status-badge active">Active</span></td>
-            <td>—</td>
-            <td><span style="color:#94a3b8;font-size:12px;">Protected</span></td>
+            <td><span class="ap-name">${escapeHtml(superAdmin.name)}</span></td>
+            <td><span class="ap-email">${escapeHtml(superAdmin.email)}</span></td>
+            <td class="ap-td-center"><span class="ap-role-badge ap-role-super"><div class="ap-role-dot"></div>Super Admin</span></td>
+            <td class="ap-td-center"><span class="ap-status-badge ap-status-active"><div class="ap-status-dot"></div>Active</span></td>
+            <td><span class="ap-date">—</span></td>
+            <td class="ap-td-center"><span class="ap-protected">Protected</span></td>
         </tr>`;
     }
 
     // Other admins
     if (adminState.admins.length === 0) {
-        html += `<tr><td colspan="6" style="text-align:center;padding:20px;color:#94a3b8;">No other admins yet. Add one above.</td></tr>`;
+        html += `<tr><td colspan="6" style="text-align:center;padding:24px;color:#93C5E0;font-weight:500;">No other admins yet. Add one above.</td></tr>`;
     } else {
         for (const admin of adminState.admins) {
-            const created = admin.created_at ? new Date(admin.created_at).toLocaleDateString() : '—';
-            const statusClass = admin.is_active ? 'active' : 'inactive';
+            const created = admin.created_at ? new Date(admin.created_at).toLocaleDateString('en', { month:'short', day:'numeric', year:'numeric' }) : '—';
+            const statusCls = admin.is_active ? 'ap-status-active' : 'ap-status-inactive';
             const statusText = admin.is_active ? 'Active' : 'Inactive';
+            const roleCls = admin.role === 'super_admin' ? 'ap-role-super' : admin.role === 'admin' ? 'ap-role-admin' : admin.role === 'editor' ? 'ap-role-editor' : 'ap-role-viewer';
+            const roleLabel = admin.role === 'super_admin' ? 'Super Admin' : admin.role.charAt(0).toUpperCase() + admin.role.slice(1);
+            const toggleIcon = admin.is_active ? '⛔' : '✅';
+            const toggleTitle = admin.is_active ? 'Deactivate' : 'Activate';
             html += `<tr data-admin-id="${admin.id}">
-                <td>${escapeHtml(admin.name || '')}</td>
-                <td>${escapeHtml(admin.email)}</td>
-                <td><span class="admin-role-badge ${admin.role}">${admin.role}</span></td>
-                <td><span class="admin-status-badge ${statusClass}">${statusText}</span></td>
-                <td>${created}</td>
-                <td>
-                    <button class="admin-action-btn" title="Toggle Active" onclick="adminToggleActive(${admin.id}, ${!admin.is_active})">
-                        <i class="fas fa-${admin.is_active ? 'ban' : 'check-circle'}"></i>
-                    </button>
-                    <button class="admin-action-btn delete" title="Delete" onclick="adminDelete(${admin.id})">
-                        <i class="fas fa-trash"></i>
-                    </button>
+                <td><span class="ap-name">${escapeHtml(admin.name || '')}</span></td>
+                <td><span class="ap-email">${escapeHtml(admin.email)}</span></td>
+                <td class="ap-td-center"><span class="ap-role-badge ${roleCls}"><div class="ap-role-dot"></div>${roleLabel}</span></td>
+                <td class="ap-td-center"><span class="ap-status-badge ${statusCls}"><div class="ap-status-dot"></div>${statusText}</span></td>
+                <td><span class="ap-date">${created}</span></td>
+                <td class="ap-td-center">
+                    <button class="ap-action-btn" title="${toggleTitle}" onclick="adminToggleActive(${admin.id}, ${!admin.is_active})">${toggleIcon}</button>
+                    <button class="ap-action-btn ap-delete" title="Delete" onclick="adminDelete(${admin.id})">🗑️</button>
                 </td>
             </tr>`;
         }
@@ -907,7 +958,7 @@ function switchSection(sectionId) {
     // Update topbar title
     const titleMap = {
         'dashboard': 'Dashboard',
-        'content-hub': 'Content Hub',
+        'content-hub': 'Control Tower',
         'pull': 'Pull',
         'translate': 'Translate',
         'push': 'Push',
@@ -1162,7 +1213,7 @@ function renderChangesChart(period, data) {
         data: {
             labels: labels,
             datasets: [{
-                label: 'FAQ Changes',
+                label: 'Source Article Changes',
                 data: values,
                 backgroundColor: 'rgba(37, 99, 235, 0.15)',
                 borderColor: '#2563eb',
@@ -1349,10 +1400,10 @@ function renderRankingTable(articles) {
     if (!tbody) return;
 
     if (!articles || articles.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" class="empty-cell">No article change data available yet. Start translating to see rankings.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="3" class="empty-cell">No recently updated articles found.</td></tr>';
         return;
     }
-    
+
     tbody.innerHTML = '';
     articles.forEach((article, index) => {
         const rank = index + 1;
@@ -1365,8 +1416,7 @@ function renderRankingTable(articles) {
         tr.innerHTML = `
             <td><span class="rank-number ${rankClass}">${rank}</span></td>
             <td class="article-name-cell" title="${escapeHtml(article.title || '')}">${escapeHtml(article.title || 'Untitled')}</td>
-            <td><span class="changes-badge"><i class="fas fa-arrow-up" style="font-size:10px"></i> ${article.changes || 0}</span></td>
-            <td style="font-size:12px;color:#94a3b8;">${article.last_updated || '--'}</td>
+            <td style="font-size:12px;color:var(--steel);">${article.last_updated || '--'}</td>
         `;
         tbody.appendChild(tr);
     });
@@ -1512,58 +1562,28 @@ function setupPullEventListeners() {
         });
     }
 
-    // Status badge click handlers
-    const statTotal = document.getElementById('pull-stat-total');
-    const statUpToDate = document.getElementById('pull-stat-uptodate');
-    const statNeedsUpdate = document.getElementById('pull-stat-needsupdate');
-    const statNever = document.getElementById('pull-stat-never');
-    const statFailed = document.getElementById('pull-stat-failed');
-
-    if (statTotal) {
-        statTotal.closest('.pull-stat-chip')?.addEventListener('click', () => {
-            state.pull.statusFilter = '';
-            if (statusFilter) statusFilter.value = '';
+    // Stat mini card click handlers — filter by clicking the cards
+    const pullStatCards = {
+        'pull-chip-uptodate': 'up_to_date',
+        'pull-chip-needsupdate': 'needs_update',
+        'pull-chip-never': 'never_pulled',
+        'pull-chip-failed': 'failed',
+    };
+    Object.entries(pullStatCards).forEach(([id, filterVal]) => {
+        const card = document.getElementById(id);
+        if (card) card.addEventListener('click', () => {
+            // Toggle: click same filter again to clear
+            if (state.pull.statusFilter === filterVal) {
+                state.pull.statusFilter = '';
+                if (statusFilter) statusFilter.value = '';
+            } else {
+                state.pull.statusFilter = filterVal;
+                if (statusFilter) statusFilter.value = filterVal;
+            }
             state.pull.page = 1;
             loadPullArticles();
-            updatePullStatusBadges();
         });
-    }
-    if (statUpToDate) {
-        statUpToDate.closest('.pull-stat-chip')?.addEventListener('click', () => {
-            state.pull.statusFilter = 'up_to_date';
-            if (statusFilter) statusFilter.value = 'up_to_date';
-            state.pull.page = 1;
-            loadPullArticles();
-            updatePullStatusBadges();
-        });
-    }
-    if (statNeedsUpdate) {
-        statNeedsUpdate.closest('.pull-stat-chip')?.addEventListener('click', () => {
-            state.pull.statusFilter = 'needs_update';
-            if (statusFilter) statusFilter.value = 'needs_update';
-            state.pull.page = 1;
-            loadPullArticles();
-            updatePullStatusBadges();
-        });
-    }
-    if (statNever) {
-        statNever.closest('.pull-stat-chip')?.addEventListener('click', () => {
-            state.pull.statusFilter = 'never_pulled';
-            if (statusFilter) statusFilter.value = 'never_pulled';
-            state.pull.page = 1;
-            loadPullArticles();
-            updatePullStatusBadges();
-        });
-    }
-    if (statFailed) {
-        statFailed.closest('.pull-stat-chip')?.addEventListener('click', () => {
-            state.pull.statusFilter = 'failed';
-            if (statusFilter) statusFilter.value = 'failed';
-            state.pull.page = 1;
-            loadPullArticles();
-            updatePullStatusBadges();
-        });
-    }
+    });
 
     // Page size
     const pageSize = document.getElementById('pull-page-size');
@@ -1592,14 +1612,7 @@ function setupPullEventListeners() {
         });
     }
 
-    // Pagination
-    const prevBtn = document.getElementById('pull-prev-btn');
-    const nextBtn = document.getElementById('pull-next-btn');
-    if (prevBtn) prevBtn.addEventListener('click', () => { if (state.pull.page > 1) { state.pull.page--; loadPullArticles(); } });
-    if (nextBtn) nextBtn.addEventListener('click', () => {
-        const maxPage = Math.ceil(state.pull.total / state.pull.pageSize) || 1;
-        if (state.pull.page < maxPage) { state.pull.page++; loadPullArticles(); }
-    });
+    // Pagination is rendered dynamically in renderPullPagination()
 
     // Setup buttons
     const copyBtn = document.getElementById('copy-setup-sql-btn');
@@ -1622,7 +1635,7 @@ function setupPullEventListeners() {
 
 async function autoCreatePullTable() {
     const btn = document.getElementById('auto-create-table-btn');
-    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating...'; }
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="fn-loader-inline"></span> Creating...'; }
     try {
         const resp = await fetch('/api/pull/create-table', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
         const data = await resp.json();
@@ -1674,11 +1687,22 @@ async function loadPullStats() {
         const resp = await fetch('/api/pull/stats');
         const data = await resp.json();
         if (data.success) {
-            setVal('pull-stat-total', data.total || 0);
-            setVal('pull-stat-uptodate', data.up_to_date || 0);
-            setVal('pull-stat-needsupdate', data.needs_update || 0);
-            setVal('pull-stat-never', data.never_pulled || 0);
-            setVal('pull-stat-failed', data.failed || 0);
+            const total = data.total || 0;
+            const uptodate = data.up_to_date || 0;
+            const needs = data.needs_update || 0;
+            const never = data.never_pulled || 0;
+            const failed = data.failed || 0;
+            setVal('pull-stat-total', total);
+            setVal('pull-stat-uptodate', uptodate);
+            setVal('pull-stat-needsupdate', needs);
+            setVal('pull-stat-never', never);
+            setVal('pull-stat-failed', failed);
+            // Update progress bars
+            const setBar = (id, val) => { const el = document.getElementById(id); if (el) el.style.width = (total ? Math.round(val/total*100) : 0) + '%'; };
+            setBar('pull-bar-uptodate', uptodate);
+            setBar('pull-bar-needsupdate', needs);
+            setBar('pull-bar-never', never);
+            setBar('pull-bar-failed', failed);
         }
     } catch (err) {
         console.warn('Pull stats error:', err);
@@ -1691,35 +1715,13 @@ function setVal(id, val) {
 }
 
 function updatePullStatusBadges() {
-    // Remove active class from all badges
-    document.querySelectorAll('.pull-stat-chip').forEach(chip => {
-        chip.classList.remove('pull-stat-chip-active');
-    });
-    
-    // Add active class to the badge matching current filter
-    const filter = state.pull.statusFilter || '';
-    let activeChip = null;
-    if (filter === '') {
-        activeChip = document.getElementById('pull-stat-total')?.closest('.pull-stat-chip');
-    } else if (filter === 'up_to_date') {
-        activeChip = document.getElementById('pull-stat-uptodate')?.closest('.pull-stat-chip');
-    } else if (filter === 'needs_update') {
-        activeChip = document.getElementById('pull-stat-needsupdate')?.closest('.pull-stat-chip');
-    } else if (filter === 'never_pulled') {
-        activeChip = document.getElementById('pull-stat-never')?.closest('.pull-stat-chip');
-    } else if (filter === 'failed') {
-        activeChip = document.getElementById('pull-stat-failed')?.closest('.pull-stat-chip');
-    }
-    
-    if (activeChip) {
-        activeChip.classList.add('pull-stat-chip-active');
-    }
+    // No-op — stat mini cards don't need active state toggling
 }
 
 async function loadPullArticles() {
     if (!state.pull.tableExists) return;
     const tbody = document.getElementById('pull-table-body');
-    if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="empty-cell"><i class="fas fa-spinner fa-spin"></i> Loading...</td></tr>';
+    if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="empty-cell"><span class="fn-loader"></span> Loading...</td></tr>';
 
     try {
         const params = new URLSearchParams({
@@ -1748,32 +1750,33 @@ async function loadPullArticles() {
 function renderPullTable() {
     const tbody = document.getElementById('pull-table-body');
     if (!tbody) return;
-    
+
     if (state.pull.articles.length === 0) {
         tbody.innerHTML = '<tr><td colspan="6" class="empty-cell">No articles found. Click <strong>Sync Source List</strong> to import articles from Intercom.</td></tr>';
         return;
     }
-    
+
     tbody.innerHTML = '';
     state.pull.articles.forEach(article => {
         const iid = article.intercom_id;
         const checked = state.pull.selectedIds.has(iid);
         const needsPull = article.needs_pull || 'never_pulled';
         const isPulling = needsPull === 'pulling';
+        const stateVal = (article.state || 'draft').toLowerCase();
+        const stateCls = stateVal === 'published' ? 'pl-s-published' : 'pl-s-draft';
 
         const tr = document.createElement('tr');
         if (isPulling) tr.classList.add('row-pulling');
 
         tr.innerHTML = `
-            <td><input type="checkbox" data-iid="${iid}" ${checked ? 'checked' : ''} ${isPulling ? 'disabled' : ''}></td>
-            <td><div class="pull-article-title" title="${escapeHtml(article.title || '')}">${escapeHtml(article.title || 'Untitled')}</div></td>
+            <td style="padding-left:18px"><input type="checkbox" class="pl-cb" data-iid="${iid}" ${checked ? 'checked' : ''} ${isPulling ? 'disabled' : ''}></td>
+            <td><div class="pl-article-title" title="${escapeHtml(article.title || '')}">${escapeHtml(article.title || 'Untitled')}</div></td>
             <td>${renderPullBadge(needsPull)}</td>
-            <td><span class="pull-state-badge pull-state-${(article.state || 'draft').toLowerCase()}">${escapeHtml(article.state || 'draft')}</span></td>
-            <td class="pull-date-cell">${formatPullDate(article.pulled_at)}</td>
-            <td class="pull-date-cell">${formatPullDate(article.source_updated_at)}</td>
+            <td class="pl-td-center"><span class="pl-state-badge ${stateCls}">${escapeHtml(article.state || 'Draft')}</span></td>
+            <td><span class="pl-dt">${formatPullDate(article.pulled_at)}</span></td>
+            <td><span class="pl-dt-source">${formatPullDate(article.source_updated_at)}</span></td>
         `;
 
-        // Checkbox handler
         const cb = tr.querySelector('input[type="checkbox"]');
         cb.addEventListener('change', () => {
             if (cb.checked) {
@@ -1782,7 +1785,6 @@ function renderPullTable() {
                 state.pull.selectedIds.delete(iid);
             }
             updatePullSelectedCount();
-            // Update select-all checkbox
             const selectAll = document.getElementById('pull-select-all');
             if (selectAll) selectAll.checked = state.pull.articles.every(a => state.pull.selectedIds.has(a.intercom_id));
         });
@@ -1790,7 +1792,6 @@ function renderPullTable() {
         tbody.appendChild(tr);
     });
 
-    // Update select-all checkbox state
     const selectAll = document.getElementById('pull-select-all');
     if (selectAll) selectAll.checked = state.pull.articles.length > 0 && state.pull.articles.every(a => state.pull.selectedIds.has(a.intercom_id));
 
@@ -1799,17 +1800,17 @@ function renderPullTable() {
 
 function renderPullBadge(status) {
     const map = {
-        'up_to_date':        '<span class="pull-badge pull-badge-uptodate"><i class="fas fa-check-circle"></i> Up to Date</span>',
-        'updated_in_source': '<span class="pull-badge pull-badge-updated"><i class="fas fa-exclamation-triangle"></i> Needs Update</span>',
-        'never_pulled':      '<span class="pull-badge pull-badge-never"><i class="far fa-circle"></i> Never Pulled</span>',
-        'failed':            '<span class="pull-badge pull-badge-failed"><i class="fas fa-times-circle"></i> Pull Failed</span>',
-        'pulling':           '<span class="pull-badge pull-badge-pulling"><i class="fas fa-spinner fa-spin"></i> Pulling...</span>',
+        'up_to_date':        '<span class="pl-badge pl-b-uptodate"><div class="pl-badge-dot"></div>Up to Date</span>',
+        'updated_in_source': '<span class="pl-badge pl-b-needsupdate"><div class="pl-badge-dot"></div>Needs Update</span>',
+        'never_pulled':      '<span class="pl-badge pl-b-never"><div class="pl-badge-dot"></div>Never Pulled</span>',
+        'failed':            '<span class="pl-badge pl-b-failed"><div class="pl-badge-dot"></div>Pull Failed</span>',
+        'pulling':           '<span class="pl-badge pl-b-pulling"><div class="pl-badge-dot"></div>Pulling…</span>',
     };
     return map[status] || map['never_pulled'];
 }
 
 function formatPullDate(isoStr) {
-    if (!isoStr) return '<span style="color:#cbd5e1">—</span>';
+    if (!isoStr) return '<span style="color:#93C5E0;font-style:italic">—</span>';
     try {
         const d = new Date(isoStr);
         const now = new Date();
@@ -1834,17 +1835,54 @@ function formatPullDate(isoStr) {
 
 function renderPullPagination() {
     const maxPage = Math.ceil(state.pull.total / state.pull.pageSize) || 1;
+    const cur = state.pull.page;
     const infoEl = document.getElementById('pull-page-info');
-    const prevBtn = document.getElementById('pull-prev-btn');
-    const nextBtn = document.getElementById('pull-next-btn');
+    const btnsEl = document.getElementById('pull-page-btns');
 
     if (infoEl) {
-        const from = state.pull.total === 0 ? 0 : (state.pull.page - 1) * state.pull.pageSize + 1;
-        const to = Math.min(state.pull.page * state.pull.pageSize, state.pull.total);
-        infoEl.textContent = `Showing ${from}–${to} of ${state.pull.total} articles (Page ${state.pull.page} of ${maxPage})`;
+        const from = state.pull.total === 0 ? 0 : (cur - 1) * state.pull.pageSize + 1;
+        const to = Math.min(cur * state.pull.pageSize, state.pull.total);
+        infoEl.textContent = `Showing ${from} – ${to}  of  ${state.pull.total} articles  ·  Page ${cur} of ${maxPage}`;
     }
-    if (prevBtn) prevBtn.disabled = state.pull.page <= 1;
-    if (nextBtn) nextBtn.disabled = state.pull.page >= maxPage;
+
+    if (!btnsEl) return;
+    btnsEl.innerHTML = '';
+
+    const mkBtn = (label, page, active) => {
+        const b = document.createElement('button');
+        b.className = 'pl-page-btn' + (active ? ' active' : '');
+        b.textContent = label;
+        if (page && page !== cur) {
+            b.addEventListener('click', () => { state.pull.page = page; loadPullArticles(); });
+        }
+        return b;
+    };
+
+    // Prev
+    if (cur > 1) btnsEl.appendChild(mkBtn('← Prev', cur - 1, false));
+
+    // Page numbers with ellipsis
+    const pages = [];
+    pages.push(1);
+    if (cur > 3) pages.push('…');
+    for (let i = Math.max(2, cur - 1); i <= Math.min(maxPage - 1, cur + 1); i++) pages.push(i);
+    if (cur < maxPage - 2) pages.push('…');
+    if (maxPage > 1) pages.push(maxPage);
+
+    pages.forEach(p => {
+        if (p === '…') {
+            const dots = document.createElement('button');
+            dots.className = 'pl-page-btn';
+            dots.textContent = '···';
+            dots.style.cursor = 'default';
+            btnsEl.appendChild(dots);
+        } else {
+            btnsEl.appendChild(mkBtn(String(p), p, p === cur));
+        }
+    });
+
+    // Next
+    if (cur < maxPage) btnsEl.appendChild(mkBtn('Next →', cur + 1, false));
 }
 
 function updatePullSelectedCount() {
@@ -1858,7 +1896,7 @@ function updatePullSelectedCount() {
 // ---- Sync Source List ----
 async function pullSyncSource() {
     const btn = document.getElementById('pull-sync-btn');
-    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Syncing...'; }
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="fn-loader-inline"></span> &nbsp;Syncing...'; }
     showPullToast('Syncing article list from Intercom...', 'loading');
 
     try {
@@ -1875,7 +1913,7 @@ async function pullSyncSource() {
     } catch (err) {
         showPullToast('Sync failed: ' + err.message, 'error');
     } finally {
-        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-sync-alt"></i> Sync Source List'; }
+        if (btn) { btn.disabled = false; btn.innerHTML = '⚡ &nbsp;Sync Source List'; }
     }
 }
 
@@ -1911,7 +1949,7 @@ async function pullExecuteConfirmed() {
     pullHideConfirm();
 
     const btn = document.getElementById('pull-selected-btn');
-    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Pulling...'; }
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="fn-loader-inline"></span> &nbsp;Pulling...'; }
     showPullToast(`Pulling ${ids.length} article(s)...`, 'loading');
 
     try {
@@ -1936,7 +1974,7 @@ async function pullExecuteConfirmed() {
     } catch (err) {
         showPullToast('Pull failed: ' + err.message, 'error');
     } finally {
-        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-cloud-download-alt"></i> Pull Selected (<span id="pull-selected-count">0</span>)'; }
+        if (btn) { btn.disabled = false; btn.innerHTML = '⬇️ &nbsp;Pull Selected &nbsp;<span class="pl-btn-count" id="pull-selected-count">0</span>'; }
         updatePullSelectedCount();
     }
 }
@@ -1951,12 +1989,12 @@ function showPullToast(message, type) {
     toast.className = 'pull-toast';
     if (type === 'success') {
         toast.classList.add('toast-success');
-        if (icon) icon.className = 'fas fa-check-circle';
+        if (icon) { icon.className = ''; icon.textContent = '✅'; }
     } else if (type === 'error') {
         toast.classList.add('toast-error');
-        if (icon) icon.className = 'fas fa-exclamation-circle';
-        } else {
-        if (icon) icon.className = 'fas fa-spinner fa-spin';
+        if (icon) { icon.className = ''; icon.textContent = '❌'; }
+    } else {
+        if (icon) { icon.className = ''; icon.innerHTML = '<span class="fn-loader-inline"></span>'; }
     }
     if (text) text.textContent = message;
 
@@ -1978,12 +2016,12 @@ async function initContentHub() {
 }
 
 function setupHubEventListeners() {
-    // Filter buttons
-    document.querySelectorAll('.ch-filter-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.ch-filter-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            state.hub.healthFilter = btn.getAttribute('data-health');
+    // Filter tabs (new navy design)
+    document.querySelectorAll('.ch-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.ch-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            state.hub.healthFilter = tab.getAttribute('data-health');
             state.hub.page = 1;
             loadHubArticles();
         });
@@ -2042,14 +2080,7 @@ function setupHubEventListeners() {
         });
     }
 
-    // Pagination
-    const prevBtn = document.getElementById('ch-prev-btn');
-    const nextBtn = document.getElementById('ch-next-btn');
-    if (prevBtn) prevBtn.addEventListener('click', () => { if (state.hub.page > 1) { state.hub.page--; loadHubArticles(); } });
-    if (nextBtn) nextBtn.addEventListener('click', () => {
-        const maxPage = Math.ceil(state.hub.total / state.hub.pageSize) || 1;
-        if (state.hub.page < maxPage) { state.hub.page++; loadHubArticles(); }
-    });
+    // Pagination is now handled dynamically in renderHubPagination()
 
     // Drawer close
     const drawerClose = document.getElementById('ch-drawer-close');
@@ -2068,7 +2099,7 @@ function setupHubEventListeners() {
 
 async function loadHubArticles() {
     const tbody = document.getElementById('ch-table-body');
-    if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="empty-cell"><i class="fas fa-spinner fa-spin"></i> Loading articles...</td></tr>';
+    if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="empty-cell"><span class="fn-loader"></span> Loading articles...</td></tr>';
 
     try {
         const params = new URLSearchParams({
@@ -2113,28 +2144,21 @@ function renderHubTable() {
         const iid = String(article.intercom_id);
         const checked = state.hub.selectedIds.has(iid);
         const health = article.health || 'NEEDS_PULL';
-        const rowClass = {
-            'NEEDS_PULL': 'ch-row-needs-pull',
-            'OUTDATED': 'ch-row-outdated',
-            'NEEDS_TRANSLATION': 'ch-row-needs-translation',
-        }[health] || '';
-
         const tr = document.createElement('tr');
-        if (rowClass) tr.classList.add(rowClass);
 
         tr.innerHTML = `
-            <td><input type="checkbox" data-iid="${iid}" ${checked ? 'checked' : ''}></td>
+            <td style="padding-left:18px"><input type="checkbox" class="ch-cb" data-iid="${iid}" ${checked ? 'checked' : ''}></td>
             <td class="ch-title-cell">
-                <span class="ch-article-title" title="${escapeHtml(article.title || '')}">${escapeHtml(article.title || 'Untitled')}</span>
-                <span class="ch-article-path">${article.collection_name ? escapeHtml(article.collection_name) + ' <i class="fas fa-chevron-right"></i> Article' : 'Article'}</span>
+                <div class="ch-article-title" title="${escapeHtml(article.title || '')}">${escapeHtml(article.title || 'Untitled')}</div>
+                <div class="ch-article-path">${article.collection_name ? escapeHtml(article.collection_name) + ' <span class="ch-breadcrumb-sep">›</span> Article' : 'Article'}</div>
             </td>
-            <td class="ch-word-cell">${article.source_updated_relative || '—'}</td>
-            <td>${article.pulled ? '<span class="ch-pulled-yes">✓</span>' : '<span class="ch-pulled-no">—</span>'}</td>
+            <td><span class="ch-word-cell">${article.source_updated_relative || '—'}</span></td>
+            <td class="ch-th-center">${article.pulled ? '<span class="ch-pulled-yes">✓</span>' : '<span class="ch-pulled-no">✗</span>'}</td>
             <td>${renderLangChips(article.lang_statuses || {})}</td>
-            <td style="text-align:center">${renderHealthBadge(health)}</td>
-            <td style="text-align:center">${state.hub.healthFilter === 'ARCHIVED'
+            <td>${renderHealthBadge(health)}</td>
+            <td class="ch-th-center">${state.hub.healthFilter === 'ARCHIVED'
                 ? `<button class="ch-unarchive-btn" data-iid="${iid}" title="Unarchive this article"><i class="fas fa-undo-alt"></i></button>`
-                : `<button class="ch-archive-btn" data-iid="${iid}" title="Archive this article"><i class="fas fa-archive"></i></button>`
+                : `<button class="ch-archive-btn" data-iid="${iid}" title="Archive this article">🗄</button>`
             }</td>
         `;
 
@@ -2205,12 +2229,12 @@ function renderLangChips(langStatuses) {
 
 function renderHealthBadge(health) {
     const map = {
-        'NEEDS_PULL':        '<span class="ch-health-badge ch-health-NEEDS_PULL"><i class="fas fa-cloud-download-alt"></i> Needs Pull</span>',
-        'OUTDATED':          '<span class="ch-health-badge ch-health-OUTDATED"><i class="fas fa-exclamation-triangle"></i> Outdated</span>',
-        'NEEDS_TRANSLATION': '<span class="ch-health-badge ch-health-NEEDS_TRANSLATION"><i class="fas fa-globe"></i> Needs Translation</span>',
-        'NEEDS_PUSH':        '<span class="ch-health-badge ch-health-NEEDS_PUSH"><i class="fas fa-cloud-upload-alt"></i> Ready to Push</span>',
-        'COMPLETE':          '<span class="ch-health-badge ch-health-COMPLETE"><i class="fas fa-check-circle"></i> Complete</span>',
-        'FAILED':            '<span class="ch-health-badge ch-health-FAILED"><i class="fas fa-times-circle"></i> Failed</span>',
+        'NEEDS_PULL':        '<span class="ch-health-badge ch-health-NEEDS_PULL"><div class="ch-health-dot"></div>Needs Pull</span>',
+        'OUTDATED':          '<span class="ch-health-badge ch-health-OUTDATED"><div class="ch-health-dot"></div>Outdated</span>',
+        'NEEDS_TRANSLATION': '<span class="ch-health-badge ch-health-NEEDS_TRANSLATION"><div class="ch-health-dot"></div>Needs Translation</span>',
+        'NEEDS_PUSH':        '<span class="ch-health-badge ch-health-NEEDS_PUSH"><div class="ch-health-dot"></div>Ready to Push</span>',
+        'COMPLETE':          '<span class="ch-health-badge ch-health-COMPLETE"><div class="ch-health-dot"></div>Complete</span>',
+        'FAILED':            '<span class="ch-health-badge ch-health-FAILED"><div class="ch-health-dot"></div>Failed</span>',
     };
     return map[health] || map['NEEDS_PULL'];
 }
@@ -2218,16 +2242,51 @@ function renderHealthBadge(health) {
 function renderHubPagination() {
     const maxPage = Math.ceil(state.hub.total / state.hub.pageSize) || 1;
     const infoEl = document.getElementById('ch-page-info');
-    const prevBtn = document.getElementById('ch-prev-btn');
-    const nextBtn = document.getElementById('ch-next-btn');
+    const btnsEl = document.getElementById('ch-page-btns');
 
     if (infoEl) {
         const from = state.hub.total === 0 ? 0 : (state.hub.page - 1) * state.hub.pageSize + 1;
         const to = Math.min(state.hub.page * state.hub.pageSize, state.hub.total);
-        infoEl.textContent = `Showing ${from}–${to} of ${state.hub.total} articles (Page ${state.hub.page} of ${maxPage})`;
+        infoEl.textContent = `Showing ${from} – ${to}  of  ${state.hub.total} articles  ·  Page ${state.hub.page} of ${maxPage}`;
     }
-    if (prevBtn) prevBtn.disabled = state.hub.page <= 1;
-    if (nextBtn) nextBtn.disabled = state.hub.page >= maxPage;
+    if (!btnsEl) return;
+    btnsEl.innerHTML = '';
+
+    // Prev button
+    const prevBtn = document.createElement('button');
+    prevBtn.className = 'ch-page-btn';
+    prevBtn.textContent = '← Prev';
+    prevBtn.disabled = state.hub.page <= 1;
+    prevBtn.addEventListener('click', () => { if (state.hub.page > 1) { state.hub.page--; loadHubArticles(); } });
+    btnsEl.appendChild(prevBtn);
+
+    // Page number buttons with ellipsis
+    const pages = [];
+    if (maxPage <= 7) {
+        for (let i = 1; i <= maxPage; i++) pages.push(i);
+    } else {
+        pages.push(1);
+        if (state.hub.page > 3) pages.push('...');
+        for (let i = Math.max(2, state.hub.page - 1); i <= Math.min(maxPage - 1, state.hub.page + 1); i++) pages.push(i);
+        if (state.hub.page < maxPage - 2) pages.push('...');
+        pages.push(maxPage);
+    }
+    pages.forEach(p => {
+        const btn = document.createElement('button');
+        btn.className = 'ch-page-btn' + (p === state.hub.page ? ' ch-page-active' : '');
+        btn.textContent = p;
+        if (p === '...') { btn.disabled = true; btn.style.cursor = 'default'; }
+        else btn.addEventListener('click', () => { state.hub.page = p; loadHubArticles(); });
+        btnsEl.appendChild(btn);
+    });
+
+    // Next button
+    const nextBtn = document.createElement('button');
+    nextBtn.className = 'ch-page-btn';
+    nextBtn.textContent = 'Next →';
+    nextBtn.disabled = state.hub.page >= maxPage;
+    nextBtn.addEventListener('click', () => { if (state.hub.page < maxPage) { state.hub.page++; loadHubArticles(); } });
+    btnsEl.appendChild(nextBtn);
 }
 
 function updateHubFilterCounts() {
@@ -2270,7 +2329,7 @@ async function openHubDrawer(intercomId) {
     drawer.classList.remove('hidden');
     overlay.classList.remove('hidden');
     state.hub.drawerOpen = true;
-    body.innerHTML = '<div style="text-align:center;padding:40px;"><i class="fas fa-spinner fa-spin" style="font-size:24px;color:#94a3b8;"></i></div>';
+    body.innerHTML = '<div style="text-align:center;padding:40px;"><span class="fn-loader"></span></div>';
 
     try {
         const resp = await fetch(`/api/content-hub/article/${intercomId}`);
@@ -2479,77 +2538,94 @@ async function hubArchiveSelected() {
     if (ids.length === 0) return;
 
     const count = ids.length;
-    const confirmMsg = `Are you sure you want to archive ${count} article${count > 1 ? 's' : ''}? Archived articles will be hidden from the application.`;
-    if (!confirm(confirmMsg)) return;
-
-    const archiveBtn = document.getElementById('ch-bulk-archive');
-    if (archiveBtn) { archiveBtn.disabled = true; archiveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Archiving...'; }
-
-    try {
-        const resp = await fetch('/api/content-hub/archive', {
-            method: 'POST',
-            headers: authHeaders(),
-            body: JSON.stringify({ intercom_ids: ids }),
-        });
-        const data = await resp.json();
-        if (data.success) {
-            // Clear selection and refresh
-            state.hub.selectedIds.clear();
-            state.hub.selectedMeta = {};
-            updateHubBulkBar();
-            await loadHubArticles();
-            showHubToast(`${data.archived} article${data.archived > 1 ? 's' : ''} archived successfully.`, 'success');
-        } else {
-            showHubToast('Archive failed: ' + (data.error || 'Unknown error'), 'error');
+    showConfirmModal({
+        title: 'Confirm Archive',
+        body: `<p><strong>Archive ${count} article${count > 1 ? 's' : ''}</strong> — they will be hidden from the application.</p><p style="margin-top:10px;font-size:13px;color:#4A90C4;">Archived articles can be restored later from the Archived filter.</p>`,
+        confirmText: 'Archive',
+        confirmIcon: 'fa-archive',
+        onConfirm: async () => {
+            const archiveBtn = document.getElementById('ch-bulk-archive');
+            if (archiveBtn) { archiveBtn.disabled = true; archiveBtn.innerHTML = '<span class="fn-loader-inline"></span> Archiving...'; }
+            try {
+                const resp = await fetch('/api/content-hub/archive', {
+                    method: 'POST',
+                    headers: authHeaders(),
+                    body: JSON.stringify({ intercom_ids: ids }),
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    state.hub.selectedIds.clear();
+                    state.hub.selectedMeta = {};
+                    updateHubBulkBar();
+                    await loadHubArticles();
+                    showHubToast(`${data.archived} article${data.archived > 1 ? 's' : ''} archived successfully.`, 'success');
+                } else {
+                    showHubToast('Archive failed: ' + (data.error || 'Unknown error'), 'error');
+                }
+            } catch (err) {
+                showHubToast('Archive failed: ' + err.message, 'error');
+            } finally {
+                if (archiveBtn) { archiveBtn.disabled = false; archiveBtn.innerHTML = '<i class="fas fa-archive"></i> Archive'; }
+            }
         }
-    } catch (err) {
-        showHubToast('Archive failed: ' + err.message, 'error');
-    } finally {
-        if (archiveBtn) { archiveBtn.disabled = false; archiveBtn.innerHTML = '<i class="fas fa-archive"></i> Archive'; }
-    }
+    });
 }
 
 async function hubArchiveSingle(intercomId, title) {
-    if (!confirm(`Archive "${title}"? It will be hidden from the application.`)) return;
-    try {
-        const resp = await fetch('/api/content-hub/archive', {
-            method: 'POST',
-            headers: authHeaders(),
-            body: JSON.stringify({ intercom_ids: [intercomId] }),
-        });
-        const data = await resp.json();
-        if (data.success) {
-            state.hub.selectedIds.delete(intercomId);
-            delete state.hub.selectedMeta[intercomId];
-            updateHubBulkBar();
-            await loadHubArticles();
-            showHubToast('Article archived successfully.', 'success');
-        } else {
-            showHubToast('Archive failed: ' + (data.error || 'Unknown error'), 'error');
+    showConfirmModal({
+        title: 'Confirm Archive',
+        body: `<p><strong>Archive "${escapeHtml(title)}"?</strong></p><p style="margin-top:8px;font-size:13px;color:#4A90C4;">It will be hidden from the application.</p>`,
+        confirmText: 'Archive',
+        confirmIcon: 'fa-archive',
+        onConfirm: async () => {
+            try {
+                const resp = await fetch('/api/content-hub/archive', {
+                    method: 'POST',
+                    headers: authHeaders(),
+                    body: JSON.stringify({ intercom_ids: [intercomId] }),
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    state.hub.selectedIds.delete(intercomId);
+                    delete state.hub.selectedMeta[intercomId];
+                    updateHubBulkBar();
+                    await loadHubArticles();
+                    showHubToast('Article archived successfully.', 'success');
+                } else {
+                    showHubToast('Archive failed: ' + (data.error || 'Unknown error'), 'error');
+                }
+            } catch (err) {
+                showHubToast('Archive failed: ' + err.message, 'error');
+            }
         }
-    } catch (err) {
-        showHubToast('Archive failed: ' + err.message, 'error');
-    }
+    });
 }
 
 async function hubUnarchiveSingle(intercomId, title) {
-    if (!confirm(`Unarchive "${title}"? It will be visible in the application again.`)) return;
-    try {
-        const resp = await fetch('/api/content-hub/unarchive', {
-            method: 'POST',
-            headers: authHeaders(),
-            body: JSON.stringify({ intercom_ids: [intercomId] }),
-        });
-        const data = await resp.json();
-        if (data.success) {
-            await loadHubArticles();
-            showHubToast('Article unarchived successfully.', 'success');
-        } else {
-            showHubToast('Unarchive failed: ' + (data.error || 'Unknown error'), 'error');
+    showConfirmModal({
+        title: 'Confirm Unarchive',
+        body: `<p><strong>Unarchive "${escapeHtml(title)}"?</strong></p><p style="margin-top:8px;font-size:13px;color:#4A90C4;">It will be visible in the application again.</p>`,
+        confirmText: 'Unarchive',
+        confirmIcon: 'fa-undo-alt',
+        onConfirm: async () => {
+            try {
+                const resp = await fetch('/api/content-hub/unarchive', {
+                    method: 'POST',
+                    headers: authHeaders(),
+                    body: JSON.stringify({ intercom_ids: [intercomId] }),
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    await loadHubArticles();
+                    showHubToast('Article unarchived successfully.', 'success');
+                } else {
+                    showHubToast('Unarchive failed: ' + (data.error || 'Unknown error'), 'error');
+                }
+            } catch (err) {
+                showHubToast('Unarchive failed: ' + err.message, 'error');
+            }
         }
-    } catch (err) {
-        showHubToast('Unarchive failed: ' + err.message, 'error');
-    }
+    });
 }
 
 function showHubToast(message, type) {
@@ -2568,7 +2644,7 @@ function _waitForTableLoad(tbodyId) {
     return new Promise(resolve => {
         const check = () => {
             const tbody = document.getElementById(tbodyId);
-            const hasSpinner = tbody && tbody.querySelector('.fa-spinner');
+            const hasSpinner = tbody && (tbody.querySelector('.fa-spinner') || tbody.querySelector('.fn-loader'));
             if (tbody && !hasSpinner) {
                 resolve();
             } else {
@@ -2601,13 +2677,19 @@ function initTranslateSection() {
         });
     }
 
-    // Filter buttons
-    document.querySelectorAll('#tr-filter-bar .tr-filter-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('#tr-filter-bar .tr-filter-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            state.tr.statusFilter = btn.dataset.status || 'ALL';
+    // Stat card clicks (filter)
+    document.querySelectorAll('.tr-stat-card[data-status]').forEach(card => {
+        card.addEventListener('click', () => {
+            state.tr.statusFilter = card.dataset.status || 'ALL';
             state.tr.page = 1;
+            // Instantly move active highlight before loading
+            document.querySelectorAll('.tr-stat-card').forEach(c => {
+                if (c.dataset.status === state.tr.statusFilter) {
+                    c.classList.add('tr-s-active');
+                } else {
+                    c.classList.remove('tr-s-active');
+                }
+            });
             trLoadArticles();
         });
     });
@@ -2656,14 +2738,7 @@ function initTranslateSection() {
         });
     }
 
-    // Pagination
-    const prevBtn = document.getElementById('tr-prev-btn');
-    const nextBtn = document.getElementById('tr-next-btn');
-    if (prevBtn) prevBtn.addEventListener('click', () => { if (state.tr.page > 1) { state.tr.page--; trLoadArticles(); } });
-    if (nextBtn) nextBtn.addEventListener('click', () => {
-        const maxPage = Math.ceil(state.tr.total / state.tr.pageSize);
-        if (state.tr.page < maxPage) { state.tr.page++; trLoadArticles(); }
-    });
+    // Pagination is handled dynamically in trRenderPagination()
 
     // Language picker toggle
     const langPickerBtn = document.getElementById('tr-lang-picker-btn');
@@ -2728,7 +2803,7 @@ function initTranslateSection() {
 
 async function trLoadArticles() {
     const tbody = document.getElementById('tr-table-body');
-    if (tbody) tbody.innerHTML = '<tr><td colspan="20" class="empty-cell"><i class="fas fa-spinner fa-spin"></i> Loading...</td></tr>';
+    if (tbody) tbody.innerHTML = '<tr><td colspan="20" class="empty-cell"><span class="fn-loader"></span> Loading...</td></tr>';
 
     try {
         const params = new URLSearchParams({
@@ -2797,13 +2872,51 @@ function trPopulateLanguageDropdowns() {
 
 function trRenderFilterCounts() {
     const c = state.tr.counts;
+    const total = c.ALL || 1;
     const el = (id, val) => { const e = document.getElementById(id); if (e) e.textContent = val; };
-    el('tr-count-ALL', c.ALL || 0);
-    el('tr-count-NEEDS', (c.NOT_STARTED || 0) + (c.OUTDATED || 0));
-    el('tr-count-OUTDATED', c.OUTDATED || 0);
-    el('tr-count-INPROGRESS', c.IN_PROGRESS || 0);
-    el('tr-count-TRANSLATED', (c.TRANSLATED || 0) + (c.APPROVED || 0));
-    el('tr-count-FAILED', c.FAILED || 0);
+    const bar = (id, val) => { const e = document.getElementById(id); if (e) e.style.width = Math.min(100, Math.round((val / total) * 100)) + '%'; };
+
+    const allVal = c.ALL || 0;
+    const needsVal = (c.NOT_STARTED || 0) + (c.OUTDATED || 0);
+    const outdatedVal = c.OUTDATED || 0;
+    const progressVal = c.IN_PROGRESS || 0;
+    const completedVal = (c.TRANSLATED || 0) + (c.APPROVED || 0);
+    const failedVal = c.FAILED || 0;
+
+    el('tr-count-ALL', allVal);
+    el('tr-count-NEEDS', needsVal);
+    el('tr-count-OUTDATED', outdatedVal);
+    el('tr-count-INPROGRESS', progressVal);
+    el('tr-count-TRANSLATED', completedVal);
+    el('tr-count-FAILED', failedVal);
+
+    bar('tr-bar-ALL', allVal);
+    bar('tr-bar-NEEDS', needsVal);
+    bar('tr-bar-OUTDATED', outdatedVal);
+    bar('tr-bar-INPROGRESS', progressVal);
+    bar('tr-bar-TRANSLATED', completedVal);
+    bar('tr-bar-FAILED', failedVal);
+
+    // Zero-state styling
+    const zeroMap = { 'tr-sc-progress': progressVal, 'tr-sc-failed': failedVal };
+    document.querySelectorAll('.tr-stat-card').forEach(card => {
+        const cls = Array.from(card.classList).find(c => c.startsWith('tr-sc-'));
+        if (cls && zeroMap.hasOwnProperty(cls) && zeroMap[cls] === 0) {
+            card.classList.add('tr-zero-state');
+        } else {
+            card.classList.remove('tr-zero-state');
+        }
+    });
+
+    // Active card state based on current filter
+    document.querySelectorAll('.tr-stat-card').forEach(card => {
+        const status = card.dataset.status;
+        if (status === state.tr.statusFilter) {
+            card.classList.add('tr-s-active');
+        } else {
+            card.classList.remove('tr-s-active');
+        }
+    });
 }
 
 
@@ -2860,10 +2973,10 @@ function trRenderTable() {
         const rowClass = needsAttention ? 'tr-attention' : '';
 
         bodyHtml += `<tr class="${rowClass}">
-            <td><input type="checkbox" class="tr-row-cb" data-id="${a.intercom_id}" ${isSelected ? 'checked' : ''}></td>
-            <td>
-                <span class="tr-article-title" data-id="${a.intercom_id}">${escapeHtml(a.title)}</span>
-                <span class="tr-article-collection">${escapeHtml(a.collection_name || 'Uncategorized')}</span>
+            <td style="padding-left:18px"><input type="checkbox" class="tr-row-cb" data-id="${a.intercom_id}" ${isSelected ? 'checked' : ''}></td>
+            <td style="text-align:left;padding-left:18px">
+                <div class="tr-article-title" data-id="${a.intercom_id}">${escapeHtml(a.title)}</div>
+                <div class="tr-article-collection">${escapeHtml(a.collection_name || 'Uncategorized')}</div>
             </td>`;
         for (const [loc] of langs) {
             const st = (a.lang_statuses && a.lang_statuses[loc]) || 'NOT_STARTED';
@@ -2901,12 +3014,12 @@ function trRenderTable() {
 
 function trStatusChip(status) {
     const map = {
-        'NOT_STARTED': { cls: 'not-started', label: 'New' },
-        'IN_PROGRESS': { cls: 'in-progress', label: 'Translating' },
-        'OUTDATED':    { cls: 'outdated', label: 'Outdated' },
-        'TRANSLATED':  { cls: 'translated', label: 'Done' },
-        'APPROVED':    { cls: 'approved', label: 'Approved' },
-        'FAILED':      { cls: 'failed', label: 'Failed' },
+        'NOT_STARTED': { cls: 'not-started', label: 'NEW' },
+        'IN_PROGRESS': { cls: 'in-progress', label: 'IN PROGRESS' },
+        'OUTDATED':    { cls: 'outdated', label: 'OUTDATED' },
+        'TRANSLATED':  { cls: 'translated', label: 'DONE' },
+        'APPROVED':    { cls: 'approved', label: 'DONE' },
+        'FAILED':      { cls: 'failed', label: 'FAILED' },
     };
     const m = map[status] || map['NOT_STARTED'];
     return `<span class="tr-status-chip ${m.cls}">${m.label}</span>`;
@@ -2915,12 +3028,52 @@ function trStatusChip(status) {
 
 function trRenderPagination() {
     const maxPage = Math.max(1, Math.ceil(state.tr.total / state.tr.pageSize));
+    const current = state.tr.page;
     const info = document.getElementById('tr-page-info');
+    const btnsWrap = document.getElementById('tr-page-btns');
+    if (!btnsWrap) return;
+
+    const start = (current - 1) * state.tr.pageSize + 1;
+    const end = Math.min(current * state.tr.pageSize, state.tr.total);
+    if (info) info.textContent = `Showing ${start} – ${end}  of  ${state.tr.total} articles  ·  Page ${current} of ${maxPage}`;
+
+    // Build page buttons
+    let btnsHtml = `<button class="tr-page-btn" id="tr-prev-btn" ${current <= 1 ? 'disabled' : ''}>← Prev</button>`;
+
+    // Show up to 5 page numbers with ellipsis
+    const pages = [];
+    if (maxPage <= 7) {
+        for (let i = 1; i <= maxPage; i++) pages.push(i);
+    } else {
+        pages.push(1);
+        if (current > 3) pages.push('...');
+        for (let i = Math.max(2, current - 1); i <= Math.min(maxPage - 1, current + 1); i++) pages.push(i);
+        if (current < maxPage - 2) pages.push('...');
+        pages.push(maxPage);
+    }
+
+    for (const p of pages) {
+        if (p === '...') {
+            btnsHtml += `<button class="tr-page-btn" disabled>···</button>`;
+        } else {
+            btnsHtml += `<button class="tr-page-btn ${p === current ? 'tr-page-active' : ''}" data-page="${p}">${p}</button>`;
+        }
+    }
+
+    btnsHtml += `<button class="tr-page-btn" id="tr-next-btn" ${current >= maxPage ? 'disabled' : ''}>Next →</button>`;
+    btnsWrap.innerHTML = btnsHtml;
+
+    // Attach listeners
     const prevBtn = document.getElementById('tr-prev-btn');
     const nextBtn = document.getElementById('tr-next-btn');
-    if (info) info.textContent = `Page ${state.tr.page} of ${maxPage} (${state.tr.total} articles)`;
-    if (prevBtn) prevBtn.disabled = state.tr.page <= 1;
-    if (nextBtn) nextBtn.disabled = state.tr.page >= maxPage;
+    if (prevBtn) prevBtn.addEventListener('click', () => { if (state.tr.page > 1) { state.tr.page--; trLoadArticles(); } });
+    if (nextBtn) nextBtn.addEventListener('click', () => { if (state.tr.page < maxPage) { state.tr.page++; trLoadArticles(); } });
+    btnsWrap.querySelectorAll('[data-page]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const p = parseInt(btn.dataset.page);
+            if (p !== current) { state.tr.page = p; trLoadArticles(); }
+        });
+    });
 }
 
 
@@ -2990,7 +3143,7 @@ async function trExecuteBulkTranslate() {
 
     state.tr.translating = true;
     trUpdateActionBar();
-    trShowToast('Translating...', 'fa-spinner fa-spin');
+    trShowToast('Translating...', 'fn-loader');
 
     try {
         const resp = await fetch('/api/translate-hub/bulk', {
@@ -3033,7 +3186,7 @@ async function trTranslateAllMissing() {
         return;
     }
 
-    trShowToast('Finding missing translations...', 'fa-spinner fa-spin');
+    trShowToast('Finding missing translations...', 'fn-loader');
 
     try {
         const resp = await fetch('/api/translate-hub/missing', {
@@ -3099,7 +3252,7 @@ async function trOpenDrawer(intercomId) {
     const drawerBody = document.getElementById('tr-drawer-body');
 
     if (drawerTitle) drawerTitle.textContent = 'Loading...';
-    if (drawerBody) drawerBody.innerHTML = '<div style="text-align:center;padding:40px;"><i class="fas fa-spinner fa-spin" style="font-size:2rem;color:var(--text-muted);"></i></div>';
+    if (drawerBody) drawerBody.innerHTML = '<div style="text-align:center;padding:40px;"><span class="fn-loader"></span></div>';
     drawer.classList.remove('hidden');
     overlay.classList.remove('hidden');
     state.tr.drawerOpen = true;
@@ -3262,7 +3415,7 @@ async function trRetranslateOne(intercomId, locale) {
     if (!confirm(`Retranslate this article to ${state.tr.languages[locale] || locale}?`)) return;
 
     state.tr.translating = true;
-    trShowToast(`Translating to ${state.tr.languages[locale] || locale}...`, 'fa-spinner fa-spin');
+    trShowToast(`Translating to ${state.tr.languages[locale] || locale}...`, 'fn-loader');
 
     try {
         const resp = await fetch('/api/translate-hub/bulk', {
@@ -3297,7 +3450,15 @@ function trShowToast(msg, iconClass) {
     const icon = document.getElementById('tr-toast-icon');
     const text = document.getElementById('tr-toast-text');
     if (toast) toast.classList.remove('hidden');
-    if (icon) { icon.className = `fas ${iconClass}`; }
+    if (icon) {
+        if (iconClass === 'fn-loader') {
+            icon.className = '';
+            icon.innerHTML = '<span class="fn-loader-inline"></span>';
+        } else {
+            icon.innerHTML = '';
+            icon.className = `fas ${iconClass}`;
+        }
+    }
     if (text) text.textContent = msg;
 }
 
@@ -3333,7 +3494,7 @@ async function initGlossarySection() {
     // --- Setup event listeners ---
     // Create tables
     document.getElementById('gl-create-tables-btn')?.addEventListener('click', async () => {
-        glShowToast('Creating tables...', 'fa-spinner fa-spin');
+        glShowToast('Creating tables...', 'fn-loader');
         try {
             const resp = await fetch('/api/glossary/create-tables', { method: 'POST' });
             const data = await resp.json();
@@ -3519,9 +3680,9 @@ async function initGlossarySection() {
 
     // --- Glossary List View Controls ---
     // Filter buttons
-    document.querySelectorAll('.tr-filter-btn[data-filter]').forEach(btn => {
+    document.querySelectorAll('.gl-filter-btn[data-filter]').forEach(btn => {
         btn.addEventListener('click', () => {
-            document.querySelectorAll('.tr-filter-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.gl-filter-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             state.gl.glossaryFilter = btn.dataset.filter;
             state.gl.glossaryPage = 1;
@@ -3593,7 +3754,7 @@ async function initGlossarySection() {
             if (!file) return;
             const formData = new FormData();
             formData.append('file', file);
-            glShowToast('Importing...', 'fa-spinner fa-spin');
+            glShowToast('Importing...', 'fn-loader');
             try {
                 const resp = await fetch(`/api/glossary/glossaries/${g.id}/import`, {
             method: 'POST',
@@ -3623,7 +3784,7 @@ async function initGlossarySection() {
 
 async function glLoadGlossaries() {
     const tbody = document.getElementById('gl-glossary-tbody');
-    if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="empty-cell"><i class="fas fa-spinner fa-spin"></i> Loading...</td></tr>';
+    if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="empty-cell"><span class="fn-loader"></span> Loading...</td></tr>';
 
     try {
         const params = new URLSearchParams({
@@ -3660,9 +3821,22 @@ function glRenderGlossaryPagination() {
     if (nextBtn) nextBtn.disabled = state.gl.glossaryPage >= totalPages;
 }
 
-function glRenderFilterCounts() {
-    // Update filter button counts (would need separate API calls or compute from current data)
-    // For now, just show active state
+async function glRenderFilterCounts() {
+    try {
+        // Fetch counts for each filter
+        const [allResp, activeResp, inactiveResp] = await Promise.all([
+            fetch('/api/glossary/glossaries?status=ALL&page_size=1'),
+            fetch('/api/glossary/glossaries?status=ACTIVE&page_size=1'),
+            fetch('/api/glossary/glossaries?status=INACTIVE&page_size=1'),
+        ]);
+        const [allData, activeData, inactiveData] = await Promise.all([
+            allResp.json(), activeResp.json(), inactiveResp.json(),
+        ]);
+        const setCount = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+        setCount('gl-count-all', allData.total || 0);
+        setCount('gl-count-active', activeData.total || 0);
+        setCount('gl-count-inactive', inactiveData.total || 0);
+    } catch (e) { /* ignore */ }
 }
 
 function glRenderGlossaryTable() {
@@ -3990,7 +4164,7 @@ async function glCreateGlossaryFromDrawer() {
     const createBtn = document.getElementById('gl-drawer-create');
     const originalText = createBtn.innerHTML;
     createBtn.disabled = true;
-    createBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating...';
+    createBtn.innerHTML = '<span class="fn-loader-inline"></span> Creating...';
     
     try {
         const resp = await fetch('/api/glossary/glossaries', {
@@ -4128,7 +4302,7 @@ function glRenderTermTableHeader() {
 async function glLoadTerms() {
     const tbody = document.getElementById('gl-term-tbody');
     const colCount = (state.gl.currentGlossary?.target_locales?.length || 0) + 4;
-    if (tbody) tbody.innerHTML = `<tr><td colspan="${colCount}" class="empty-cell"><i class="fas fa-spinner fa-spin"></i> Loading...</td></tr>`;
+    if (tbody) tbody.innerHTML = `<tr><td colspan="${colCount}" class="empty-cell"><span class="fn-loader"></span> Loading...</td></tr>`;
 
     try {
         const params = new URLSearchParams({
@@ -4452,7 +4626,7 @@ async function glHandleImport(e) {
     const formData = new FormData();
     formData.append('file', file);
 
-    glShowToast('Importing...', 'fa-spinner fa-spin');
+    glShowToast('Importing...', 'fn-loader');
 
     try {
         const resp = await fetch(`/api/glossary/glossaries/${state.gl.currentGlossaryId}/import`, {
@@ -4504,7 +4678,15 @@ function glShowToast(msg, iconClass) {
     const icon = document.getElementById('gl-toast-icon');
     const text = document.getElementById('gl-toast-text');
     if (toast) toast.classList.remove('hidden');
-    if (icon) icon.className = `fas ${iconClass}`;
+    if (icon) {
+        if (iconClass === 'fn-loader') {
+            icon.className = '';
+            icon.innerHTML = '<span class="fn-loader-inline"></span>';
+        } else {
+            icon.innerHTML = '';
+            icon.className = `fas ${iconClass}`;
+        }
+    }
     if (text) text.textContent = msg;
 }
 
@@ -4635,14 +4817,7 @@ function pushSetupEventListeners() {
         pushLoadArticles();
     });
 
-    // Pagination
-    document.getElementById('push-prev-btn')?.addEventListener('click', () => {
-        if (state.push.page > 1) { state.push.page--; pushLoadArticles(); }
-    });
-    document.getElementById('push-next-btn')?.addEventListener('click', () => {
-        const total = Math.ceil(state.push.total / state.push.pageSize);
-        if (state.push.page < total) { state.push.page++; pushLoadArticles(); }
-    });
+    // Pagination is now handled dynamically in pushRenderPagination()
 
     // Push Selected
     document.getElementById('push-selected-btn')?.addEventListener('click', () => pushStartSelected());
@@ -4700,9 +4875,16 @@ function pushOnLangChange() {
 function pushUpdateJobCounter() {
     const articles = state.push.selectedIds.size;
     const langs = state.push.locales.length;
-    document.getElementById('push-sel-article-count').textContent = articles;
-    document.getElementById('push-sel-lang-count').textContent = langs;
-    document.getElementById('push-sel-combo-count').textContent = articles * langs;
+    const jobs = articles * langs;
+    // Update stat mini cards
+    const setTxt = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+    setTxt('push-sel-article-count', articles);
+    setTxt('push-sel-lang-count', langs);
+    setTxt('push-sel-combo-count', jobs);
+    // Update job chips in action bar
+    setTxt('push-chip-articles', articles);
+    setTxt('push-chip-langs', langs);
+    setTxt('push-chip-jobs', jobs);
 }
 
 function pushUpdateActionButtons() {
@@ -4720,7 +4902,7 @@ function pushUpdateActionButtons() {
 function pushLoadArticles() {
     const tbody = document.getElementById('push-table-body');
     const colSpan = 2 + state.push.locales.length;
-    if (tbody) tbody.innerHTML = `<tr><td colspan="${Math.max(colSpan, 2)}" class="empty-cell"><i class="fas fa-spinner fa-spin"></i> Loading…</td></tr>`;
+    if (tbody) tbody.innerHTML = `<tr><td colspan="${Math.max(colSpan, 2)}" class="empty-cell"><span class="fn-loader"></span> Loading…</td></tr>`;
 
     pushRenderTableHeader();
 
@@ -4772,7 +4954,7 @@ function pushRenderTableHeader() {
     const thead = document.getElementById('push-thead-row');
     if (!thead) return;
     thead.innerHTML = `
-        <th class="push-th-check"><input type="checkbox" id="push-select-all" title="Select all" aria-label="Select all"></th>
+        <th style="width:40px;padding-left:16px"><input type="checkbox" id="push-select-all" class="push-cb" title="Select all" aria-label="Select all"></th>
         <th class="push-th-title">Article Title</th>
         ${state.push.locales.map(code =>
             `<th class="push-th-lang" title="${escapeHtml(TARGET_LANGUAGES[code] || code)}">${code.toUpperCase()}</th>`
@@ -4823,9 +5005,10 @@ function pushRenderTable() {
             }).join('')
             : '';
 
+        if (checked) tr.classList.add('push-row-selected');
         tr.innerHTML = `
-            <td><input type="checkbox" class="push-row-cb" data-id="${iid}" ${checked ? 'checked' : ''} aria-label="Select article"></td>
-            <td><a href="#" class="push-article-link" data-id="${iid}">${escapeHtml(article.title || 'Untitled')}</a></td>
+            <td style="padding-left:16px"><input type="checkbox" class="push-row-cb push-cb" data-id="${iid}" ${checked ? 'checked' : ''} aria-label="Select article"></td>
+            <td class="push-td-title"><a href="#" class="push-article-link" data-id="${iid}">${escapeHtml(article.title || 'Untitled')}</a></td>
             ${localeCells}
         `;
         tbody.appendChild(tr);
@@ -4847,12 +5030,12 @@ function pushRenderTable() {
         });
     });
 
-    // Bind article title links → drawer
+    // Article title links — drawer disabled
     tbody.querySelectorAll('.push-article-link').forEach(link => {
-        link.addEventListener('click', (e) => {
-            e.preventDefault();
-            pushOpenDrawer(link.dataset.id);
-        });
+        link.style.cursor = 'default';
+        link.style.pointerEvents = 'none';
+        link.style.color = 'inherit';
+        link.style.textDecoration = 'none';
     });
 }
 
@@ -4861,29 +5044,69 @@ function pushRenderTable() {
 // ---------------------------------------------------------------------------
 function pushRenderBadge(status, reason) {
     const map = {
-        READY:               { cls: 'push-badge-ready',          icon: 'fa-check-circle',         label: 'Ready' },
-        LIVE:                { cls: 'push-badge-live',           icon: 'fa-globe',                label: 'Live' },
-        OUTDATED:            { cls: 'push-badge-outdated',       icon: 'fa-exclamation-triangle', label: 'Outdated' },
-        MISSING:             { cls: 'push-badge-missing',        icon: 'fa-times-circle',         label: 'Missing' },
-        FAILED:              { cls: 'push-badge-failed',         icon: 'fa-exclamation-circle',   label: 'Failed' },
-        PENDING:             { cls: 'push-badge-pending',        icon: 'fa-spinner fa-spin',      label: 'Pushing…' },
-        NEEDS_RETRANSLATION: { cls: 'push-badge-retranslation',  icon: 'fa-language',             label: 'Re-translate' },
+        READY:               { cls: 'push-badge-ready',          label: 'Ready' },
+        LIVE:                { cls: 'push-badge-live',           label: 'Live' },
+        OUTDATED:            { cls: 'push-badge-outdated',       label: 'Outdated' },
+        MISSING:             { cls: 'push-badge-missing',        label: 'Missing' },
+        FAILED:              { cls: 'push-badge-failed',         label: 'Failed' },
+        PENDING:             { cls: 'push-badge-pending',        label: 'Pushing…' },
+        NEEDS_RETRANSLATION: { cls: 'push-badge-retranslation',  label: 'Re-translate' },
     };
-    const d = map[status] || { cls: 'push-badge-nolang', icon: 'fa-minus', label: '—' };
-    return `<span class="push-badge ${d.cls}" title="${escapeHtml(reason || status)}"><i class="fas ${d.icon}"></i> ${d.label}</span>`;
+    const d = map[status] || { cls: 'push-badge-nolang', label: '—' };
+    return `<span class="push-badge ${d.cls}" title="${escapeHtml(reason || status)}"><div class="push-badge-dot"></div>${d.label}</span>`;
 }
 
 // ---------------------------------------------------------------------------
-// Pagination
+// Pagination (numbered with ellipsis)
 // ---------------------------------------------------------------------------
 function pushRenderPagination() {
     const totalPages = Math.max(1, Math.ceil(state.push.total / state.push.pageSize));
-    const info = document.getElementById('push-page-info');
-    if (info) info.textContent = `Page ${state.push.page} of ${totalPages} (${state.push.total} articles)`;
-    const prev = document.getElementById('push-prev-btn');
-    const next = document.getElementById('push-next-btn');
-    if (prev) prev.disabled = state.push.page <= 1;
-    if (next) next.disabled = state.push.page >= totalPages;
+    const infoEl = document.getElementById('push-page-info');
+    const btnsEl = document.getElementById('push-page-btns');
+
+    if (infoEl) {
+        const from = state.push.total === 0 ? 0 : (state.push.page - 1) * state.push.pageSize + 1;
+        const to = Math.min(state.push.page * state.push.pageSize, state.push.total);
+        infoEl.textContent = `Showing ${from} – ${to}  of  ${state.push.total} articles  ·  Page ${state.push.page} of ${totalPages}`;
+    }
+    if (!btnsEl) return;
+    btnsEl.innerHTML = '';
+
+    // Prev
+    const prevBtn = document.createElement('button');
+    prevBtn.className = 'push-page-btn';
+    prevBtn.textContent = '← Prev';
+    prevBtn.disabled = state.push.page <= 1;
+    prevBtn.addEventListener('click', () => { if (state.push.page > 1) { state.push.page--; pushLoadArticles(); } });
+    btnsEl.appendChild(prevBtn);
+
+    // Page numbers with ellipsis
+    const pages = [];
+    if (totalPages <= 7) {
+        for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+        pages.push(1);
+        if (state.push.page > 3) pages.push('...');
+        for (let i = Math.max(2, state.push.page - 1); i <= Math.min(totalPages - 1, state.push.page + 1); i++) pages.push(i);
+        if (state.push.page < totalPages - 2) pages.push('...');
+        pages.push(totalPages);
+    }
+    pages.forEach(p => {
+        const btn = document.createElement('button');
+        btn.className = 'push-page-btn' + (p === state.push.page ? ' push-page-active' : '');
+        btn.textContent = p;
+        if (p === '...') { btn.disabled = true; btn.style.cursor = 'default'; }
+        else btn.addEventListener('click', () => { state.push.page = p; pushLoadArticles(); });
+        btnsEl.appendChild(btn);
+    });
+
+    // Next
+    const nextBtn = document.createElement('button');
+    nextBtn.className = 'push-page-btn';
+    nextBtn.textContent = 'Next →';
+    nextBtn.disabled = state.push.page >= totalPages;
+    nextBtn.addEventListener('click', () => { if (state.push.page < totalPages) { state.push.page++; pushLoadArticles(); } });
+    btnsEl.appendChild(nextBtn);
 }
 
 // ---------------------------------------------------------------------------
@@ -5055,7 +5278,7 @@ function pushRenderDrawerTabs() {
 function pushLoadDrawerContent(iid, locale) {
     const body = document.getElementById('push-drawer-body');
     if (!body) return;
-    body.innerHTML = '<div style="text-align:center;padding:40px;"><i class="fas fa-spinner fa-spin"></i> Loading preview…</div>';
+    body.innerHTML = '<div style="text-align:center;padding:40px;"><span class="fn-loader"></span> Loading preview…</div>';
 
     const pushBtn = document.getElementById('push-drawer-push-btn');
     const params = new URLSearchParams({intercom_id: iid});
@@ -5195,7 +5418,7 @@ function initLanguageSection() {
 async function langLoadStats() {
     const grid = document.getElementById('lang-grid');
     if (!grid) return;
-    grid.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Loading languages...</div>';
+    grid.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted)"><span class="fn-loader"></span> Loading languages...</div>';
 
     try {
         const resp = await fetch('/api/languages/stats');
@@ -5366,7 +5589,7 @@ function langCloseConfirm() {
 async function langDoRemove() {
     if (!_langRemoveCode) return;
     const btn = document.getElementById('lang-confirm-btn');
-    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Removing...'; }
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="fn-loader-inline"></span> Removing...'; }
 
     try {
         const resp = await fetch(`/api/languages/${encodeURIComponent(_langRemoveCode)}/remove`, { method: 'DELETE' });

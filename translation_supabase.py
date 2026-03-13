@@ -138,7 +138,7 @@ def list_article_translations() -> List[Dict]:
             url,
             headers=headers,
             params={
-                "select": "id,content_item_id,parent_intercom_article_id,source_locale,target_locale,translated_title,status,created_at,updated_at",
+                "select": "id,content_item_id,parent_intercom_article_id,source_locale,target_locale,translated_title,status,created_at,updated_at,pushed_at",
                 "order": "updated_at.desc",
             },
             timeout=30,

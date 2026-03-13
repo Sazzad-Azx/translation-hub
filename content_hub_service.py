@@ -200,7 +200,7 @@ def _fetch_all_translations() -> Dict[str, List[Dict]]:
             f"{REST_BASE}/{TRANSLATIONS_TABLE}",
             headers=_headers(),
             params={
-                "select": "parent_intercom_article_id,target_locale,status,updated_at,source_checksum,translated_title",
+                "select": "parent_intercom_article_id,target_locale,status,updated_at,pushed_at,source_checksum,translated_title,translated_body_html",
                 "limit": "5000",
             },
             timeout=20,
@@ -390,6 +390,12 @@ def list_content_hub_articles(
         "ALL": len(active_articles),
         "ARCHIVED": len(archived_articles),
     }
+
+    # Always compute counts from active (non-archived) articles
+    if showing_archived:
+        for a in active_articles:
+            h, _ = _compute_health(a, translations_map)
+            counts[h] = counts.get(h, 0) + 1
 
     for a in working_articles:
         health, lang_statuses = _compute_health(a, translations_map)

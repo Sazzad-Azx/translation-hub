@@ -136,71 +136,70 @@ def list_pull_articles(
         params["pull_status"] = "neq.failed"
         up_to_date_filter = True
 
-    # Get total count first
-    count_headers = dict(headers)
-    count_headers["Prefer"] = "count=exact"
-    count_headers["Range-Unit"] = "items"
-    count_headers["Range"] = "0-0"
-    count_resp = requests.get(f"{REST_BASE}/{TABLE}", headers=count_headers, params=params, timeout=15)
-    total = 0
-    if count_resp.ok:
-        content_range = count_resp.headers.get("Content-Range", "")
-        if "/" in content_range:
-            try:
-                total = int(content_range.split("/")[1])
-            except (ValueError, IndexError):
-                total = 0
+    # For needs_update and up_to_date filters, we must fetch ALL matching rows
+    # and paginate in Python, because the DB can't compare two columns directly.
+    if needs_update_filter or up_to_date_filter:
+        target_status = "updated_in_source" if needs_update_filter else "up_to_date"
+        # Fetch all pulled articles (paginated in chunks of 1000)
+        all_articles = []
+        fetch_offset = 0
+        while True:
+            fetch_params = dict(params)
+            fetch_params["offset"] = str(fetch_offset)
+            fetch_params["limit"] = "1000"
+            resp = requests.get(f"{REST_BASE}/{TABLE}", headers=headers, params=fetch_params, timeout=20)
+            if not resp.ok:
+                break
+            batch = resp.json() if resp.text else []
+            if not isinstance(batch, list) or not batch:
+                break
+            all_articles.extend(batch)
+            if len(batch) < 1000:
+                break
+            fetch_offset += 1000
 
-    # Fetch page
-    offset = (page - 1) * page_size
-    params["offset"] = str(offset)
-    params["limit"] = str(page_size)
+        # Compute status and filter
+        for a in all_articles:
+            a["needs_pull"] = _compute_needs_pull(a)
+        filtered = [a for a in all_articles if a["needs_pull"] == target_status]
+        total = len(filtered)
 
-    resp = requests.get(f"{REST_BASE}/{TABLE}", headers=headers, params=params, timeout=15)
-    if not resp.ok:
-        return {"articles": [], "total": 0, "page": page, "page_size": page_size, "error": resp.text[:200]}
+        # Paginate in Python
+        offset = (page - 1) * page_size
+        articles = filtered[offset:offset + page_size]
+    else:
+        # Standard DB-level pagination for other filters
+        # Get total count first
+        count_headers = dict(headers)
+        count_headers["Prefer"] = "count=exact"
+        count_headers["Range-Unit"] = "items"
+        count_headers["Range"] = "0-0"
+        count_resp = requests.get(f"{REST_BASE}/{TABLE}", headers=count_headers, params=params, timeout=15)
+        total = 0
+        if count_resp.ok:
+            content_range = count_resp.headers.get("Content-Range", "")
+            if "/" in content_range:
+                try:
+                    total = int(content_range.split("/")[1])
+                except (ValueError, IndexError):
+                    total = 0
 
-    articles = resp.json() if resp.text else []
-    if not isinstance(articles, list):
-        articles = []
+        # Fetch page
+        offset = (page - 1) * page_size
+        params["offset"] = str(offset)
+        params["limit"] = str(page_size)
 
-    # Compute needs_pull status for each article
-    for a in articles:
-        a["needs_pull"] = _compute_needs_pull(a)
+        resp = requests.get(f"{REST_BASE}/{TABLE}", headers=headers, params=params, timeout=15)
+        if not resp.ok:
+            return {"articles": [], "total": 0, "page": page, "page_size": page_size, "error": resp.text[:200]}
 
-    # If needs_update filter is active, keep only articles with that status
-    # and recalculate total (since DB-level filter was approximate)
-    if needs_update_filter:
-        articles = [a for a in articles if a["needs_pull"] == "updated_in_source"]
-        # For accurate pagination with this filter we need the real total;
-        # fetch all matching rows' count by scanning (only id + timestamps)
-        all_params: Dict = {
-            "select": "pulled_at,source_updated_at,pull_status",
-            "pulled_at": "not.is.null",
-        }
-        if search:
-            all_params["title"] = f"ilike.*{search}*"
-        all_resp = requests.get(f"{REST_BASE}/{TABLE}", headers=headers, params=all_params, timeout=20)
-        if all_resp.ok and all_resp.text:
-            all_rows = all_resp.json()
-            if isinstance(all_rows, list):
-                total = sum(1 for r in all_rows if _compute_needs_pull(r) == "updated_in_source")
-    elif up_to_date_filter:
-        # Filter for articles that are up to date (pulled, not failed, not needs_update)
-        articles = [a for a in articles if a["needs_pull"] == "up_to_date"]
-        # Recalculate total for accurate pagination
-        all_params: Dict = {
-            "select": "pulled_at,source_updated_at,pull_status",
-            "pulled_at": "not.is.null",
-            "pull_status": "neq.failed",
-        }
-        if search:
-            all_params["title"] = f"ilike.*{search}*"
-        all_resp = requests.get(f"{REST_BASE}/{TABLE}", headers=headers, params=all_params, timeout=20)
-        if all_resp.ok and all_resp.text:
-            all_rows = all_resp.json()
-            if isinstance(all_rows, list):
-                total = sum(1 for r in all_rows if _compute_needs_pull(r) == "up_to_date")
+        articles = resp.json() if resp.text else []
+        if not isinstance(articles, list):
+            articles = []
+
+        # Compute needs_pull status for each article
+        for a in articles:
+            a["needs_pull"] = _compute_needs_pull(a)
 
     return {
         "articles": articles,

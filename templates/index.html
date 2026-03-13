@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FundedNext - Translation Hub</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260313x">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
@@ -14,30 +15,81 @@
     <!-- LOGIN SCREEN                    -->
     <!-- ============================== -->
     <div class="login-screen" id="login-screen">
-        <div class="login-card">
-            <div class="login-logo">
-                <i class="fas fa-language"></i>
-            </div>
-            <h1 class="login-title">FundedNext</h1>
-            <p class="login-subtitle">Translation Hub</p>
-            <form id="login-form" autocomplete="on">
-                <div class="login-field">
-                    <label for="login-email"><i class="fas fa-envelope"></i> Email</label>
-                    <input type="email" id="login-email" placeholder="Enter your email" required autocomplete="email">
+        <!-- Left Brand Panel -->
+        <div class="login-left">
+            <div class="login-brand">
+                <div class="login-brand-icon">FN</div>
+                <div>
+                    <div class="login-brand-name">FundedNext</div>
+                    <div class="login-brand-sub">Translation Hub</div>
                 </div>
-                <div class="login-field">
-                    <label for="login-password"><i class="fas fa-lock"></i> Password</label>
-                    <div class="password-wrap">
-                        <input type="password" id="login-password" placeholder="Enter your password" required autocomplete="current-password">
-                        <button type="button" class="password-toggle" id="password-toggle"><i class="fas fa-eye"></i></button>
+            </div>
+            <div class="login-left-content">
+                <h1 class="login-tagline">Translate smarter,<br>reach <span>every market.</span></h1>
+                <p class="login-tagline-sub">Manage, translate, and push your help center articles across multiple languages — from one central hub.</p>
+                <div class="login-stats">
+                    <div class="login-stat">
+                        <div class="login-stat-num" id="login-stat-articles">--</div>
+                        <div class="login-stat-label">Articles</div>
+                    </div>
+                    <div class="login-stat-divider"></div>
+                    <div class="login-stat">
+                        <div class="login-stat-num" id="login-stat-languages">--</div>
+                        <div class="login-stat-label">Languages</div>
+                    </div>
+                    <div class="login-stat-divider"></div>
+                    <div class="login-stat">
+                        <div class="login-stat-num" id="login-stat-translated">--</div>
+                        <div class="login-stat-label">Translated</div>
                     </div>
                 </div>
-                <div class="login-error hidden" id="login-error"></div>
-                <button type="submit" class="login-btn" id="login-btn">
-                    <span class="login-btn-text">Sign In</span>
-                    <span class="login-btn-loading hidden"><i class="fas fa-spinner fa-spin"></i> Signing in...</span>
-                </button>
-            </form>
+            </div>
+            <div class="login-left-footer">&copy; 2026 NEXT Ventures &middot; FundedNext Translation Hub</div>
+        </div>
+
+        <!-- Right Login Panel -->
+        <div class="login-right">
+            <div class="login-card">
+                <div class="login-header">
+                    <h2 class="login-title">Sign in to your account</h2>
+                    <p class="login-subtitle">Enter your credentials to access the hub.</p>
+                </div>
+                <form id="login-form" autocomplete="on">
+                    <div class="login-field">
+                        <label for="login-email">Email address</label>
+                        <input type="email" id="login-email" placeholder="you@fundednext.com" required autocomplete="email">
+                    </div>
+                    <div class="login-field">
+                        <label for="login-password">Password</label>
+                        <div class="password-wrap">
+                            <input type="password" id="login-password" placeholder="Enter your password" required autocomplete="current-password">
+                            <button type="button" class="password-toggle" id="password-toggle">
+                                <svg class="eye-icon" id="eye-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                    <circle cx="12" cy="12" r="3"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="login-row-between">
+                        <label class="login-remember">
+                            <input type="checkbox"> Keep me signed in
+                        </label>
+                    </div>
+                    <div class="login-error hidden" id="login-error"></div>
+                    <button type="submit" class="login-btn" id="login-btn">
+                        <span class="login-btn-text">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+                            Sign In
+                        </span>
+                        <span class="login-btn-loading hidden"><span class="fn-loader-inline"></span> Signing in...</span>
+                    </button>
+                </form>
+                <p class="login-footer-text">
+                    Having trouble? Contact <a href="mailto:support@fundednext.com">support@fundednext.com</a><br>
+                    or reach your workspace admin.
+                </p>
+            </div>
         </div>
     </div>
 
@@ -50,20 +102,23 @@
     <aside class="sidebar" id="sidebar">
         <div class="sidebar-header">
             <div class="sidebar-logo">
-                <i class="fas fa-language"></i>
-                <span class="sidebar-brand">FundedNext</span>
+                <span class="sidebar-logo-badge">FN</span>
+                <div>
+                    <span class="sidebar-brand">FundedNext</span>
+                    <span class="sidebar-subtitle">TRANSLATION HUB</span>
+                </div>
             </div>
-            <span class="sidebar-subtitle">Translation Hub</span>
         </div>
 
         <nav class="sidebar-nav">
+            <div class="nav-section-label">MAIN</div>
             <a href="#" class="nav-item active" data-section="dashboard">
                 <i class="fas fa-chart-line"></i>
                 <span>Dashboard</span>
             </a>
             <a href="#" class="nav-item" data-section="content-hub">
-                <i class="fas fa-folder-open"></i>
-                <span>Content Hub</span>
+                <i class="fas fa-broadcast-tower"></i>
+                <span>Control Tower</span>
             </a>
             <a href="#" class="nav-item" data-section="pull">
                 <i class="fas fa-cloud-download-alt"></i>
@@ -77,14 +132,17 @@
                 <i class="fas fa-cloud-upload-alt"></i>
                 <span>Push</span>
             </a>
+            <div class="nav-section-label">SETTINGS</div>
             <a href="#" class="nav-item" data-section="automation">
                 <i class="fas fa-robot"></i>
                 <span>Automation</span>
             </a>
+            <!-- Fundee Update — hidden for now
             <a href="#" class="nav-item" data-section="fundee-update">
                 <i class="fas fa-bullhorn"></i>
                 <span>Fundee Update</span>
             </a>
+            -->
             <a href="#" class="nav-item" data-section="language">
                 <i class="fas fa-globe"></i>
                 <span>Language</span>
@@ -93,7 +151,6 @@
                 <i class="fas fa-book"></i>
                 <span>Glossary</span>
             </a>
-            <div class="nav-divider" id="admin-nav-divider" style="display:none;"></div>
             <a href="#" class="nav-item" data-section="admin" id="admin-nav-item" style="display:none;">
                 <i class="fas fa-users-cog"></i>
                 <span>Admin Panel</span>
@@ -145,10 +202,19 @@
         <!-- SECTION: Dashboard                         -->
         <!-- ========================================== -->
         <section class="page-section active" id="section-dashboard">
+            <!-- Dashboard Header -->
+            <div class="dash-header">
+                <span class="tr-page-icon"><i class="fas fa-tachometer-alt"></i></span>
+                <div>
+                    <span class="tr-page-title">Dashboard</span>
+                    <p class="dash-subtitle">Overview of your translation pipeline</p>
+                </div>
+            </div>
+
             <!-- Stats Cards Row -->
             <div class="stats-row">
                 <div class="stat-card">
-                    <div class="stat-icon" style="background:linear-gradient(135deg,#eff6ff,#dbeafe);color:#3b82f6;">
+                    <div class="stat-icon stat-icon-articles">
                         <i class="fas fa-file-alt"></i>
                     </div>
                     <div class="stat-info">
@@ -157,7 +223,7 @@
                     </div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-icon" style="background:linear-gradient(135deg,#ecfdf5,#d1fae5);color:#10b981;">
+                    <div class="stat-icon stat-icon-translated">
                         <i class="fas fa-check-circle"></i>
                     </div>
                     <div class="stat-info">
@@ -166,16 +232,16 @@
                     </div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-icon" style="background:linear-gradient(135deg,#fffbeb,#fef3c7);color:#f59e0b;">
+                    <div class="stat-icon stat-icon-changed">
                         <i class="fas fa-calendar-week"></i>
                     </div>
                     <div class="stat-info">
                         <span class="stat-value" id="stat-changed-week">--</span>
-                        <span class="stat-label">Changed This Week</span>
+                        <span class="stat-label">Source Changes (Week)</span>
                     </div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-icon" style="background:linear-gradient(135deg,#fef2f2,#fecaca);color:#ef4444;">
+                    <div class="stat-icon stat-icon-cost">
                         <i class="fas fa-dollar-sign"></i>
                     </div>
                     <div class="stat-info">
@@ -189,7 +255,7 @@
             <div class="charts-row">
                 <div class="card chart-card">
                     <div class="card-header">
-                        <h3>FAQ Changes Over Time</h3>
+                        <h3>Source Article Changes</h3>
                         <div class="chart-period-toggle">
                             <button class="period-btn active" data-period="week">Week</button>
                             <button class="period-btn" data-period="month">Month</button>
@@ -217,7 +283,7 @@
             <div class="bottom-row">
                 <div class="card ranking-card">
                     <div class="card-header">
-                        <h3>Top Changed Articles</h3>
+                        <h3>Recently Updated Articles</h3>
                     </div>
                     <div class="card-body">
                         <table class="ranking-table">
@@ -225,12 +291,11 @@
                                 <tr>
                                     <th>#</th>
                                     <th>Article</th>
-                                    <th>Changes</th>
                                     <th>Last Updated</th>
                                 </tr>
                             </thead>
                             <tbody id="ranking-table-body">
-                                <tr><td colspan="4" class="empty-cell">Loading...</td></tr>
+                                <tr><td colspan="3" class="empty-cell"><span class="fn-loader"></span> Loading...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -241,7 +306,7 @@
                     </div>
                     <div class="card-body">
                         <div class="activity-feed" id="activity-feed">
-                            <div class="activity-empty">Loading recent activities...</div>
+                            <div class="activity-empty"><span class="fn-loader"></span> Loading recent activities...</div>
                         </div>
                     </div>
                 </div>
@@ -249,79 +314,66 @@
         </section>
 
         <!-- ========================================== -->
-        <!-- SECTION: Content Hub                       -->
+        <!-- SECTION: Control Tower                       -->
         <!-- ========================================== -->
         <section class="page-section" id="section-content-hub">
 
-            <!-- Header -->
-            <div class="ch-header">
-                <div class="ch-header-text">
-                    <h2><i class="fas fa-folder-open"></i> Content Hub</h2>
-                    <span class="ch-subtitle">Operational Control Center</span>
-                </div>
-                <div class="ch-header-stats">
-                    <span class="ch-global-stat" id="ch-total-articles-stat">
-                        <i class="fas fa-file-alt"></i> <strong id="ch-article-count-val">--</strong> articles
-                    </span>
-                </div>
-            </div>
-
-
-            <!-- ===== Attention Filter Bar ===== -->
-            <div class="ch-filter-bar" id="ch-filter-bar">
-                <button class="ch-filter-btn active" data-health="ALL">
-                    <span class="ch-filter-icon">📋</span>
-                    All <span class="ch-filter-count" id="ch-count-ALL">--</span>
-                </button>
-                <button class="ch-filter-btn" data-health="NEEDS_PULL">
-                    <span class="ch-filter-icon">🔄</span>
-                    Needs Pull <span class="ch-filter-count" id="ch-count-NEEDS_PULL">0</span>
-                </button>
-                <button class="ch-filter-btn" data-health="NEEDS_TRANSLATION">
-                    <span class="ch-filter-icon">🌍</span>
-                    Needs Translation <span class="ch-filter-count" id="ch-count-NEEDS_TRANSLATION">0</span>
-                </button>
-                <button class="ch-filter-btn" data-health="NEEDS_PUSH">
-                    <span class="ch-filter-icon">🚀</span>
-                    Ready to Push <span class="ch-filter-count" id="ch-count-NEEDS_PUSH">0</span>
-                </button>
-                <button class="ch-filter-btn" data-health="OUTDATED">
-                    <span class="ch-filter-icon">⚠️</span>
-                    Outdated <span class="ch-filter-count" id="ch-count-OUTDATED">0</span>
-                </button>
-                <button class="ch-filter-btn" data-health="COMPLETE">
-                    <span class="ch-filter-icon">✅</span>
-                    Complete <span class="ch-filter-count" id="ch-count-COMPLETE">0</span>
-                </button>
-                <button class="ch-filter-btn" data-health="ARCHIVED">
-                    <span class="ch-filter-icon">📦</span>
-                    Archived <span class="ch-filter-count" id="ch-count-ARCHIVED">0</span>
-                </button>
-            </div>
-
-            <!-- Search & Sort Bar -->
-            <div class="ch-toolbar">
-                <div class="ch-toolbar-left">
-                    <div class="ch-search-wrap">
-                        <i class="fas fa-search"></i>
-                        <input type="text" id="ch-search-input" class="ch-search-input" placeholder="Search articles by title..." aria-label="Search articles by title">
+            <!-- Page Header -->
+            <div class="ch-page-header">
+                <div class="ch-page-title-wrap">
+                    <div class="ch-page-icon">🗼</div>
+                    <div>
+                        <div class="ch-page-title">Control Tower</div>
+                        <div class="ch-page-sub">Operational Control Center</div>
                     </div>
                 </div>
-                <div class="ch-toolbar-right">
-                    <select id="ch-sort-select" class="ch-sort-select" aria-label="Sort articles">
-                        <option value="title_asc" selected>Alphabetical (A–Z)</option>
-                        <option value="updated_desc">Intercom Recent Update</option>
-                        <option value="attention">Needs Attention First</option>
-                    </select>
-                    <select id="ch-page-size" class="ch-sort-select" aria-label="Page size">
-                        <option value="10">10 / page</option>
-                        <option value="25" selected>25 / page</option>
-                        <option value="50">50 / page</option>
-                    </select>
+                <div class="ch-article-pill">📄 &nbsp;<span id="ch-article-count-val">--</span> articles</div>
             </div>
-        </div>
 
-            <!-- ===== Bulk Action Bar (hidden until items selected) ===== -->
+            <!-- Status Tabs -->
+            <div class="ch-tabs-wrap" id="ch-filter-bar">
+                <div class="ch-tab ch-tab-all active" data-health="ALL">
+                    <span>All</span><span class="ch-tab-count" id="ch-count-ALL">--</span>
+                </div>
+                <div class="ch-tab ch-tab-pull" data-health="NEEDS_PULL">
+                    <span>⬇️ Needs Pull</span><span class="ch-tab-count" id="ch-count-NEEDS_PULL">0</span>
+                </div>
+                <div class="ch-tab ch-tab-trans" data-health="NEEDS_TRANSLATION">
+                    <span>🌍 Needs Translation</span><span class="ch-tab-count" id="ch-count-NEEDS_TRANSLATION">0</span>
+                </div>
+                <div class="ch-tab ch-tab-push" data-health="NEEDS_PUSH">
+                    <span>🚀 Ready to Push</span><span class="ch-tab-count" id="ch-count-NEEDS_PUSH">0</span>
+                </div>
+                <div class="ch-tab ch-tab-outdated" data-health="OUTDATED">
+                    <span>⚠️ Outdated</span><span class="ch-tab-count" id="ch-count-OUTDATED">0</span>
+                </div>
+                <div class="ch-tab ch-tab-complete" data-health="COMPLETE">
+                    <span>✅ Complete</span><span class="ch-tab-count" id="ch-count-COMPLETE">0</span>
+                </div>
+                <div class="ch-tab ch-tab-archived" data-health="ARCHIVED">
+                    <span>🗄️ Archived</span><span class="ch-tab-count" id="ch-count-ARCHIVED">0</span>
+                </div>
+            </div>
+
+            <!-- Toolbar -->
+            <div class="ch-toolbar">
+                <div class="ch-search-wrap">
+                    <span class="ch-search-icon">🔍</span>
+                    <input type="text" id="ch-search-input" class="ch-search-input" placeholder="Search articles by title..." aria-label="Search articles by title">
+                </div>
+                <select id="ch-sort-select" class="ch-ctrl-select" aria-label="Sort articles">
+                    <option value="title_asc" selected>Alphabetical (A–Z)</option>
+                    <option value="updated_desc">Intercom Recent Update</option>
+                    <option value="attention">Needs Attention First</option>
+                </select>
+                <select id="ch-page-size" class="ch-ctrl-select" aria-label="Page size">
+                    <option value="10">10 / page</option>
+                    <option value="25" selected>25 / page</option>
+                    <option value="50">50 / page</option>
+                </select>
+            </div>
+
+            <!-- Bulk Action Bar (hidden until items selected) -->
             <div class="ch-bulk-bar hidden" id="ch-bulk-bar">
                 <div class="ch-bulk-info">
                     <strong><span id="ch-bulk-count">0</span></strong> selected
@@ -331,43 +383,41 @@
                     <button class="btn btn-small btn-success" id="ch-bulk-translate"><i class="fas fa-exchange-alt"></i> Translate</button>
                     <button class="btn btn-small btn-secondary" id="ch-bulk-push"><i class="fas fa-cloud-upload-alt"></i> Push</button>
                 </div>
-                </div>
-                
-            <!-- ===== Articles Content ===== -->
+            </div>
+
+            <div class="ch-section-divider"></div>
+
+            <!-- Table -->
             <div id="ch-tab-articles">
-                <div class="card ch-table-card">
+                <div class="ch-table-wrap-outer">
                     <div class="ch-table-wrap">
                         <table class="ch-table">
                             <thead>
                                 <tr>
-                                    <th class="ch-th-check"><input type="checkbox" id="ch-select-all" title="Select all" aria-label="Select all articles"></th>
+                                    <th style="width:40px;padding-left:18px"><input type="checkbox" id="ch-select-all" class="ch-cb" title="Select all" aria-label="Select all articles"></th>
                                     <th>Title</th>
                                     <th>Source Updated</th>
-                                    <th>Pulled</th>
+                                    <th class="ch-th-center">Pulled</th>
                                     <th>Languages</th>
-                                    <th class="ch-th-health">Health</th>
-                                    <th style="width:50px;text-align:center;">Archive</th>
+                                    <th>Health</th>
+                                    <th class="ch-th-center">Archive</th>
                                 </tr>
                             </thead>
                             <tbody id="ch-table-body">
-                                <tr><td colspan="7" class="empty-cell">Navigate to Content Hub to load articles.</td></tr>
+                                <tr><td colspan="7" class="empty-cell">Navigate to Control Tower to load articles.</td></tr>
                             </tbody>
                         </table>
-                    </div>
-                </div>
 
-                <!-- Pagination -->
-                <div class="ch-pagination">
-                    <span class="ch-page-info" id="ch-page-info">Page 1</span>
-                    <div class="ch-page-btns">
-                        <button class="btn btn-small btn-secondary" id="ch-prev-btn" disabled><i class="fas fa-chevron-left"></i> Prev</button>
-                        <button class="btn btn-small btn-secondary" id="ch-next-btn" disabled>Next <i class="fas fa-chevron-right"></i></button>
+                        <!-- Pagination inside table wrap -->
+                        <div class="ch-pagination">
+                            <div class="ch-page-info" id="ch-page-info">Page 1</div>
+                            <div class="ch-page-btns" id="ch-page-btns"></div>
+                        </div>
                     </div>
                 </div>
             </div>
 
-
-            <!-- ===== Details Drawer ===== -->
+            <!-- Details Drawer -->
             <div class="ch-drawer-overlay hidden" id="ch-drawer-overlay"></div>
             <aside class="ch-drawer hidden" id="ch-drawer">
                 <div class="ch-drawer-header">
@@ -403,90 +453,102 @@
                 </div>
             </div>
 
-            <!-- Pull Stats Bar -->
-            <div class="pull-stats-bar" id="pull-stats-bar">
-                <div class="pull-stat-chip">
-                    <i class="fas fa-layer-group"></i>
-                    <span id="pull-stat-total">0</span> Total
+            <!-- Page Header -->
+            <div class="pl-page-header" id="pull-stats-bar">
+                <div class="pl-page-title-wrap">
+                    <div class="pl-page-icon">⬇️</div>
+                    <div>
+                        <div class="pl-page-title">Pull</div>
+                        <div class="pl-page-sub">Sync articles from your source — keep your content up to date</div>
+                    </div>
                 </div>
-                <div class="pull-stat-chip chip-success">
-                    <i class="fas fa-check-circle"></i>
-                    <span id="pull-stat-uptodate">0</span> Up to Date
-                </div>
-                <div class="pull-stat-chip chip-warning">
-                    <i class="fas fa-exclamation-triangle"></i>
-                    <span id="pull-stat-needsupdate">0</span> Needs Update
-                </div>
+                <div class="pl-article-pill">📄 &nbsp;<span id="pull-stat-total">0</span> articles</div>
+            </div>
 
-                <div class="pull-stat-chip chip-muted">
-                    <i class="fas fa-circle"></i>
-                    <span id="pull-stat-never">0</span> Never Pulled
+            <!-- Stats Row -->
+            <div class="pl-stats-row">
+                <div class="pl-stat-mini" id="pull-chip-uptodate">
+                    <div class="pl-stat-mini-icon pl-smi-green">✅</div>
+                    <div class="pl-stat-mini-info">
+                        <div class="pl-stat-mini-num" id="pull-stat-uptodate">0</div>
+                        <div class="pl-stat-mini-label">Up to Date</div>
+                        <div class="pl-stat-mini-bar"><div class="pl-stat-mini-bar-fill pl-bar-green" id="pull-bar-uptodate" style="width:0%"></div></div>
+                    </div>
                 </div>
-                <div class="pull-stat-chip chip-danger">
-                    <i class="fas fa-times-circle"></i>
-                    <span id="pull-stat-failed">0</span> Failed
+                <div class="pl-stat-mini" id="pull-chip-needsupdate">
+                    <div class="pl-stat-mini-icon pl-smi-amber">⚠️</div>
+                    <div class="pl-stat-mini-info">
+                        <div class="pl-stat-mini-num" id="pull-stat-needsupdate">0</div>
+                        <div class="pl-stat-mini-label">Needs Update</div>
+                        <div class="pl-stat-mini-bar"><div class="pl-stat-mini-bar-fill pl-bar-amber" id="pull-bar-needsupdate" style="width:0%"></div></div>
+                    </div>
+                </div>
+                <div class="pl-stat-mini" id="pull-chip-never">
+                    <div class="pl-stat-mini-icon pl-smi-slate">🔘</div>
+                    <div class="pl-stat-mini-info">
+                        <div class="pl-stat-mini-num" id="pull-stat-never">0</div>
+                        <div class="pl-stat-mini-label">Never Pulled</div>
+                        <div class="pl-stat-mini-bar"><div class="pl-stat-mini-bar-fill pl-bar-slate" id="pull-bar-never" style="width:0%"></div></div>
+                    </div>
+                </div>
+                <div class="pl-stat-mini" id="pull-chip-failed">
+                    <div class="pl-stat-mini-icon pl-smi-rose">❌</div>
+                    <div class="pl-stat-mini-info">
+                        <div class="pl-stat-mini-num" id="pull-stat-failed">0</div>
+                        <div class="pl-stat-mini-label">Failed</div>
+                        <div class="pl-stat-mini-bar"><div class="pl-stat-mini-bar-fill pl-bar-rose" id="pull-bar-failed" style="width:0%"></div></div>
+                    </div>
                 </div>
             </div>
+
+            <div class="pl-section-divider"></div>
 
             <!-- Toolbar -->
-            <div class="pull-toolbar">
-                <div class="pull-toolbar-left">
-                    <button class="btn btn-primary" id="pull-sync-btn">
-                        <i class="fas fa-sync-alt"></i> Sync Source List
-                    </button>
-                    <button class="btn btn-success" id="pull-selected-btn" disabled>
-                        <i class="fas fa-cloud-download-alt"></i> Pull Selected (<span id="pull-selected-count">0</span>)
-                    </button>
+            <div class="pl-toolbar">
+                <div class="pl-btn-group-left">
+                    <button class="pl-btn pl-btn-sync" id="pull-sync-btn">⚡ &nbsp;Sync Source List</button>
+                    <button class="pl-btn pl-btn-pull" id="pull-selected-btn" disabled>⬇️ &nbsp;Pull Selected &nbsp;<span class="pl-btn-count" id="pull-selected-count">0</span></button>
                 </div>
-                <div class="pull-toolbar-right">
-                    <div class="pull-search-wrap">
-                        <i class="fas fa-search"></i>
-                        <input type="text" id="pull-search-input" class="pull-search-input" placeholder="Search articles..." aria-label="Search articles">
+                <div class="pl-toolbar-right">
+                    <div class="pl-search-wrap">
+                        <span class="pl-search-icon">🔍</span>
+                        <input class="pl-search-input" type="text" id="pull-search-input" placeholder="Search articles..." aria-label="Search articles">
                     </div>
-                    <select id="pull-status-filter" class="pull-filter-select" aria-label="Filter by status">
+                    <select id="pull-status-filter" class="pl-ctrl-select" aria-label="Filter by status">
                         <option value="">All Statuses</option>
-                        <option value="up_to_date">Up to Date</option>
-                        <option value="needs_update">Needs Update</option>
-                        <option value="never_pulled">Never Pulled</option>
-                        <option value="failed">Failed</option>
+                        <option value="up_to_date">✅ Up to Date</option>
+                        <option value="needs_update">⚠️ Needs Update</option>
+                        <option value="never_pulled">🔘 Never Pulled</option>
+                        <option value="failed">❌ Failed</option>
                     </select>
-                    <select id="pull-page-size" class="pull-filter-select" aria-label="Page size">
-                        <option value="10">10 / page</option>
+                    <select id="pull-page-size" class="pl-ctrl-select" aria-label="Page size">
                         <option value="25" selected>25 / page</option>
                         <option value="50">50 / page</option>
+                        <option value="100">100 / page</option>
                     </select>
                 </div>
             </div>
 
-            <!-- Article Table -->
-            <div class="card pull-table-card">
-                <div class="pull-table-wrap">
-                    <table class="pull-table">
-                        <thead>
-                            <tr>
-                                <th class="pull-th-check">
-                                    <input type="checkbox" id="pull-select-all" title="Select all on this page" aria-label="Select all articles on this page">
-                                </th>
-                                <th>Article Title</th>
-                                <th>Status</th>
-                                <th>State</th>
-                                <th>Last Synced On</th>
-                                <th>Source Updated</th>
-                            </tr>
-                        </thead>
-                        <tbody id="pull-table-body">
-                            <tr><td colspan="6" class="empty-cell">Loading articles...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- Pagination -->
-            <div class="pull-pagination" id="pull-pagination">
-                <span class="pull-page-info" id="pull-page-info">Page 1</span>
-                <div class="pull-page-btns">
-                    <button class="btn btn-small btn-secondary" id="pull-prev-btn" disabled><i class="fas fa-chevron-left"></i> Prev</button>
-                    <button class="btn btn-small btn-secondary" id="pull-next-btn" disabled>Next <i class="fas fa-chevron-right"></i></button>
+            <!-- Table -->
+            <div class="pl-table-wrap">
+                <table class="pl-table">
+                    <thead>
+                        <tr>
+                            <th style="width:40px;padding-left:18px"><input type="checkbox" class="pl-cb" id="pull-select-all" title="Select all" style="accent-color:#93C5E0"></th>
+                            <th>Article Title</th>
+                            <th>Status</th>
+                            <th class="pl-th-center">State</th>
+                            <th>Last Synced On</th>
+                            <th>Source Updated</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pull-table-body">
+                        <tr><td colspan="6" class="empty-cell"><span class="fn-loader"></span> Loading articles...</td></tr>
+                    </tbody>
+                </table>
+                <div class="pl-pagination" id="pull-pagination">
+                    <div class="pl-page-info" id="pull-page-info">Page 1</div>
+                    <div class="pl-page-btns" id="pull-page-btns"></div>
                 </div>
             </div>
 
@@ -508,7 +570,7 @@
             <!-- Pull Progress Toast -->
             <div id="pull-toast" class="pull-toast hidden">
                 <div class="pull-toast-inner">
-                    <i class="fas fa-spinner fa-spin" id="pull-toast-icon"></i>
+                    <span id="pull-toast-icon"><span class="fn-loader-inline"></span></span>
                     <span id="pull-toast-text">Pulling articles...</span>
                 </div>
             </div>
@@ -520,79 +582,84 @@
         <!-- ========================================== -->
         <section class="page-section" id="section-translate">
 
-            <!-- Header -->
-            <div class="tr-header">
-                <div class="tr-header-text">
-                    <h2><i class="fas fa-exchange-alt"></i> Translate</h2>
-                    <span class="tr-subtitle">Translation Operations</span>
+            <!-- Page Header -->
+            <div class="tr-page-header">
+                <div class="tr-page-title-wrap">
+                    <div class="tr-page-icon">⇄</div>
+                    <div>
+                        <div class="tr-page-title">Translation Hub</div>
+                        <div class="tr-page-sub">Manage and track article translations across all languages</div>
+                    </div>
                 </div>
-                <div class="tr-header-stats">
-                    <span class="tr-global-stat">
-                        <i class="fas fa-file-alt"></i> <strong id="tr-stat-articles">--</strong> articles
-                    </span>
+                <div class="tr-article-pill">📄 &nbsp;<span id="tr-stat-articles">--</span> articles</div>
+            </div>
+
+            <!-- Stat Cards -->
+            <div class="tr-stats-grid" id="tr-stats-grid">
+                <div class="tr-stat-card tr-sc-all tr-s-active" data-status="ALL">
+                    <div class="tr-stat-num" id="tr-count-ALL">--</div>
+                    <div class="tr-stat-label">All Articles</div>
+                    <div class="tr-stat-bar-bg"><div class="tr-stat-bar" id="tr-bar-ALL" style="width:100%"></div></div>
+                </div>
+                <div class="tr-stat-card tr-sc-needs" data-status="NEEDS_TRANSLATION">
+                    <div class="tr-stat-num" id="tr-count-NEEDS">0</div>
+                    <div class="tr-stat-label">Needs Translation</div>
+                    <div class="tr-stat-bar-bg"><div class="tr-stat-bar" id="tr-bar-NEEDS" style="width:0%"></div></div>
+                </div>
+                <div class="tr-stat-card tr-sc-outdated" data-status="OUTDATED">
+                    <div class="tr-stat-num" id="tr-count-OUTDATED">0</div>
+                    <div class="tr-stat-label">Outdated</div>
+                    <div class="tr-stat-bar-bg"><div class="tr-stat-bar" id="tr-bar-OUTDATED" style="width:0%"></div></div>
+                </div>
+                <div class="tr-stat-card tr-sc-progress" data-status="IN_PROGRESS">
+                    <div class="tr-stat-num" id="tr-count-INPROGRESS">0</div>
+                    <div class="tr-stat-label">In Progress</div>
+                    <div class="tr-stat-bar-bg"><div class="tr-stat-bar" id="tr-bar-INPROGRESS" style="width:0%"></div></div>
+                </div>
+                <div class="tr-stat-card tr-sc-complete" data-status="TRANSLATED">
+                    <div class="tr-stat-num" id="tr-count-TRANSLATED">0</div>
+                    <div class="tr-stat-label">Completed</div>
+                    <div class="tr-stat-bar-bg"><div class="tr-stat-bar" id="tr-bar-TRANSLATED" style="width:0%"></div></div>
+                </div>
+                <div class="tr-stat-card tr-sc-failed" data-status="FAILED">
+                    <div class="tr-stat-num" id="tr-count-FAILED">0</div>
+                    <div class="tr-stat-label">Failed</div>
+                    <div class="tr-stat-bar-bg"><div class="tr-stat-bar" id="tr-bar-FAILED" style="width:0%"></div></div>
                 </div>
             </div>
 
-            <!-- Filter Bar -->
-            <div class="tr-filter-bar" id="tr-filter-bar">
-                <button class="tr-filter-btn active" data-status="ALL">
-                    <span class="tr-filter-icon">📋</span> All <span class="tr-filter-count" id="tr-count-ALL">--</span>
-                </button>
-                <button class="tr-filter-btn" data-status="NEEDS_TRANSLATION">
-                    <span class="tr-filter-icon">🌍</span> Needs Translation <span class="tr-filter-count" id="tr-count-NEEDS">0</span>
-                </button>
-                <button class="tr-filter-btn" data-status="OUTDATED">
-                    <span class="tr-filter-icon">⚠️</span> Outdated <span class="tr-filter-count" id="tr-count-OUTDATED">0</span>
-                </button>
-                <button class="tr-filter-btn" data-status="IN_PROGRESS">
-                    <span class="tr-filter-icon">🔄</span> In Progress <span class="tr-filter-count" id="tr-count-INPROGRESS">0</span>
-                </button>
-                <button class="tr-filter-btn" data-status="TRANSLATED">
-                    <span class="tr-filter-icon">✅</span> Completed <span class="tr-filter-count" id="tr-count-TRANSLATED">0</span>
-                </button>
-                <button class="tr-filter-btn" data-status="FAILED">
-                    <span class="tr-filter-icon">❌</span> Failed <span class="tr-filter-count" id="tr-count-FAILED">0</span>
-                </button>
-            </div>
+            <!-- Section Divider -->
+            <div class="tr-section-divider"></div>
 
             <!-- Toolbar -->
             <div class="tr-toolbar">
-                <div class="tr-toolbar-left">
-                    <div class="tr-search-wrap">
-                        <i class="fas fa-search"></i>
-                        <input type="text" id="tr-search-input" class="tr-search-input" placeholder="Search articles by title...">
-                    </div>
-                    <select id="tr-lang-filter" class="tr-select">
-                        <option value="">All Languages</option>
-                    </select>
+                <div class="tr-search-wrap">
+                    <span class="tr-search-icon">🔍</span>
+                    <input type="text" id="tr-search-input" class="tr-search-input" placeholder="Search articles by title...">
                 </div>
-                <div class="tr-toolbar-right">
-                    <select id="tr-sort-select" class="tr-select">
-                        <option value="attention">Needs Attention First</option>
-                        <option value="title_asc">Alphabetical (A–Z)</option>
-                        <option value="updated_desc">Recently Updated</option>
-                    </select>
-                    <select id="tr-page-size" class="tr-select">
-                        <option value="10">10 / page</option>
-                        <option value="25" selected>25 / page</option>
-                        <option value="50">50 / page</option>
-                    </select>
-                </div>
+                <select id="tr-sort-select" class="tr-ctrl-select">
+                    <option value="attention">Needs Attention First</option>
+                    <option value="title_asc">Alphabetical (A–Z)</option>
+                    <option value="updated_desc">Recently Updated</option>
+                </select>
+                <select id="tr-page-size" class="tr-ctrl-select">
+                    <option value="10">10 / page</option>
+                    <option value="25" selected>25 / page</option>
+                    <option value="50">50 / page</option>
+                </select>
             </div>
 
             <!-- Action Bar -->
             <div class="tr-action-bar" id="tr-action-bar">
-                <div class="tr-action-left">
-                    <span class="tr-action-info">
-                        <strong id="tr-sel-article-count">0</strong> articles ×
-                        <strong id="tr-sel-lang-count">0</strong> languages =
-                        <strong id="tr-sel-combo-count">0</strong> jobs
-                    </span>
+                <div class="tr-job-info">
+                    <strong id="tr-sel-article-count">0</strong> articles &nbsp;×&nbsp;
+                    <strong id="tr-sel-lang-count">0</strong> languages &nbsp;=&nbsp;
+                    <strong id="tr-sel-combo-count">0</strong> jobs queued
                 </div>
-                <div class="tr-action-right">
+                <div class="tr-btn-group">
                     <div class="tr-lang-picker-wrap">
-                        <button class="btn btn-small btn-secondary" id="tr-lang-picker-btn">
-                            <i class="fas fa-globe"></i> Select Languages <span id="tr-lang-badge" class="tr-lang-badge">0</span>
+                        <button class="tr-btn tr-btn-lang" id="tr-lang-picker-btn">
+                            🌐 &nbsp;Select Languages <span id="tr-lang-badge" class="tr-lang-badge">0</span>
                         </button>
                         <div class="tr-lang-dropdown hidden" id="tr-lang-dropdown">
                             <div class="tr-lang-dropdown-header">
@@ -601,23 +668,23 @@
                             <div class="tr-lang-dropdown-list" id="tr-lang-dropdown-list"></div>
                         </div>
                     </div>
-                    <button class="btn btn-small btn-primary" id="tr-translate-btn" disabled>
-                        <i class="fas fa-exchange-alt"></i> Translate Selected
+                    <button class="tr-btn tr-btn-sel" id="tr-translate-btn" disabled>
+                        ⇄ &nbsp;Translate Selected
                     </button>
-                    <button class="btn btn-small btn-success" id="tr-translate-missing-btn">
-                        <i class="fas fa-magic"></i> Translate All Missing
+                    <button class="tr-btn tr-btn-all" id="tr-translate-missing-btn">
+                        ✦ &nbsp;Translate All Missing
                     </button>
                 </div>
             </div>
 
             <!-- Matrix Table -->
-            <div class="card tr-table-card">
+            <div class="tr-table-wrap-outer">
                 <div class="tr-table-wrap">
                     <table class="tr-table" id="tr-matrix-table">
                         <thead id="tr-table-head">
                             <tr>
                                 <th class="tr-th-check"><input type="checkbox" id="tr-select-all" title="Select all" aria-label="Select all articles"></th>
-                                <th class="tr-th-title">Title</th>
+                                <th class="tr-th-title">Article Title</th>
                                 <!-- Language columns inserted by JS -->
                             </tr>
                         </thead>
@@ -626,14 +693,15 @@
                         </tbody>
                     </table>
                 </div>
-            </div>
 
-            <!-- Pagination -->
-            <div class="tr-pagination">
-                <span class="tr-page-info" id="tr-page-info">Page 1</span>
-                <div class="tr-page-btns">
-                    <button class="btn btn-small btn-secondary" id="tr-prev-btn" disabled><i class="fas fa-chevron-left"></i> Prev</button>
-                    <button class="btn btn-small btn-secondary" id="tr-next-btn" disabled>Next <i class="fas fa-chevron-right"></i></button>
+                <!-- Pagination -->
+                <div class="tr-pagination">
+                    <div class="tr-page-info" id="tr-page-info">Page 1</div>
+                    <div class="tr-page-btns" id="tr-page-btns">
+                        <button class="tr-page-btn" id="tr-prev-btn" disabled>← Prev</button>
+                        <button class="tr-page-btn tr-page-active">1</button>
+                        <button class="tr-page-btn" id="tr-next-btn" disabled>Next →</button>
+                    </div>
                 </div>
             </div>
 
@@ -662,7 +730,7 @@
             <!-- Toast -->
             <div id="tr-toast" class="pull-toast hidden">
                 <div class="pull-toast-inner">
-                    <i class="fas fa-spinner fa-spin" id="tr-toast-icon"></i>
+                    <span id="tr-toast-icon"><span class="fn-loader-inline"></span></span>
                     <span id="tr-toast-text">Translating...</span>
                 </div>
             </div>
@@ -674,52 +742,73 @@
         <!-- ========================================== -->
         <section class="page-section" id="section-push">
 
-            <!-- Header -->
-            <div class="tr-header">
-                <div class="tr-header-text">
-                    <h2><i class="fas fa-cloud-upload-alt"></i> Push</h2>
-                    <span class="tr-subtitle">Deployment Control Panel</span>
-                </div>
-                <div class="tr-header-stats">
-                    <span class="tr-global-stat">
-                        <i class="fas fa-file-alt"></i> <strong id="push-stat-articles">--</strong> articles
-                    </span>
-                </div>
-            </div>
-
-            <!-- Toolbar (search + page size + refresh) -->
-            <div class="tr-toolbar">
-                <div class="tr-toolbar-left">
-                    <div class="push-search-wrap">
-                        <i class="fas fa-search"></i>
-                        <input type="text" id="push-search-input" class="push-search-input" placeholder="Search articles by title...">
+            <!-- Page Header -->
+            <div class="push-page-header">
+                <div class="push-page-title-wrap">
+                    <div class="push-page-icon">🚀</div>
+                    <div>
+                        <div class="push-page-title">Push</div>
+                        <div class="push-page-sub">Deployment Control Panel — publish translations to live</div>
                     </div>
                 </div>
-                <div class="tr-toolbar-right">
-                    <select id="push-page-size" class="tr-select" aria-label="Page size">
-                        <option value="10">10 / page</option>
-                        <option value="25" selected>25 / page</option>
-                        <option value="50">50 / page</option>
-                        <option value="100">100 / page</option>
-                    </select>
+                <div class="push-article-pill">📄 &nbsp;<span id="push-stat-articles">--</span> articles</div>
+            </div>
+
+            <!-- Stats Mini Row -->
+            <div class="push-stats-row">
+                <div class="push-stat-mini">
+                    <div class="push-stat-mini-icon push-smi-blue">📋</div>
+                    <div>
+                        <div class="push-stat-mini-num" id="push-sel-article-count">0</div>
+                        <div class="push-stat-mini-label">Articles Selected</div>
+                    </div>
+                </div>
+                <div class="push-stat-mini">
+                    <div class="push-stat-mini-icon push-smi-green">✅</div>
+                    <div>
+                        <div class="push-stat-mini-num" id="push-sel-combo-count">0</div>
+                        <div class="push-stat-mini-label">Jobs Queued</div>
+                    </div>
+                </div>
+                <div class="push-stat-mini">
+                    <div class="push-stat-mini-icon push-smi-amber">🌍</div>
+                    <div>
+                        <div class="push-stat-mini-num" id="push-sel-lang-count">0</div>
+                        <div class="push-stat-mini-label">Languages Targeted</div>
+                    </div>
                 </div>
             </div>
 
-            <!-- Action Bar (mirrors Translate section) -->
-            <div class="tr-action-bar" id="push-action-bar">
-                <div class="tr-action-left">
-                    <span class="tr-action-info">
-                        <strong id="push-sel-article-count">0</strong> articles ×
-                        <strong id="push-sel-lang-count">0</strong> languages =
-                        <strong id="push-sel-combo-count">0</strong> jobs
-                    </span>
+            <div class="push-section-divider"></div>
+
+            <!-- Toolbar -->
+            <div class="push-toolbar">
+                <div class="push-search-wrap">
+                    <span class="push-search-icon">🔍</span>
+                    <input type="text" id="push-search-input" class="push-search-input" placeholder="Search articles by title...">
                 </div>
-                <div class="tr-action-right">
-                    <!-- Language picker (same as Translate) -->
+                <select id="push-page-size" class="push-ctrl-select" aria-label="Page size">
+                    <option value="10">10 / page</option>
+                    <option value="25" selected>25 / page</option>
+                    <option value="50">50 / page</option>
+                    <option value="100">100 / page</option>
+                </select>
+            </div>
+
+            <!-- Action Bar -->
+            <div class="push-action-bar" id="push-action-bar">
+                <div class="push-job-info">
+                    <span class="push-job-chip push-jc-articles">📋 &nbsp;<span id="push-chip-articles">0</span> articles</span>
+                    <span class="push-job-sep">×</span>
+                    <span class="push-job-chip push-jc-langs">🌍 &nbsp;<span id="push-chip-langs">0</span> languages</span>
+                    <span class="push-job-sep">=</span>
+                    <span class="push-job-chip push-jc-jobs">✦ &nbsp;<span id="push-chip-jobs">0</span> jobs</span>
+                </div>
+                <div class="push-btn-group">
+                    <!-- Language picker -->
                     <div class="tr-lang-picker-wrap" id="push-lang-picker-wrap">
-                        <button class="btn btn-small btn-secondary" id="push-lang-picker-btn">
-                            <i class="fas fa-globe"></i> Select Languages
-                            <span id="push-lang-badge" class="tr-lang-badge">0</span>
+                        <button class="push-btn push-btn-lang" id="push-lang-picker-btn">
+                            🌍 &nbsp;Select Languages &nbsp;<span class="push-lang-count" id="push-lang-badge">0</span>
                         </button>
                         <div class="tr-lang-dropdown hidden" id="push-lang-dropdown">
                             <div class="tr-lang-dropdown-header">
@@ -728,41 +817,36 @@
                             <div class="tr-lang-dropdown-list" id="push-lang-dropdown-list"></div>
                         </div>
                     </div>
-                    <button class="btn btn-small btn-primary" id="push-selected-btn" disabled>
-                        <i class="fas fa-cloud-upload-alt"></i> Push Selected
+                    <button class="push-btn push-btn-sel" id="push-selected-btn" disabled>
+                        🚀 &nbsp;Push Selected
                     </button>
-                    <button class="btn btn-small btn-success" id="push-all-ready-btn" disabled>
-                        <i class="fas fa-rocket"></i> Push All Ready
+                    <button class="push-btn push-btn-all" id="push-all-ready-btn" disabled>
+                        ✦ &nbsp;Push All Ready
                     </button>
                 </div>
             </div>
 
-            <!-- Matrix Table -->
-            <div class="card push-table-card">
+            <!-- Table -->
+            <div class="push-table-wrap-outer">
                 <div class="push-table-wrap">
                     <table class="push-table" id="push-main-table">
                         <thead>
                             <tr id="push-thead-row">
-                                <th class="push-th-check">
-                                    <input type="checkbox" id="push-select-all" title="Select all" aria-label="Select all">
-                                </th>
+                                <th style="width:40px;padding-left:16px"><input type="checkbox" id="push-select-all" class="push-cb" title="Select all" aria-label="Select all"></th>
                                 <th class="push-th-title">Article Title</th>
                                 <!-- Language columns added dynamically by JS -->
                             </tr>
                         </thead>
                         <tbody id="push-table-body">
-                            <tr><td colspan="2" class="empty-cell"><i class="fas fa-spinner fa-spin"></i> Loading articles…</td></tr>
+                            <tr><td colspan="2" class="empty-cell"><span class="fn-loader"></span> Loading articles…</td></tr>
                         </tbody>
                     </table>
-                </div>
-            </div>
 
-            <!-- Pagination -->
-            <div class="tr-pagination">
-                <span class="tr-page-info" id="push-page-info">Page 1</span>
-                <div class="tr-page-btns">
-                    <button class="btn btn-small btn-secondary" id="push-prev-btn" disabled><i class="fas fa-chevron-left"></i> Prev</button>
-                    <button class="btn btn-small btn-secondary" id="push-next-btn" disabled>Next <i class="fas fa-chevron-right"></i></button>
+                    <!-- Pagination -->
+                    <div class="push-pagination">
+                        <div class="push-page-info" id="push-page-info">Page 1</div>
+                        <div class="push-page-btns" id="push-page-btns"></div>
+                    </div>
                 </div>
             </div>
 
@@ -823,9 +907,9 @@
             <div id="auto-main-content" class="hidden">
                 <div class="auto-header">
                     <div class="auto-header-left">
-                        <i class="fas fa-robot auto-header-icon"></i>
+                        <span class="tr-page-icon"><i class="fas fa-robot"></i></span>
                         <div>
-                            <h2>Automation</h2>
+                            <span class="tr-page-title">Automation</span>
                             <p class="auto-subtitle">Schedule automatic tasks to keep your translations in sync.</p>
                         </div>
                     </div>
@@ -983,9 +1067,12 @@
             <!-- Header -->
             <div class="lang-header">
                 <div class="lang-header-left">
-                    <h2><i class="fas fa-globe"></i> Languages</h2>
-                    <span class="lang-base-badge">English</span>
-                    <span class="lang-info-tip" title="Base language is English. Translations are created for each target language below."><i class="fas fa-info-circle"></i></span>
+                    <div class="tr-page-icon" style="background:linear-gradient(135deg,#1A3D63,#2E6DA4);">🌐</div>
+                    <div>
+                        <div class="tr-page-title">Languages</div>
+                        <div class="tr-page-sub">Manage target languages for translations</div>
+                    </div>
+                    <span class="lang-base-badge"><i class="fas fa-check-circle"></i> English (Base)</span>
                 </div>
                 <div class="lang-header-right">
                     <div class="lang-search-box">
@@ -1070,42 +1157,45 @@
             <div id="gl-main-content">
 
                 <!-- Header -->
-                <div class="tr-header">
-                    <div class="tr-header-text">
-                        <h2><i class="fas fa-book"></i> Glossary</h2>
-                        <span class="tr-subtitle">Terminology Management</span>
+                <div class="gl-page-header">
+                    <div class="tr-page-title-wrap">
+                        <div class="tr-page-icon" style="background:linear-gradient(135deg,#1A3D63,#2E6DA4);">📖</div>
+                        <div>
+                            <div class="tr-page-title">Glossary</div>
+                            <div class="tr-page-sub">Terminology Management</div>
+                        </div>
                     </div>
-                    <div class="tr-header-stats">
-                        <span class="tr-global-stat">
-                            <i class="fas fa-layer-group"></i> <strong id="gl-stat-glossaries">0</strong> glossaries
-                        </span>
-                        <span class="tr-global-stat" id="gl-stat-terms-wrap" style="display:none;">
-                            <i class="fas fa-list"></i> <strong id="gl-stat-terms">0</strong> terms
-                        </span>
+                    <div class="tr-article-pill">
+                        <i class="fas fa-layer-group"></i> &nbsp;<span id="gl-stat-glossaries">0</span> glossaries
                     </div>
+                    <span class="tr-global-stat" id="gl-stat-terms-wrap" style="display:none;">
+                        <i class="fas fa-list"></i> <strong id="gl-stat-terms">0</strong> terms
+                    </span>
                 </div>
 
                 <!-- ========== GLOSSARY LIST VIEW ========== -->
                 <div id="gl-list-view">
-                    <!-- Filter Bar -->
-                    <div class="tr-filter-bar">
-                        <button class="tr-filter-btn active" data-filter="ALL" id="gl-filter-all">All</button>
-                        <button class="tr-filter-btn" data-filter="ACTIVE" id="gl-filter-active">Active</button>
-                        <button class="tr-filter-btn" data-filter="INACTIVE" id="gl-filter-inactive">Inactive</button>
+                    <!-- Filter Tabs -->
+                    <div class="gl-filter-bar">
+                        <button class="gl-filter-btn active" data-filter="ALL" id="gl-filter-all">
+                            <i class="fas fa-layer-group"></i> All <span class="gl-filter-count" id="gl-count-all">0</span>
+                        </button>
+                        <button class="gl-filter-btn" data-filter="ACTIVE" id="gl-filter-active">
+                            <i class="fas fa-check-circle"></i> Active <span class="gl-filter-count" id="gl-count-active">0</span>
+                        </button>
+                        <button class="gl-filter-btn" data-filter="INACTIVE" id="gl-filter-inactive">
+                            <i class="fas fa-pause-circle"></i> Inactive <span class="gl-filter-count" id="gl-count-inactive">0</span>
+                        </button>
                     </div>
 
                     <div class="tr-toolbar">
-                        <div class="tr-toolbar-left">
-                            <button class="btn btn-primary btn-small" id="gl-create-btn">
-                                <i class="fas fa-plus"></i> Create New Glossary
-                            </button>
-                            <div class="tr-search-wrap">
-                                <i class="fas fa-search"></i>
-                                <input type="text" id="gl-search-input" class="tr-search-input" placeholder="Search glossaries..." aria-label="Search glossaries">
-                            </div>
+                        <div class="tr-search-wrap" style="flex:1;min-width:200px;">
+                            <span class="tr-search-icon">🔍</span>
+                            <input type="text" id="gl-search-input" class="tr-search-input" placeholder="Search glossaries..." aria-label="Search glossaries">
                         </div>
-                        <div class="tr-toolbar-right" style="gap:6px;">
-                        </div>
+                        <button class="tr-btn tr-btn-all" id="gl-create-btn">
+                            <i class="fas fa-plus"></i> Create New Glossary
+                        </button>
                     </div>
 
                     <div class="card">
@@ -1122,7 +1212,7 @@
                                 </tr>
                             </thead>
                             <tbody id="gl-glossary-tbody">
-                                <tr><td colspan="7" class="empty-cell"><i class="fas fa-spinner fa-spin"></i> Loading...</td></tr>
+                                <tr><td colspan="7" class="empty-cell"><span class="fn-loader"></span> Loading...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -1163,18 +1253,16 @@
 
                     <!-- Term Toolbar -->
                     <div class="tr-toolbar" style="margin-top:8px;">
-                        <div class="tr-toolbar-left">
-                            <div class="tr-search-wrap">
-                                <i class="fas fa-search"></i>
-                                <input type="text" id="gl-term-search" class="tr-search-input" placeholder="Search terms..." aria-label="Search terms">
-                            </div>
+                        <div class="tr-search-wrap" style="flex:1;min-width:200px;">
+                            <span class="tr-search-icon">🔍</span>
+                            <input type="text" id="gl-term-search" class="tr-search-input" placeholder="Search terms..." aria-label="Search terms">
                         </div>
-                        <div class="tr-toolbar-right" style="gap:8px;">
-                            <button class="btn btn-small btn-secondary" id="gl-selected-count-btn" style="display:none;">
+                        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                            <button class="gl-filter-btn" id="gl-selected-count-btn" style="display:none;">
                                 <span id="gl-sel-count-display">0</span> selected
                             </button>
-                            <button class="btn btn-primary btn-small" id="gl-add-term-btn"><i class="fas fa-plus"></i> Add Term</button>
-                            <button class="btn btn-small btn-danger" id="gl-bulk-delete-btn" disabled><i class="fas fa-trash"></i> Delete Selected (<span id="gl-sel-count">0</span>)</button>
+                            <button class="tr-btn tr-btn-sel" id="gl-bulk-delete-btn" disabled><i class="fas fa-trash"></i> Delete Selected (<span id="gl-sel-count">0</span>)</button>
+                            <button class="tr-btn tr-btn-all" id="gl-add-term-btn"><i class="fas fa-plus"></i> Add Term</button>
                         </div>
                     </div>
 
@@ -1377,7 +1465,7 @@
             <!-- Toast -->
             <div id="gl-toast" class="pull-toast hidden">
                 <div class="pull-toast-inner">
-                    <i class="fas fa-spinner fa-spin" id="gl-toast-icon"></i>
+                    <span id="gl-toast-icon"><span class="fn-loader-inline"></span></span>
                     <span id="gl-toast-text">Working...</span>
                 </div>
             </div>
@@ -1388,66 +1476,83 @@
         <!-- SECTION: Admin Panel (super admin only)    -->
         <!-- ========================================== -->
         <section class="page-section" id="section-admin">
-            <div class="section-header" style="margin-bottom:20px;">
-                <h2><i class="fas fa-users-cog"></i> Admin Panel</h2>
-                <p class="section-subtitle">Manage admin accounts</p>
+
+            <!-- Page Header -->
+            <div class="ap-page-header">
+                <div class="ap-page-title-wrap">
+                    <div class="ap-page-icon">🛡️</div>
+                    <div>
+                        <div class="ap-page-title">Admin Panel</div>
+                        <div class="ap-page-sub">Manage admin accounts and access control</div>
+                    </div>
+                </div>
             </div>
 
             <!-- Admin Table Setup Banner -->
             <div class="admin-setup-banner hidden" id="admin-setup-banner">
-                <div class="pull-setup-card">
-                    <h3><i class="fas fa-database"></i> Admin Table Setup Required</h3>
-                    <p>The <code>admins</code> table needs to be created in Supabase. Copy the SQL below and run it in <strong>Supabase Dashboard &gt; SQL Editor &gt; New Query</strong>.</p>
-                    <pre id="admin-setup-sql" style="background:#1e293b;color:#e2e8f0;padding:12px;border-radius:8px;font-size:12px;overflow-x:auto;margin:12px 0;"></pre>
-                    <button class="btn btn-primary" id="admin-copy-sql"><i class="fas fa-copy"></i> Copy SQL</button>
-                    <button class="btn btn-secondary" id="admin-auto-create" style="margin-left:8px;"><i class="fas fa-magic"></i> Auto-Create Table</button>
+                <div class="ap-setup-card">
+                    <div class="ap-setup-icon">🗄️</div>
+                    <div class="ap-setup-body">
+                        <h3>Admin Table Setup Required</h3>
+                        <p>The <code>admins</code> table needs to be created in Supabase. Copy the SQL below and run it in <strong>Supabase Dashboard &gt; SQL Editor &gt; New Query</strong>.</p>
+                        <pre id="admin-setup-sql" class="ap-setup-sql"></pre>
+                        <div class="ap-setup-btns">
+                            <button class="ap-btn ap-btn-secondary" id="admin-copy-sql">📋 &nbsp;Copy SQL</button>
+                            <button class="ap-btn ap-btn-primary" id="admin-auto-create">⚡ &nbsp;Auto-Create Table</button>
+                        </div>
+                    </div>
                 </div>
             </div>
 
             <!-- Add Admin Form -->
-            <div class="admin-add-card" id="admin-add-card">
-                <h3><i class="fas fa-user-plus"></i> Add New Admin</h3>
-                <div class="admin-form-row">
-                    <div class="admin-form-group">
+            <div class="ap-add-card" id="admin-add-card">
+                <div class="ap-add-header">
+                    <div class="ap-add-icon">👤</div>
+                    <h3>Add New Admin</h3>
+                </div>
+                <div class="ap-form-row">
+                    <div class="ap-form-group">
                         <label>Name *</label>
-                        <input type="text" id="admin-add-name" class="admin-input" placeholder="Full name">
+                        <input type="text" id="admin-add-name" class="ap-input" placeholder="Full name">
                     </div>
-                    <div class="admin-form-group">
+                    <div class="ap-form-group">
                         <label>Email *</label>
-                        <input type="email" id="admin-add-email" class="admin-input" placeholder="email@example.com">
+                        <input type="email" id="admin-add-email" class="ap-input" placeholder="email@example.com">
                     </div>
-                    <div class="admin-form-group">
+                    <div class="ap-form-group">
                         <label>Password *</label>
-                        <input type="password" id="admin-add-password" class="admin-input" placeholder="Min 6 characters">
+                        <input type="password" id="admin-add-password" class="ap-input" placeholder="Min 6 characters">
                     </div>
-                    <div class="admin-form-group">
+                    <div class="ap-form-group">
                         <label>Role</label>
-                        <select id="admin-add-role" class="admin-input">
+                        <select id="admin-add-role" class="ap-input">
                             <option value="admin">Admin</option>
                             <option value="editor">Editor</option>
                             <option value="viewer">Viewer</option>
                         </select>
                     </div>
-                    <button class="btn btn-primary admin-add-btn" id="admin-add-btn"><i class="fas fa-plus"></i> Add Admin</button>
+                    <button class="ap-btn ap-btn-primary ap-add-btn" id="admin-add-btn">➕ &nbsp;Add Admin</button>
                 </div>
-                <div class="admin-form-error hidden" id="admin-add-error"></div>
-        </div>
+                <div class="ap-form-error hidden" id="admin-add-error"></div>
+            </div>
+
+            <div class="ap-section-divider"></div>
 
             <!-- Admins Table -->
-            <div class="admin-table-card">
-                <table class="admin-table">
+            <div class="ap-table-wrap">
+                <table class="ap-table">
                     <thead>
                         <tr>
                             <th>Name</th>
                             <th>Email</th>
-                            <th>Role</th>
-                            <th>Status</th>
+                            <th class="ap-th-center">Role</th>
+                            <th class="ap-th-center">Status</th>
                             <th>Created</th>
-                            <th>Actions</th>
+                            <th class="ap-th-center">Actions</th>
                         </tr>
                     </thead>
                     <tbody id="admin-table-body">
-                        <tr><td colspan="6" style="text-align:center;padding:20px;color:#94a3b8;">Loading...</td></tr>
+                        <tr><td colspan="6" style="text-align:center;padding:20px;color:#93C5E0;"><span class="fn-loader"></span> Loading...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -1475,6 +1580,21 @@
         </div>
     </div>
 
-    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <!-- Generic Confirm Modal -->
+    <div class="push-confirm-overlay hidden" id="generic-confirm-overlay">
+        <div class="push-confirm-modal">
+            <div class="push-confirm-header">
+                <h3 id="generic-confirm-title"><i class="fas fa-exclamation-circle"></i> Confirm</h3>
+                <button class="push-confirm-close" id="generic-confirm-close">&times;</button>
+            </div>
+            <div class="push-confirm-body" id="generic-confirm-body"></div>
+            <div class="push-confirm-footer">
+                <button class="btn btn-secondary" id="generic-confirm-cancel">Cancel</button>
+                <button class="btn btn-primary" id="generic-confirm-ok"><i class="fas fa-check"></i> Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='app.js') }}?v=20260313o"></script>
 </body>
 </html>

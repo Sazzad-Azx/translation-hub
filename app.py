@@ -24,6 +24,8 @@ from config import TARGET_LANGUAGES, BASE_LANGUAGE
 import auth_service
 
 app = Flask(__name__)
+app.config['TEMPLATES_AUTO_RELOAD'] = True
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 CORS(app, supports_credentials=True)
 
 
@@ -728,7 +730,7 @@ def dashboard_stats():
         except Exception:
             pass
 
-        # ---------- Translations from Supabase ----------
+        # ---------- Translations from Supabase (for translated count + cost) ----------
         all_translations = []
         try:
             from translation_supabase import list_article_translations
@@ -738,55 +740,100 @@ def dashboard_stats():
 
         total_translated = len(all_translations)
 
-        # Count translations in the last week/month
+        # ---------- Source article changes from pull_registry ----------
+        # This tracks actual Intercom article edits, not translation rows
+        all_pull_rows = []
+        try:
+            import requests as _req_pr
+            from config import SUPABASE_URL, SUPABASE_SERVICE_KEY
+            offset = 0
+            while True:
+                resp = _req_pr.get(
+                    f"{SUPABASE_URL}/rest/v1/pull_registry",
+                    headers={
+                        "apikey": SUPABASE_SERVICE_KEY,
+                        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+                    },
+                    params={
+                        "select": "intercom_id,title,source_updated_at",
+                        "limit": 1000,
+                        "offset": offset,
+                    },
+                    timeout=15,
+                )
+                if resp.status_code != 200:
+                    break
+                batch = resp.json()
+                if not batch:
+                    break
+                all_pull_rows.extend(batch)
+                if len(batch) < 1000:
+                    break
+                offset += 1000
+        except Exception:
+            pass
+
+        def _parse_ts(s):
+            if not s:
+                return None
+            try:
+                return datetime.datetime.fromisoformat(s.replace('Z', '+00:00').replace('+00:00', ''))
+            except Exception:
+                try:
+                    return datetime.datetime.strptime(s[:19], '%Y-%m-%dT%H:%M:%S')
+                except Exception:
+                    return None
+
+        # Count unique source articles changed in week/month
         changed_week = 0
         changed_month = 0
-        for t in all_translations:
-            updated = t.get('updated_at') or t.get('created_at') or ''
-            if updated:
-                try:
-                    ts = datetime.datetime.fromisoformat(updated.replace('Z', '+00:00').replace('+00:00', ''))
-                except Exception:
-                    try:
-                        ts = datetime.datetime.strptime(updated[:19], '%Y-%m-%dT%H:%M:%S')
-                    except Exception:
-                        continue
+        for row in all_pull_rows:
+            ts = _parse_ts(row.get('source_updated_at'))
+            if ts:
                 if ts >= week_ago:
                     changed_week += 1
                 if ts >= month_ago:
                     changed_month += 1
 
         # ---------- Cost estimation (GPT-4o-mini pricing) ----------
-        # GPT-4o-mini: ~$0.15/1M input, ~$0.60/1M output tokens
-        # Avg article: ~800 input tokens, ~1200 output tokens per translation
+        # Cost is based on actual translations done, not source changes
         AVG_INPUT_TOKENS = 800
         AVG_OUTPUT_TOKENS = 1200
         INPUT_COST_PER_TOKEN = 0.15 / 1_000_000
         OUTPUT_COST_PER_TOKEN = 0.60 / 1_000_000
         cost_per_translation = (AVG_INPUT_TOKENS * INPUT_COST_PER_TOKEN) + (AVG_OUTPUT_TOKENS * OUTPUT_COST_PER_TOKEN)
 
-        cost_week = changed_week * cost_per_translation
-        cost_month = changed_month * cost_per_translation
+        # Count translations done this week/month for cost
+        translations_week = 0
+        translations_month = 0
+        for t in all_translations:
+            ts = _parse_ts(t.get('updated_at') or t.get('created_at'))
+            if ts:
+                if ts >= week_ago:
+                    translations_week += 1
+                if ts >= month_ago:
+                    translations_month += 1
 
-        # ---------- Weekly breakdown (per day of week) ----------
+        cost_week = translations_week * cost_per_translation
+        cost_month = translations_month * cost_per_translation
+
+        # ---------- Weekly breakdown (per day of week) — source article changes ----------
         changes_weekly = [0] * 7  # Mon-Sun
         cost_weekly = [0.0] * 7
-        for t in all_translations:
-            updated = t.get('updated_at') or t.get('created_at') or ''
-            if updated:
-                try:
-                    ts = datetime.datetime.fromisoformat(updated.replace('Z', '+00:00').replace('+00:00', ''))
-                except Exception:
-                    try:
-                        ts = datetime.datetime.strptime(updated[:19], '%Y-%m-%dT%H:%M:%S')
-                    except Exception:
-                        continue
-                if ts >= week_ago:
-                    day_idx = ts.weekday()  # 0=Mon
-                    changes_weekly[day_idx] += 1
-                    cost_weekly[day_idx] += cost_per_translation
+        for row in all_pull_rows:
+            ts = _parse_ts(row.get('source_updated_at'))
+            if ts and ts >= week_ago:
+                day_idx = ts.weekday()  # 0=Mon
+                changes_weekly[day_idx] += 1
 
-        # ---------- Monthly breakdown (per week) ----------
+        # Cost weekly breakdown — based on translations done
+        for t in all_translations:
+            ts = _parse_ts(t.get('updated_at') or t.get('created_at'))
+            if ts and ts >= week_ago:
+                day_idx = ts.weekday()
+                cost_weekly[day_idx] += cost_per_translation
+
+        # ---------- Monthly breakdown (per week) — source article changes ----------
         changes_monthly = [0] * 5
         cost_monthly = [0.0] * 5
         changes_monthly_labels = []
@@ -794,105 +841,117 @@ def dashboard_stats():
             wk_start = now - datetime.timedelta(days=i * 7 + 7)
             wk_end = now - datetime.timedelta(days=i * 7)
             changes_monthly_labels.append(f'W{5 - i}')
+            for row in all_pull_rows:
+                ts = _parse_ts(row.get('source_updated_at'))
+                if ts and wk_start <= ts < wk_end:
+                    changes_monthly[4 - i] += 1
             for t in all_translations:
-                updated = t.get('updated_at') or t.get('created_at') or ''
-                if updated:
-                    try:
-                        ts = datetime.datetime.fromisoformat(updated.replace('Z', '+00:00').replace('+00:00', ''))
-                    except Exception:
-                        try:
-                            ts = datetime.datetime.strptime(updated[:19], '%Y-%m-%dT%H:%M:%S')
-                        except Exception:
-                            continue
-                    if wk_start <= ts < wk_end:
-                        changes_monthly[4 - i] += 1
-                        cost_monthly[4 - i] += cost_per_translation
+                ts = _parse_ts(t.get('updated_at') or t.get('created_at'))
+                if ts and wk_start <= ts < wk_end:
+                    cost_monthly[4 - i] += cost_per_translation
 
-        # ---------- Fetch English titles from pull_registry ----------
+        # ---------- Build English titles lookup from pull_registry ----------
         english_titles = {}
-        try:
-            unique_aids = set(t.get('parent_intercom_article_id', '') for t in all_translations if t.get('parent_intercom_article_id'))
-            if unique_aids:
-                import requests as _req2
-                from config import SUPABASE_URL, SUPABASE_SERVICE_KEY
-                aid_list = list(unique_aids)
-                for i in range(0, len(aid_list), 50):
-                    batch = aid_list[i:i+50]
-                    filter_str = ','.join(batch)
-                    resp = _req2.get(
-                        f"{SUPABASE_URL}/rest/v1/pull_registry",
-                        headers={
-                            "apikey": SUPABASE_SERVICE_KEY,
-                            "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
-                        },
-                        params={
-                            "select": "intercom_id,title",
-                            "intercom_id": f"in.({filter_str})",
-                        },
-                        timeout=15,
-                    )
-                    if resp.status_code == 200:
-                        for row in resp.json():
-                            if row.get('title'):
-                                english_titles[row['intercom_id']] = row['title']
-        except Exception:
-            pass
+        for row in all_pull_rows:
+            iid = row.get('intercom_id', '')
+            if iid and row.get('title'):
+                english_titles[iid] = row['title']
 
-        # ---------- Top changed articles ----------
-        article_change_count = {}
-        for t in all_translations:
-            aid = t.get('parent_intercom_article_id', '')
-            # Use English title from pull_registry, fallback to translated_title
-            title = english_titles.get(aid) or t.get('translated_title', 'Untitled')
-            updated = t.get('updated_at') or t.get('created_at') or ''
-            if aid not in article_change_count:
-                article_change_count[aid] = {'title': title, 'changes': 0, 'last_updated': updated}
-            article_change_count[aid]['changes'] += 1
-            if updated > article_change_count[aid]['last_updated']:
-                article_change_count[aid]['last_updated'] = updated
+        # ---------- Recently updated source articles (from pull_registry) ----------
+        # Sorted by source_updated_at desc — shows which Intercom articles were
+        # most recently edited, so user knows what needs re-translation.
+        recently_updated = []
+        for row in all_pull_rows:
+            ts = _parse_ts(row.get('source_updated_at'))
+            if ts:
+                recently_updated.append({
+                    'title': row.get('title') or 'Untitled',
+                    'source_updated_at': row.get('source_updated_at'),
+                    'ts': ts,
+                })
 
-        top_articles = sorted(article_change_count.values(), key=lambda x: x['changes'], reverse=True)[:20]
-        for a in top_articles:
-            lu = a.get('last_updated', '')
-            if lu:
-                try:
-                    ts = datetime.datetime.fromisoformat(lu.replace('Z', '+00:00').replace('+00:00', ''))
-                    a['last_updated'] = ts.strftime('%b %d, %Y')
-                except Exception:
-                    a['last_updated'] = lu[:10] if len(lu) >= 10 else lu
+        recently_updated.sort(key=lambda x: x['ts'], reverse=True)
+        top_articles = []
+        for a in recently_updated[:20]:
+            top_articles.append({
+                'title': a['title'],
+                'last_updated': a['ts'].strftime('%b %d, %Y'),
+            })
 
         # ---------- Recent activities ----------
-        recent_activities = []
-        sorted_translations = sorted(all_translations,
-            key=lambda t: t.get('updated_at') or t.get('created_at') or '', reverse=True)
-        for t in sorted_translations[:15]:
-            locale = t.get('target_locale', '??')
-            aid = t.get('parent_intercom_article_id', '')
-            # Use English title from pull_registry, fallback to translated_title
-            title = english_titles.get(aid) or t.get('translated_title', 'Untitled')
-            if len(title) > 50:
-                title = title[:47] + '...'
-            updated = t.get('updated_at') or t.get('created_at') or ''
-            time_str = ''
-            if updated:
-                try:
-                    ts = datetime.datetime.fromisoformat(updated.replace('Z', '+00:00').replace('+00:00', ''))
-                    delta = now - ts
-                    if delta.days > 0:
-                        time_str = f'{delta.days}d ago'
-                    elif delta.seconds > 3600:
-                        time_str = f'{delta.seconds // 3600}h ago'
-                    elif delta.seconds > 60:
-                        time_str = f'{delta.seconds // 60}m ago'
-                    else:
-                        time_str = 'Just now'
-                except Exception:
-                    time_str = updated[:16] if len(updated) >= 16 else updated
+        # Group by article (one entry per article per action type)
+        # 1. Pulled articles — from pull_registry.pulled_at
+        # 2. Translated articles — from article_translations.updated_at (grouped by article)
+        # 3. Pushed articles — from article_translations.pushed_at (grouped by article)
 
+        def _time_ago(ts):
+            delta = now - ts
+            if delta.days > 0:
+                return f'{delta.days}d ago'
+            elif delta.seconds > 3600:
+                return f'{delta.seconds // 3600}h ago'
+            elif delta.seconds > 60:
+                return f'{delta.seconds // 60}m ago'
+            else:
+                return 'Just now'
+
+        activity_entries = []  # list of (timestamp, type, title)
+
+        # --- Pulled: group by article from pull_registry ---
+        for row in all_pull_rows:
+            pulled_at_str = row.get('source_updated_at') or ''
+            ts = _parse_ts(pulled_at_str)
+            if ts:
+                title = row.get('title') or 'Untitled'
+                activity_entries.append((ts, 'pull', title))
+
+        # --- Translated: group by article (most recent updated_at per article) ---
+        translate_by_article = {}
+        for t in all_translations:
+            aid = t.get('parent_intercom_article_id', '')
+            if not aid:
+                continue
+            ts = _parse_ts(t.get('updated_at') or t.get('created_at'))
+            if ts:
+                if aid not in translate_by_article or ts > translate_by_article[aid]['ts']:
+                    title = english_titles.get(aid) or t.get('translated_title', 'Untitled')
+                    translate_by_article[aid] = {'ts': ts, 'title': title}
+
+        for info in translate_by_article.values():
+            activity_entries.append((info['ts'], 'translate', info['title']))
+
+        # --- Pushed: group by article (most recent pushed_at per article) ---
+        push_by_article = {}
+        for t in all_translations:
+            aid = t.get('parent_intercom_article_id', '')
+            if not aid:
+                continue
+            ts = _parse_ts(t.get('pushed_at'))
+            if ts:
+                if aid not in push_by_article or ts > push_by_article[aid]['ts']:
+                    title = english_titles.get(aid) or t.get('translated_title', 'Untitled')
+                    push_by_article[aid] = {'ts': ts, 'title': title}
+
+        for info in push_by_article.values():
+            activity_entries.append((info['ts'], 'push', info['title']))
+
+        # Sort all entries by timestamp desc, take top 20
+        activity_entries.sort(key=lambda x: x[0], reverse=True)
+
+        type_labels = {
+            'pull': 'Pulled',
+            'translate': 'Translated',
+            'push': 'Pushed',
+        }
+
+        recent_activities = []
+        for ts, atype, title in activity_entries[:20]:
+            display_title = title
+            label = type_labels.get(atype, atype.capitalize())
             recent_activities.append({
-                'type': 'translate',
-                'text': f'Translated <strong>{escapeHtml(title)}</strong> to <strong>{locale.upper()}</strong>',
-                'time': time_str
+                'type': atype,
+                'text': f'{label} <strong>{escapeHtml(display_title)}</strong>',
+                'time': _time_ago(ts)
             })
 
         return jsonify({
