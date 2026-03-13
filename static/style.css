@@ -3252,10 +3252,13 @@ textarea.gl-input { resize: vertical; }
    ============================================ */
 /* ---------- Login Screen — Split Layout ---------- */
 .login-screen {
-    min-height: 100vh;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
     display: flex;
     align-items: stretch;
     background: #0f1a2e;
+    z-index: 9999;
+    overflow: auto;
 }
 .login-screen.hidden { display: none; }
 
@@ -3386,7 +3389,6 @@ textarea.gl-input { resize: vertical; }
     align-items: center;
     justify-content: center;
     padding: 48px 40px;
-    min-height: 100vh;
 }
 
 .login-card {
