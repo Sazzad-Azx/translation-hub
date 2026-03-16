@@ -138,10 +138,21 @@ def _compute_health(
         if locale:
             trans_map[locale] = t
 
+    current_hash = article.get("content_hash", "")
+    # Pull-level outdated: source updated after last pull (needs re-pull)
+    pull_is_stale = bool(source_updated and pulled_at and source_updated > pulled_at)
     lang_statuses: Dict[str, str] = {}
     has_untranslated = False
     has_unpushed = False
+    has_outdated = False
     all_pushed = True
+
+    def _content_changed(t: Dict) -> bool:
+        """Check if source content genuinely changed since this translation was created."""
+        trans_checksum = t.get("source_checksum", "")
+        if current_hash and trans_checksum:
+            return current_hash != trans_checksum
+        return False
 
     for loc in TARGET_LANGUAGES:
         t = trans_map.get(loc)
@@ -153,20 +164,37 @@ def _compute_health(
             status = (t.get("status") or "draft").lower()
             pushed_at_val = t.get("pushed_at")
             if pushed_at_val:
-                # Check if translation is outdated relative to pull
-                trans_updated = _parse_ts(t.get("updated_at"))
-                if trans_updated and pulled_at and pulled_at > trans_updated:
-                    lang_statuses[loc] = "OUTDATED"
+                if pull_is_stale or _content_changed(t):
+                    if pull_is_stale:
+                        lang_statuses[loc] = "OUTDATED"
+                        has_outdated = True
+                    else:
+                        lang_statuses[loc] = "NOT_STARTED"
+                        has_untranslated = True
                     all_pushed = False
                 else:
                     lang_statuses[loc] = "PUSHED"
             elif status == "ready" or status == "approved":
-                lang_statuses[loc] = "APPROVED"
-                has_unpushed = True
+                if pull_is_stale:
+                    lang_statuses[loc] = "OUTDATED"
+                    has_outdated = True
+                elif _content_changed(t):
+                    lang_statuses[loc] = "NOT_STARTED"
+                    has_untranslated = True
+                else:
+                    lang_statuses[loc] = "APPROVED"
+                    has_unpushed = True
                 all_pushed = False
             elif t.get("translated_title") or t.get("translated_body_html"):
-                lang_statuses[loc] = "TRANSLATED"
-                has_unpushed = True
+                if pull_is_stale:
+                    lang_statuses[loc] = "OUTDATED"
+                    has_outdated = True
+                elif _content_changed(t):
+                    lang_statuses[loc] = "NOT_STARTED"
+                    has_untranslated = True
+                else:
+                    lang_statuses[loc] = "TRANSLATED"
+                    has_unpushed = True
                 all_pushed = False
             else:
                 lang_statuses[loc] = "NOT_STARTED"
@@ -176,6 +204,8 @@ def _compute_health(
     # --- Overall health ---
     if all_pushed and len(TARGET_LANGUAGES) > 0:
         return "COMPLETE", lang_statuses
+    if has_outdated:
+        return "OUTDATED", lang_statuses
     if has_untranslated:
         return "NEEDS_TRANSLATION", lang_statuses
     if has_unpushed:
@@ -346,7 +376,7 @@ def list_content_hub_articles(
 
     # Fetch all pull_registry rows (metadata only – no body_html)
     params: Dict = {
-        "select": "id,intercom_id,title,description,state,url,source_updated_at,pulled_at,pull_status,pull_error,collection_id,collection_name,created_at,updated_at",
+        "select": "id,intercom_id,title,description,state,url,source_updated_at,pulled_at,pull_status,pull_error,content_hash,collection_id,collection_name,created_at,updated_at",
         "order": "title.asc",
         "limit": "5000",
     }
@@ -531,7 +561,7 @@ def get_article_detail(intercom_id: str) -> Optional[Dict]:
         f"{REST_BASE}/{PULL_TABLE}",
         headers=headers,
         params={
-            "select": "id,intercom_id,title,description,state,url,source_updated_at,pulled_at,pull_status,pull_error,collection_id,collection_name,created_at,updated_at",
+            "select": "id,intercom_id,title,description,state,url,source_updated_at,pulled_at,pull_status,pull_error,content_hash,collection_id,collection_name,created_at,updated_at",
             "intercom_id": f"eq.{intercom_id}",
         },
         timeout=15,

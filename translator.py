@@ -41,8 +41,14 @@ class GPTTranslator:
         
         system_prompt = f"""You are a professional translator specializing in help center and FAQ content.
 Translate the following text from {source_language} to {language_name} ({target_language}).
-Maintain the original formatting, structure, and tone. Preserve HTML tags, markdown, and special formatting.
-Ensure the translation is natural, accurate, and appropriate for help center documentation.
+
+CRITICAL HTML RULES — you MUST follow these exactly:
+- The input is HTML. Your output MUST be valid HTML with the EXACT same tag structure.
+- Preserve EVERY HTML tag exactly as it appears: <h1>, <h2>, <h3>, <p>, <ul>, <ol>, <li>, <table>, <tr>, <td>, <th>, <div>, <span>, <blockquote>, <b>, <strong>, <i>, <em>, <a>, <br>, <img>, etc.
+- Do NOT merge, remove, or rearrange any HTML tags. Every opening and closing tag in the source must appear in the translation.
+- Do NOT merge a heading tag into the preceding paragraph. Headings (<h1>, <h2>, <h3>, etc.) must remain as separate block elements.
+- Only translate the visible text content between tags. Never translate attribute values (href, src, class, id, style, etc.).
+- Maintain the original tone and ensure the translation is natural and appropriate for help center documentation.
 """
         
         if context:
@@ -61,7 +67,7 @@ Ensure the translation is natural, accurate, and appropriate for help center doc
                     {"role": "user", "content": user_prompt}
                 ],
                 temperature=0.3,  # Lower temperature for more consistent translations
-                max_tokens=4000  # Adjust based on article length
+                max_tokens=16000  # Large enough to handle full article translations without truncation
             )
             
             translated_text = response.choices[0].message.content.strip()

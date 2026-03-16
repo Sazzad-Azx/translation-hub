@@ -171,31 +171,42 @@ def _compute_article_lang_status(
     pulled_at = _parse_ts(article.get("pulled_at"))
     source_updated = _parse_ts(article.get("source_updated_at"))
 
+    # Pull-level outdated: source updated after last pull (needs re-pull)
+    pull_is_stale = bool(source_updated and pulled_at and source_updated > pulled_at)
+
     # Check if translation exists and when it was last updated
     if translation:
-        translation_updated = _parse_ts(translation.get("updated_at"))
         status = (translation.get("status") or "").lower()
         has_content = bool(translation.get("translated_title"))
+        current_hash = article.get("content_hash", "")
+        trans_checksum = translation.get("source_checksum", "")
+        # Content genuinely changed if hashes exist and differ
+        content_changed = bool(current_hash and trans_checksum and current_hash != trans_checksum)
 
         # Check if failed
         if status == "failed":
             return "FAILED"
-        
+
         # Check if approved/ready
         if status == "approved" or status == "ready":
-            return "APPROVED"
-        
-        # If translation exists with content, check if it's outdated
-        if has_content:
-            # Translation is outdated only if source was updated AFTER the translation was created/updated
-            if source_updated and translation_updated and source_updated > translation_updated:
+            if pull_is_stale:
                 return "OUTDATED"
-            # Otherwise, translation is current
+            if content_changed:
+                return "NOT_STARTED"  # Needs re-translation, not "outdated"
+            return "APPROVED"
+
+        # If translation exists with content, check staleness
+        if has_content:
+            if pull_is_stale:
+                return "OUTDATED"
+            if content_changed:
+                return "NOT_STARTED"  # Source content changed — needs re-translation
+            # No hash data and pull is fresh — translation is valid
             return "TRANSLATED"
-    
+
     # No translation exists
     if not translation:
-        # Check if source was updated after pull (needs translation)
+        # Check if source was updated after pull (needs re-pull first)
         if source_updated and pulled_at and source_updated > pulled_at:
             return "OUTDATED"
         return "NOT_STARTED"

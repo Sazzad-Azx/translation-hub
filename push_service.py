@@ -209,7 +209,7 @@ def _fetch_article_source(intercom_id: str) -> Optional[Dict]:
             f"{REST_BASE}/{PULL_TABLE}",
             headers=headers,
             params={
-                "select": "id,intercom_id,title,state,url,source_updated_at,pulled_at,body_html,collection_name",
+                "select": "id,intercom_id,title,state,url,source_updated_at,pulled_at,content_hash,body_html,collection_name",
                 "intercom_id": f"eq.{intercom_id}",
             },
             timeout=15,
@@ -256,9 +256,15 @@ def _compute_push_status(article: Dict, translation: Optional[Dict], locale: str
     pushed_at = _parse_ts(translation.get("pushed_at"))
     push_error = translation.get("push_error") or ""
 
-    # Check if source updated after translation
-    if source_updated and trans_updated and source_updated > trans_updated:
-        return "NEEDS_RETRANSLATION", "Source updated after translation was created"
+    # Check if source content actually changed after translation (using hash comparison)
+    current_hash = article.get("content_hash", "")
+    trans_checksum = translation.get("source_checksum", "")
+    if current_hash and trans_checksum and current_hash != trans_checksum:
+        return "NEEDS_RETRANSLATION", "Source content changed after translation was created"
+    elif not current_hash or not trans_checksum:
+        # No hash data — fall back to timestamp, but only if pull is stale
+        if source_updated and pulled_at and source_updated > pulled_at:
+            return "NEEDS_RETRANSLATION", "Source updated after last pull"
 
     # Check if last push failed
     if push_error and not pushed_at:
@@ -266,12 +272,17 @@ def _compute_push_status(article: Dict, translation: Optional[Dict], locale: str
 
     # Already pushed
     if pushed_at:
-        # Check if translation updated after push
+        # Check if translation was re-done after last push → ready to push again
         if trans_updated and trans_updated > pushed_at:
-            return "OUTDATED", "Translation updated since last push"
-        # Check if source updated after push
+            return "READY", "Updated translation ready to publish"
+        # Check if source updated after push (use hash to avoid false positives)
+        if current_hash and trans_checksum and current_hash != trans_checksum:
+            return "NEEDS_RETRANSLATION", "Source content changed since last push"
         if source_updated and source_updated > pushed_at:
-            return "OUTDATED", "Source updated since last push"
+            # Source timestamp changed but content hash matches — still live
+            if current_hash and trans_checksum and current_hash == trans_checksum:
+                return "LIVE", "Already published and up-to-date"
+            return "READY", "Source updated, translation ready to re-publish"
         return "LIVE", "Already published and up-to-date"
 
     # Translation exists, not pushed yet
@@ -492,6 +503,43 @@ def get_push_preview(intercom_id: str, locale: str) -> Optional[Dict]:
 
 
 # ---------------------------------------------------------------------------
+# HTML pre-processing for Intercom push
+# ---------------------------------------------------------------------------
+
+import re as _re
+
+def _prepare_body_for_push(body: str) -> str:
+    """
+    Pre-process translated HTML body before pushing to Intercom.
+
+    Intercom strips inline styles and class attributes from translated content,
+    so CSS-based spacing won't work.  Instead, insert a structural spacer
+    (<p><br></p>) before every heading tag that doesn't already have one.
+    This guarantees a visible blank line above headings regardless of CSS.
+    """
+    if not body:
+        return body
+
+    SPACER = '<p><br></p>'
+
+    def _ensure_spacer(match):
+        before = match.group(1)   # closing tag before the heading
+        heading = match.group(2)  # the <h1..6> opening tag
+        # Already has a spacer (<p> with only whitespace/<br> inside)?
+        if _re.search(r'<p[^>]*>\s*(<br\s*/?>)?\s*</p>\s*$', before):
+            return match.group(0)
+        return before + SPACER + heading
+
+    # Insert spacer before any heading that follows a closing block tag
+    body = _re.sub(
+        r'(</p>|</div>|</table>|</blockquote>)\s*(<h[1-6][^>]*>)',
+        _ensure_spacer,
+        body,
+    )
+    return body
+
+
+# ---------------------------------------------------------------------------
 # Push execution
 # ---------------------------------------------------------------------------
 
@@ -517,6 +565,9 @@ def push_single(intercom_id: str, locale: str, intercom_client) -> Dict:
         if not title and not body:
             return {"success": False, "intercom_id": intercom_id, "locale": locale,
                     "message": "Translation has no content"}
+
+        # Pre-process HTML to ensure heading spacing is preserved
+        body = _prepare_body_for_push(body)
 
         # Push to Intercom
         result = intercom_client.create_or_update_translation(
