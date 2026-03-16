@@ -7,11 +7,16 @@ Columns: id, intercom_id, title, description, state, url, source_updated_at,
          author_id, collection_id, collection_name, created_at, updated_at
 """
 import hashlib
+import re
 import requests
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 from config import SUPABASE_URL, SUPABASE_SERVICE_KEY
+
+# Pattern matching translated article titles created by Push Approach 3
+# e.g. "[FA] Some Title", "[ZH-CN] Some Title"
+_LOCALE_PREFIX_RE = re.compile(r'^\[[A-Z]{2}(?:-[A-Z]{1,4})?\]\s+', re.IGNORECASE)
 
 REST_BASE = f"{SUPABASE_URL.rstrip('/')}/rest/v1" if SUPABASE_URL else ""
 TABLE = "pull_registry"
@@ -294,11 +299,17 @@ def sync_source_list(intercom_client) -> Dict:
         page += 1
 
     synced = 0
+    skipped_locale = 0
     for a in articles:
         iid = str(a.get("id", ""))
         if not iid:
             continue
         title = (a.get("title") or "").strip() or "Untitled"
+
+        # Skip translated articles created by Push Approach 3 (e.g. "[FA] Title")
+        if _LOCALE_PREFIX_RE.match(title):
+            skipped_locale += 1
+            continue
         description = a.get("description") or ""
         state = a.get("state") or "published"
         url = a.get("url") or ""
@@ -348,7 +359,45 @@ def sync_source_list(intercom_client) -> Dict:
                 )
         synced += 1
 
-    return {"synced": synced, "total": len(articles)}
+    # Clean up any existing [LOCALE] rows already in pull_registry
+    _cleanup_locale_articles()
+
+    return {"synced": synced, "total": len(articles), "skipped_locale": skipped_locale}
+
+
+def _cleanup_locale_articles():
+    """Remove [LOCALE] translated article rows from pull_registry."""
+    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+        return
+    try:
+        # Fetch titles that match the locale prefix pattern
+        headers = _headers()
+        resp = requests.get(
+            f"{REST_BASE}/{TABLE}",
+            headers=headers,
+            params={"select": "intercom_id,title", "limit": "5000"},
+            timeout=30,
+        )
+        if resp.status_code != 200:
+            return
+        rows = resp.json()
+        to_delete = [r["intercom_id"] for r in rows
+                     if _LOCALE_PREFIX_RE.match((r.get("title") or ""))]
+        if not to_delete:
+            return
+        # Delete in batches
+        del_headers = _headers("return=minimal")
+        for i in range(0, len(to_delete), 50):
+            batch = to_delete[i:i+50]
+            ids_csv = ",".join(f'"{iid}"' for iid in batch)
+            requests.delete(
+                f"{REST_BASE}/{TABLE}?intercom_id=in.({ids_csv})",
+                headers=del_headers,
+                timeout=15,
+            )
+        print(f"    [INFO] Cleaned up {len(to_delete)} [LOCALE] articles from pull_registry")
+    except Exception as e:
+        print(f"    [WARN] Locale cleanup failed: {e}")
 
 
 # ---------------------------------------------------------------------------

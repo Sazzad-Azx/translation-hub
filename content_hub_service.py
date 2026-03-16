@@ -15,11 +15,15 @@ Health priority (highest → lowest):
 """
 
 import json
+import re
 import requests
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Set, Tuple
 
 from config import SUPABASE_URL, SUPABASE_SERVICE_KEY, TARGET_LANGUAGES
+
+# Skip translated articles created by Push Approach 3 (e.g. "[FA] Title")
+_LOCALE_PREFIX_RE = re.compile(r'^\[[A-Z]{2}(?:-[A-Z]{1,4})?\]\s+', re.IGNORECASE)
 
 REST_BASE = f"{SUPABASE_URL.rstrip('/')}/rest/v1" if SUPABASE_URL else ""
 PULL_TABLE = "pull_registry"
@@ -390,6 +394,10 @@ def list_content_hub_articles(
     all_articles = resp.json() if resp.text else []
     if not isinstance(all_articles, list):
         all_articles = []
+
+    # Filter out [LOCALE] translated articles created by Push Approach 3
+    all_articles = [a for a in all_articles
+                    if not _LOCALE_PREFIX_RE.match((a.get("title") or ""))]
 
     # Separate archived vs active articles
     archived_ids = _read_archived_ids()
