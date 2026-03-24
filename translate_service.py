@@ -18,12 +18,30 @@ Priority (for sorting):
 """
 
 import hashlib
+import re
 import time
 import requests
 import threading
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+
+def _strip_html_tags(text: str) -> str:
+    """Remove all HTML tags from text (for plain-text fields like title)."""
+    if not text:
+        return text
+    return re.sub(r'<[^>]+>', '', text).strip()
+
+
+def _strip_code_fences(text: str) -> str:
+    """Remove markdown code fences (```html ... ```) that GPT sometimes adds."""
+    if not text:
+        return text
+    # Remove opening ```html or ``` and closing ```
+    text = re.sub(r'^```(?:html)?\s*\n?', '', text.strip())
+    text = re.sub(r'\n?```\s*$', '', text.strip())
+    return text
 
 from config import SUPABASE_URL, SUPABASE_SERVICE_KEY, TARGET_LANGUAGES, BASE_LANGUAGE
 
@@ -533,12 +551,16 @@ def bulk_translate(
                 glossary_prompt=glossary_prompt,
             )
 
+            # Clean up GPT output: strip HTML from title, strip code fences from body
+            clean_title = _strip_html_tags(translated.get("title", ""))
+            clean_body = _strip_code_fences(translated.get("body", ""))
+
             # Save to Supabase
             upsert_article_translation(
                 parent_intercom_article_id=str(iid),
                 target_locale=locale,
-                translated_title=translated.get("title", ""),
-                translated_body_html=translated.get("body", ""),
+                translated_title=clean_title,
+                translated_body_html=clean_body,
                 status="draft",
                 source_locale=BASE_LANGUAGE,
                 engine="openai",

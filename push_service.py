@@ -512,27 +512,39 @@ def _prepare_body_for_push(body: str) -> str:
     """
     Pre-process translated HTML body before pushing to Intercom.
 
-    Intercom strips inline styles and class attributes from translated content,
-    so CSS-based spacing won't work.  Instead, insert a structural spacer
-    (<p><br></p>) before every heading tag that doesn't already have one.
-    This guarantees a visible blank line above headings regardless of CSS.
+    Intercom's API behaviour:
+    - Strips empty <p> tags (no content inside) entirely.
+    - Strips class attributes and inline styles from translated content.
+
+    Strategy:
+    - Remove empty <p> tags (they have no-margin class in source so create no
+      visible space in the English article — keeping them would add unwanted gaps).
+    - Insert a structural spacer (<p><br></p>) before headings to guarantee a
+      visible blank line, matching the English article's appearance.
     """
     if not body:
         return body
 
+    # Step 1: Remove empty <p> spacer tags — these have no-margin class in the
+    # source and create no visible space. Intercom strips them anyway, but if
+    # they somehow survive they'd create unwanted gaps.
+    body = _re.sub(
+        r'<p[^>]*>\s*(&nbsp;)?\s*</p>',
+        '',
+        body,
+    )
+
+    # Step 2: Ensure spacer before headings that follow block elements
     SPACER = '<p><br></p>'
 
     def _ensure_spacer(match):
         before = match.group(1)   # closing tag before the heading
         heading = match.group(2)  # the <h1..6> opening tag
-        # Already has a spacer (<p> with only whitespace/<br> inside)?
-        if _re.search(r'<p[^>]*>\s*(<br\s*/?>)?\s*</p>\s*$', before):
-            return match.group(0)
         return before + SPACER + heading
 
     # Insert spacer before any heading that follows a closing block tag
     body = _re.sub(
-        r'(</p>|</div>|</table>|</blockquote>)\s*(<h[1-6][^>]*>)',
+        r'(</p>|</div>|</table>|</blockquote>|</ul>|</ol>)\s*(<h[1-6][^>]*>)',
         _ensure_spacer,
         body,
     )
