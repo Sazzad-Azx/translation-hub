@@ -1166,7 +1166,7 @@ function renderDashboard(data) {
     setStatValue('stat-total-articles', formatNumber(data.total_articles || 0));
     setStatValue('stat-translated', formatNumber(data.total_translated || 0));
     setStatValue('stat-changed-week', formatNumber(data.changed_this_week || 0));
-    setStatValue('stat-cost-month', '$' + (data.cost_month || 0).toFixed(2));
+    // stat-cost-month is populated by live OpenAI API embed script in index.html
 
     // Charts
     renderChangesChart('week', data);
@@ -1266,9 +1266,9 @@ function renderCostChart(period, data) {
     // Create gradient fill for "This period" line
     const chartCtx = ctx.getContext('2d');
     const gradient = chartCtx.createLinearGradient(0, 0, 0, 260);
-    gradient.addColorStop(0, 'rgba(96, 165, 250, 0.25)');
-    gradient.addColorStop(0.6, 'rgba(96, 165, 250, 0.06)');
-    gradient.addColorStop(1, 'rgba(96, 165, 250, 0)');
+    gradient.addColorStop(0, 'rgba(45, 130, 150, 0.25)');
+    gradient.addColorStop(0.6, 'rgba(45, 130, 150, 0.06)');
+    gradient.addColorStop(1, 'rgba(45, 130, 150, 0)');
 
     state.costChart = new Chart(ctx, {
         type: 'line',
@@ -1278,16 +1278,16 @@ function renderCostChart(period, data) {
                 {
                     label: period === 'month' ? 'This month' : 'This week',
                     data: currentValues,
-                    borderColor: '#60a5fa',
+                    borderColor: '#2d8296',
                     backgroundColor: gradient,
                     fill: true,
                     tension: 0.4,
                     pointBackgroundColor: '#ffffff',
-                    pointBorderColor: '#60a5fa',
+                    pointBorderColor: '#2d8296',
                     pointBorderWidth: 2.5,
                     pointRadius: 4,
                     pointHoverRadius: 7,
-                    pointHoverBackgroundColor: '#60a5fa',
+                    pointHoverBackgroundColor: '#2d8296',
                     pointHoverBorderColor: '#ffffff',
                     pointHoverBorderWidth: 2,
                     borderWidth: 2.5
@@ -1295,20 +1295,20 @@ function renderCostChart(period, data) {
                 {
                     label: period === 'month' ? 'Last month' : 'Last week',
                     data: previousValues,
-                    borderColor: '#1e3a5f',
+                    borderColor: '#94a3b8',
                     backgroundColor: 'transparent',
                     fill: false,
                     tension: 0.4,
                     pointBackgroundColor: '#ffffff',
-                    pointBorderColor: '#1e3a5f',
+                    pointBorderColor: '#94a3b8',
                     pointBorderWidth: 2,
                     pointRadius: 3,
                     pointHoverRadius: 6,
-                    pointHoverBackgroundColor: '#1e3a5f',
+                    pointHoverBackgroundColor: '#94a3b8',
                     pointHoverBorderColor: '#ffffff',
                     pointHoverBorderWidth: 2,
-                    borderWidth: 2,
-                    borderDash: []
+                    borderWidth: 1.5,
+                    borderDash: [5, 5]
                 }
             ]
         },

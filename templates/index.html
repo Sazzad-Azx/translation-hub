@@ -8,6 +8,25 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260313z">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        #dateFilterDropdown.df-open { display:block !important; }
+        .df-preset {
+            padding:9px 18px; font-size:13px; font-weight:600; color:#64748b;
+            cursor:pointer; transition:all 0.15s;
+        }
+        .df-preset:hover { background:rgba(46,109,164,0.08); color:#2E6DA4; }
+        .df-preset-active { color:#2E6DA4 !important; background:rgba(46,109,164,0.1) !important; font-weight:700 !important; }
+        .df-cal-table { width:100%; border-collapse:collapse; text-align:center; }
+        .df-cal-table th { font-size:10px; font-weight:700; color:#94a3b8; padding:4px 0; text-transform:uppercase; }
+        .df-cal-table td { font-size:12px; padding:5px 0; cursor:pointer; border-radius:6px; color:#334155; font-weight:500; }
+        .df-cal-table td:hover { background:rgba(46,109,164,0.1); }
+        .df-cal-table td.df-empty { cursor:default; }
+        .df-cal-table td.df-empty:hover { background:none; }
+        .df-cal-table td.df-today { font-weight:800; color:#2E6DA4; }
+        .df-cal-table td.df-selected { background:linear-gradient(135deg,#2E6DA4,#4A90C4); color:#fff !important; font-weight:700; }
+        .df-cal-table td.df-in-range { background:rgba(46,109,164,0.08); }
+        .df-cal-month-title { font-size:13px; font-weight:700; color:#0D2137; text-align:center; margin-bottom:6px; }
+    </style>
 </head>
 <body>
 
@@ -197,6 +216,84 @@
                 </div>
             </div>
 
+            <!-- Date Filter Row -->
+            <div style="display:flex; justify-content:flex-end; margin-bottom:16px; position:relative;">
+                <button id="dateFilterBtn" style="
+                    display:inline-flex; align-items:center; gap:8px; padding:9px 18px;
+                    background:linear-gradient(135deg, #2E6DA4, #4A90C4); color:#fff;
+                    border:none; border-radius:10px; font-size:13px; font-weight:700;
+                    cursor:pointer; letter-spacing:0.3px; box-shadow:0 2px 8px rgba(46,109,164,0.25);
+                    transition:all 0.2s ease;">
+                    <i class="fas fa-calendar-alt"></i>
+                    <span id="dateFilterLabel">All Time</span>
+                    <i class="fas fa-caret-down" style="margin-left:2px;"></i>
+                </button>
+
+                <!-- Date Filter Dropdown -->
+                <div id="dateFilterDropdown" style="
+                    display:none; position:absolute; top:100%; right:0; margin-top:8px; z-index:1000;
+                    background:#ffffff; border-radius:14px; box-shadow:0 12px 40px rgba(13,33,55,0.18);
+                    border:1.5px solid rgba(74,144,196,0.15); overflow:hidden; min-width:620px;">
+
+                    <div style="display:flex;">
+                        <!-- Preset Options Sidebar -->
+                        <div style="width:150px; border-right:1.5px solid rgba(74,144,196,0.1); padding:12px 0; background:#F2F8FD;">
+                            <div class="df-preset df-preset-active" data-preset="all">All Time</div>
+                            <div class="df-preset" data-preset="today">Today</div>
+                            <div class="df-preset" data-preset="yesterday">Yesterday</div>
+                            <div class="df-preset" data-preset="thisweek">This Week</div>
+                            <div class="df-preset" data-preset="thismonth">This Month</div>
+                            <div class="df-preset" data-preset="lastmonth">Last Month</div>
+                            <div class="df-preset" data-preset="last7">Last 7 Days</div>
+                            <div class="df-preset" data-preset="last30">Last 30 Days</div>
+                            <div class="df-preset" data-preset="last90">Last 90 Days</div>
+                            <div class="df-preset" data-preset="custom">Custom</div>
+                        </div>
+
+                        <!-- Calendar Area -->
+                        <div style="flex:1; padding:16px 20px;">
+                            <!-- FROM / TO -->
+                            <div style="display:flex; gap:24px; margin-bottom:14px;">
+                                <div>
+                                    <span style="font-size:10px; font-weight:800; color:#2E6DA4; letter-spacing:0.5px; text-transform:uppercase;">From</span>
+                                    <div id="dfFromDisplay" style="font-size:13px; font-weight:600; color:#0D2137; margin-top:2px;">—</div>
+                                </div>
+                                <div>
+                                    <span style="font-size:10px; font-weight:800; color:#2E6DA4; letter-spacing:0.5px; text-transform:uppercase;">To</span>
+                                    <div id="dfToDisplay" style="font-size:13px; font-weight:600; color:#0D2137; margin-top:2px;">—</div>
+                                </div>
+                            </div>
+                            <hr style="border:none; border-top:1px solid rgba(74,144,196,0.1); margin:0 0 12px;">
+
+                            <!-- Month Navigation -->
+                            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+                                <button onclick="dfNavMonth(-1)" style="background:none; border:none; cursor:pointer; color:#2E6DA4; font-size:16px; padding:4px 8px;"><i class="fas fa-chevron-left"></i></button>
+                                <span id="dfMonthRange" style="font-size:13px; font-weight:700; color:#0D2137;"></span>
+                                <button onclick="dfNavMonth(1)" style="background:none; border:none; cursor:pointer; color:#2E6DA4; font-size:16px; padding:4px 8px;"><i class="fas fa-chevron-right"></i></button>
+                            </div>
+
+                            <!-- Dual Calendar -->
+                            <div style="display:flex; gap:20px;">
+                                <div id="dfCal1" style="flex:1;"></div>
+                                <div id="dfCal2" style="flex:1;"></div>
+                            </div>
+
+                            <!-- Action Buttons -->
+                            <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px; padding-top:12px; border-top:1px solid rgba(74,144,196,0.1);">
+                                <button onclick="dfCancel()" style="
+                                    padding:8px 20px; border:1.5px solid rgba(74,144,196,0.2); background:#fff;
+                                    border-radius:8px; font-size:13px; font-weight:600; color:#64748b;
+                                    cursor:pointer; transition:all 0.2s;">Cancel</button>
+                                <button onclick="dfApply()" style="
+                                    padding:8px 24px; border:none; background:linear-gradient(135deg, #2E6DA4, #4A90C4);
+                                    border-radius:8px; font-size:13px; font-weight:700; color:#fff;
+                                    cursor:pointer; box-shadow:0 2px 8px rgba(46,109,164,0.3); transition:all 0.2s;">Apply</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Stats Cards Row -->
             <div class="stats-row">
                 <div class="stat-card">
@@ -232,7 +329,7 @@
                     </div>
                     <div class="stat-info">
                         <span class="stat-value" id="stat-cost-month">--</span>
-                        <span class="stat-label">API Cost (Month)</span>
+                        <span class="stat-label">API Cost (All Time)</span>
                     </div>
                 </div>
             </div>
@@ -1582,5 +1679,178 @@
     </div>
 
     <script src="{{ url_for('static', filename='app.js') }}?v=20260313o"></script>
+    <script>
+    // ── Date Filter & Live Cost ──
+    (function(){
+        const COST_API = 'https://intercom-analyzer-shizans-projects-a7b50fa1.vercel.app/api';
+        const TARGET_KEY = 'key_24T9PNCgnvWHZvxc';
+        const fmt = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+        const fmtDisplay = d => d ? d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—';
+
+        // State
+        let dfFrom = null, dfTo = null, dfSelecting = 'from';
+        let dfViewYear, dfViewMonth;
+        const now = new Date();
+        dfViewYear = now.getFullYear();
+        dfViewMonth = now.getMonth(); // show current month on right, previous on left
+
+        // ── Fetch cost for date range ──
+        async function fetchCost(startDate, endDate) {
+            const el = document.getElementById('stat-cost-month');
+            if (el) el.textContent = '...';
+            const s = startDate ? fmt(startDate) : '2024-01-01';
+            const e = endDate ? fmt(endDate) : fmt(new Date());
+            const chunks = [];
+            let cur = new Date(s);
+            const end = new Date(e);
+            while (cur <= end) {
+                let ce = new Date(cur); ce.setDate(ce.getDate()+30);
+                if (ce > end) ce = new Date(end);
+                chunks.push([fmt(cur), fmt(ce)]);
+                cur = new Date(ce); cur.setDate(cur.getDate()+1);
+            }
+            let total = 0;
+            for (const [cs, ce] of chunks) {
+                try {
+                    const res = await fetch(COST_API+'/openai-usage?start_date='+cs+'&end_date='+ce);
+                    const data = await res.json();
+                    if (data && data.apiKeys) {
+                        const keys = Array.isArray(data.apiKeys) ? data.apiKeys : Object.values(data.apiKeys);
+                        const t = keys.find(k => k.keyId === TARGET_KEY);
+                        if (t) total += t.cost || 0;
+                    }
+                } catch(x) {}
+            }
+            if (el) el.textContent = '$' + total.toFixed(2);
+        }
+
+        // ── Calendar rendering ──
+        function renderCalendars() {
+            const m1y = dfViewMonth === 0 ? dfViewYear-1 : dfViewYear;
+            const m1m = dfViewMonth === 0 ? 11 : dfViewMonth-1;
+            document.getElementById('dfMonthRange').textContent =
+                new Date(m1y,m1m).toLocaleDateString('en-US',{month:'long',year:'numeric'}) + ' — ' +
+                new Date(dfViewYear,dfViewMonth).toLocaleDateString('en-US',{month:'long',year:'numeric'});
+            document.getElementById('dfCal1').innerHTML = buildMonth(m1y, m1m);
+            document.getElementById('dfCal2').innerHTML = buildMonth(dfViewYear, dfViewMonth);
+            document.getElementById('dfFromDisplay').textContent = fmtDisplay(dfFrom);
+            document.getElementById('dfToDisplay').textContent = fmtDisplay(dfTo);
+        }
+
+        function buildMonth(year, month) {
+            const today = new Date(); today.setHours(0,0,0,0);
+            const title = new Date(year,month).toLocaleDateString('en-US',{month:'long',year:'numeric'});
+            let html = '<div class="df-cal-month-title">'+title+'</div>';
+            html += '<table class="df-cal-table"><tr><th>SU</th><th>MO</th><th>TU</th><th>WE</th><th>TH</th><th>FR</th><th>SA</th></tr><tr>';
+            const first = new Date(year,month,1).getDay();
+            const days = new Date(year,month+1,0).getDate();
+            for (let i=0;i<first;i++) html+='<td class="df-empty"></td>';
+            for (let d=1;d<=days;d++) {
+                const dt = new Date(year,month,d); dt.setHours(0,0,0,0);
+                let cls = '';
+                if (dt.getTime()===today.getTime()) cls+=' df-today';
+                if (dfFrom && dt.getTime()===dfFrom.getTime()) cls+=' df-selected';
+                if (dfTo && dt.getTime()===dfTo.getTime()) cls+=' df-selected';
+                if (dfFrom && dfTo && dt>dfFrom && dt<dfTo) cls+=' df-in-range';
+                html+='<td class="'+cls.trim()+'" onclick="dfPickDay('+year+','+month+','+d+')">'+d+'</td>';
+                if ((first+d)%7===0 && d<days) html+='</tr><tr>';
+            }
+            html+='</tr></table>';
+            return html;
+        }
+
+        // ── Preset logic ──
+        function applyPreset(preset) {
+            document.querySelectorAll('.df-preset').forEach(p=>p.classList.remove('df-preset-active'));
+            document.querySelector('[data-preset="'+preset+'"]').classList.add('df-preset-active');
+            const t = new Date(); t.setHours(0,0,0,0);
+            switch(preset) {
+                case 'all': dfFrom=null; dfTo=null; break;
+                case 'today': dfFrom=new Date(t); dfTo=new Date(t); break;
+                case 'yesterday': { const y=new Date(t); y.setDate(y.getDate()-1); dfFrom=y; dfTo=y; } break;
+                case 'thisweek': { const d=t.getDay(); const s=new Date(t); s.setDate(s.getDate()-d); dfFrom=s; dfTo=new Date(t); } break;
+                case 'thismonth': dfFrom=new Date(t.getFullYear(),t.getMonth(),1); dfTo=new Date(t); break;
+                case 'lastmonth': dfFrom=new Date(t.getFullYear(),t.getMonth()-1,1); dfTo=new Date(t.getFullYear(),t.getMonth(),0); break;
+                case 'last7': { const s=new Date(t); s.setDate(s.getDate()-6); dfFrom=s; dfTo=new Date(t); } break;
+                case 'last30': { const s=new Date(t); s.setDate(s.getDate()-29); dfFrom=s; dfTo=new Date(t); } break;
+                case 'last90': { const s=new Date(t); s.setDate(s.getDate()-89); dfFrom=s; dfTo=new Date(t); } break;
+                case 'custom': dfFrom=null; dfTo=null; dfSelecting='from'; break;
+            }
+            renderCalendars();
+        }
+
+        // ── Exposed globals ──
+        window.dfPickDay = function(y,m,d) {
+            const dt = new Date(y,m,d); dt.setHours(0,0,0,0);
+            document.querySelectorAll('.df-preset').forEach(p=>p.classList.remove('df-preset-active'));
+            document.querySelector('[data-preset="custom"]').classList.add('df-preset-active');
+            if (dfSelecting==='from' || (dfFrom && dfTo)) {
+                dfFrom=dt; dfTo=null; dfSelecting='to';
+            } else {
+                if (dt<dfFrom) { dfTo=dfFrom; dfFrom=dt; } else { dfTo=dt; }
+                dfSelecting='from';
+            }
+            renderCalendars();
+        };
+        window.dfNavMonth = function(dir) {
+            dfViewMonth+=dir;
+            if (dfViewMonth>11){dfViewMonth=0;dfViewYear++;}
+            if (dfViewMonth<0){dfViewMonth=11;dfViewYear--;}
+            renderCalendars();
+        };
+        window.dfCancel = function() {
+            document.getElementById('dateFilterDropdown').classList.remove('df-open');
+        };
+        window.dfApply = function() {
+            const label = document.getElementById('dateFilterLabel');
+            const active = document.querySelector('.df-preset-active');
+            if (active && active.dataset.preset !== 'custom') {
+                label.textContent = active.textContent;
+            } else if (dfFrom && dfTo) {
+                label.textContent = fmtDisplay(dfFrom)+' – '+fmtDisplay(dfTo);
+            } else if (dfFrom) {
+                label.textContent = 'From '+fmtDisplay(dfFrom);
+            } else {
+                label.textContent = 'All Time';
+            }
+            document.getElementById('dateFilterDropdown').classList.remove('df-open');
+            // Update the stat label
+            const statLabel = document.querySelector('#stat-cost-month').closest('.stat-info').querySelector('.stat-label');
+            if (active && active.dataset.preset === 'all') {
+                statLabel.textContent = 'API Cost (All Time)';
+            } else if (active && active.dataset.preset !== 'custom') {
+                statLabel.textContent = 'API Cost ('+active.textContent+')';
+            } else {
+                statLabel.textContent = 'API Cost (Custom)';
+            }
+            fetchCost(dfFrom, dfTo);
+        };
+
+        // Preset click handlers
+        document.querySelectorAll('.df-preset').forEach(el => {
+            el.addEventListener('click', () => applyPreset(el.dataset.preset));
+        });
+
+        // Toggle dropdown on button click
+        document.getElementById('dateFilterBtn').addEventListener('click', e => {
+            e.stopPropagation();
+            document.getElementById('dateFilterDropdown').classList.toggle('df-open');
+        });
+
+        // Stop propagation inside dropdown so clicks don't close it
+        document.getElementById('dateFilterDropdown').addEventListener('mousedown', e => {
+            e.stopPropagation();
+        });
+
+        // Close dropdown on outside click
+        document.addEventListener('mousedown', () => {
+            document.getElementById('dateFilterDropdown').classList.remove('df-open');
+        });
+
+        // Initial render
+        renderCalendars();
+        fetchCost(null, null); // All Time on load
+    })();
+    </script>
 </body>
 </html>
