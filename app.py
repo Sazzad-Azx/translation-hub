@@ -1287,6 +1287,24 @@ def translate_hub_bulk():
         if not locales:
             return jsonify({'success': False, 'error': 'No languages provided.'}), 400
 
+        # Block translation of outdated articles (source changed since last pull)
+        from pull_service import get_pull_article
+        outdated_titles = []
+        for iid in intercom_ids:
+            row = get_pull_article(str(iid))
+            if row:
+                pulled_at = row.get('pulled_at')
+                source_updated = row.get('source_updated_at')
+                if pulled_at and source_updated and source_updated > pulled_at:
+                    outdated_titles.append(row.get('title', iid))
+        if outdated_titles:
+            names = ', '.join(outdated_titles[:3])
+            more = f' and {len(outdated_titles) - 3} more' if len(outdated_titles) > 3 else ''
+            return jsonify({
+                'success': False,
+                'error': f'Cannot translate {len(outdated_titles)} outdated article(s): {names}{more}. Please re-pull from the Pull page first.'
+            }), 400
+
         # glossary_id is no longer manually selected; all active glossaries
         # are automatically applied during translation.
         result = bulk_translate(

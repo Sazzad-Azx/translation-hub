@@ -2070,7 +2070,8 @@ body {
 }
 .tr-status-chip:hover { transform: scale(1.08); }
 .tr-status-chip.not-started { background: transparent; color: #0E7490; border: 1.5px solid #22D3EE; }
-.tr-status-chip.in-progress { background: transparent; color: #0284C7; border: 1.5px solid #38BDF8; }
+.tr-status-chip.in-progress { background: transparent; color: #0284C7; border: 1.5px solid #38BDF8; animation: tr-pulse 1.2s ease-in-out infinite; }
+@keyframes tr-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
 .tr-status-chip.outdated    { background: transparent; color: #D97706; border: 1.5px solid #FBBF24; }
 .tr-status-chip.translated  { background: transparent; color: #059669; border: 1.5px solid #34D399; }
 .tr-status-chip.approved    { background: transparent; color: #059669; border: 1.5px solid #34D399; }

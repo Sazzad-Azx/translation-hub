@@ -2892,7 +2892,7 @@ function trRenderFilterCounts() {
     const bar = (id, val) => { const e = document.getElementById(id); if (e) e.style.width = Math.min(100, Math.round((val / total) * 100)) + '%'; };
 
     const allVal = c.ALL || 0;
-    const needsVal = (c.NOT_STARTED || 0) + (c.OUTDATED || 0);
+    const needsVal = c.NOT_STARTED || 0;
     const outdatedVal = c.OUTDATED || 0;
     const progressVal = c.IN_PROGRESS || 0;
     const completedVal = (c.TRANSLATED || 0) + (c.APPROVED || 0);
@@ -2995,7 +2995,7 @@ function trRenderTable() {
             </td>`;
         for (const [loc] of langs) {
             const st = (a.lang_statuses && a.lang_statuses[loc]) || 'NOT_STARTED';
-            bodyHtml += `<td class="tr-cell-lang">${trStatusChip(st)}</td>`;
+            bodyHtml += `<td class="tr-cell-lang" data-iid="${a.intercom_id}" data-loc="${loc}">${trStatusChip(st)}</td>`;
         }
         bodyHtml += `</tr>`;
     }
@@ -3030,7 +3030,7 @@ function trRenderTable() {
 function trStatusChip(status) {
     const map = {
         'NOT_STARTED': { cls: 'not-started', label: 'NEW' },
-        'IN_PROGRESS': { cls: 'in-progress', label: 'IN PROGRESS' },
+        'IN_PROGRESS': { cls: 'in-progress', label: 'TRANSLATING' },
         'OUTDATED':    { cls: 'outdated', label: 'OUTDATED' },
         'TRANSLATED':  { cls: 'translated', label: 'DONE' },
         'APPROVED':    { cls: 'approved', label: 'DONE' },
@@ -3038,6 +3038,11 @@ function trStatusChip(status) {
     };
     const m = map[status] || map['NOT_STARTED'];
     return `<span class="tr-status-chip ${m.cls}">${m.label}</span>`;
+}
+
+function trSetCellStatus(iid, locale, status) {
+    const cell = document.querySelector(`td.tr-cell-lang[data-iid="${iid}"][data-loc="${locale}"]`);
+    if (cell) cell.innerHTML = trStatusChip(status);
 }
 
 
@@ -3120,6 +3125,42 @@ function trShowConfirmModal() {
 
     if (combos === 0) return;
 
+    // Block translation of outdated articles — they need re-pulling first
+    const outdatedArticles = (state.tr.articles || []).filter(
+        a => state.tr.selectedArticles.has(a.intercom_id) && a.row_status === 'OUTDATED'
+    );
+    if (outdatedArticles.length > 0) {
+        const names = outdatedArticles.map(a => `<li>${escapeHtml(a.title)}</li>`).slice(0, 5).join('');
+        const more = outdatedArticles.length > 5 ? `<li style="color:var(--text-muted);">...and ${outdatedArticles.length - 5} more</li>` : '';
+        const overlay = document.getElementById('generic-confirm-overlay');
+        const title = document.getElementById('generic-confirm-title');
+        const body = document.getElementById('generic-confirm-body');
+        const okBtn = document.getElementById('generic-confirm-ok');
+        const cancelBtn = document.getElementById('generic-confirm-cancel');
+        if (overlay && title && body) {
+            title.innerHTML = '<i class="fas fa-exclamation-triangle" style="color:var(--warning);"></i> Cannot Translate Outdated Articles';
+            body.innerHTML = `
+                <p><strong>${outdatedArticles.length} article(s)</strong> have outdated source content. The source was updated on Intercom after the last pull.</p>
+                <ul style="margin:10px 0;padding-left:20px;font-size:0.88rem;">${names}${more}</ul>
+                <p style="margin-top:12px;font-size:0.82rem;color:var(--text-muted);">
+                    <i class="fas fa-info-circle"></i> Please go to the <strong>Pull</strong> page and re-pull these articles first to get the latest source content, then translate.
+                </p>
+            `;
+            if (okBtn) okBtn.style.display = 'none';
+            if (cancelBtn) cancelBtn.textContent = 'OK';
+            overlay.classList.remove('hidden');
+            const closeHandler = () => {
+                overlay.classList.add('hidden');
+                if (okBtn) okBtn.style.display = '';
+                if (cancelBtn) cancelBtn.textContent = 'Cancel';
+            };
+            cancelBtn.onclick = closeHandler;
+            const closeBtn = document.getElementById('generic-confirm-close');
+            if (closeBtn) closeBtn.onclick = closeHandler;
+        }
+        return;
+    }
+
     const selectedLangNames = Array.from(state.tr.selectedLanguages).map(loc => {
         return state.tr.languages[loc] || loc;
     });
@@ -3158,34 +3199,60 @@ async function trExecuteBulkTranslate() {
 
     state.tr.translating = true;
     trUpdateActionBar();
-    trShowToast('Translating...', 'fn-loader');
 
-    try {
-        const resp = await fetch('/api/translate-hub/bulk', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ intercom_ids: articleIds, locales: locales }),
-        });
-        const data = await resp.json();
-        if (data.success) {
-            const msg = `Completed: ${data.completed} success, ${data.failed} failed out of ${data.total_jobs} jobs.`;
-            trShowToast(msg, data.failed > 0 ? 'fa-exclamation-triangle' : 'fa-check-circle');
-        } else {
-            trShowToast(`Error: ${data.error || 'Unknown'}`, 'fa-times-circle');
+    const totalJobs = articleIds.length * locales.length;
+    let completed = 0, ok = 0, fail = 0;
+    const origTitle = document.title;
+
+    trShowToast(`Translating 0/${totalJobs}...`, 'fn-loader');
+    document.title = `Translating 0/${totalJobs}... — Translation Hub`;
+
+    // Mark all selected cells as IN_PROGRESS
+    for (const iid of articleIds) {
+        for (const loc of locales) {
+            trSetCellStatus(iid, loc, 'IN_PROGRESS');
         }
-    } catch (e) {
-        trShowToast(`Network error: ${e.message}`, 'fa-times-circle');
     }
+
+    // Translate one article×locale at a time for live cell updates
+    for (const iid of articleIds) {
+        for (const loc of locales) {
+            try {
+                const resp = await fetch('/api/translate-hub/bulk', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ intercom_ids: [iid], locales: [loc] }),
+                });
+                const data = await resp.json();
+                if (data.success && (data.failed || 0) === 0) {
+                    trSetCellStatus(iid, loc, 'TRANSLATED');
+                    ok++;
+                } else {
+                    trSetCellStatus(iid, loc, 'FAILED');
+                    fail++;
+                }
+            } catch (e) {
+                trSetCellStatus(iid, loc, 'FAILED');
+                fail++;
+            }
+            completed++;
+            document.title = `Translating ${completed}/${totalJobs}... — Translation Hub`;
+            trShowToast(`Translating ${completed}/${totalJobs}...`, 'fn-loader');
+        }
+    }
+
+    document.title = `Done — ${ok} translated, ${fail} failed`;
+    const msg = `Completed: ${ok} success, ${fail} failed out of ${totalJobs} jobs.`;
+    trShowToast(msg, fail > 0 ? 'fa-exclamation-triangle' : 'fa-check-circle');
+
+    setTimeout(() => { document.title = origTitle; }, 5000);
 
     state.tr.translating = false;
     state.tr.selectedArticles.clear();
     trUpdateActionBar();
-    // Reload data to refresh statuses
-    setTimeout(() => trLoadArticles(), 1000);
-    // Refresh Content Hub in background so health status updates
-    if (state.hub.loaded) setTimeout(() => loadHubArticles(), 1500);
-    // Auto-hide toast after 6 seconds
-        setTimeout(() => {
+    setTimeout(() => trLoadArticles(), 1500);
+    if (state.hub.loaded) setTimeout(() => loadHubArticles(), 2000);
+    setTimeout(() => {
         const toast = document.getElementById('tr-toast');
         if (toast) toast.classList.add('hidden');
     }, 6000);
@@ -3243,7 +3310,7 @@ async function trTranslateAllMissing() {
                     <strong>Languages:</strong> ${selectedLangNames.map(n => escapeHtml(n)).join(', ')}
         </div>
                 <div style="margin-top:8px;font-size:0.78rem;color:var(--warning);">
-                    <i class="fas fa-magic"></i> This will translate all NOT_STARTED and OUTDATED articles.
+                    <i class="fas fa-magic"></i> This will translate all articles that need translation. Outdated articles are skipped.
         </div>
     `;
         }

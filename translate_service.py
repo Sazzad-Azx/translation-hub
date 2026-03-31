@@ -331,7 +331,7 @@ def list_translate_articles(
     # Apply status filter
     if status_filter and status_filter != "ALL":
         if status_filter == "NEEDS_TRANSLATION":
-            enriched = [a for a in enriched if a["row_status"] in ("NOT_STARTED", "OUTDATED")]
+            enriched = [a for a in enriched if a["row_status"] == "NOT_STARTED"]
         else:
             enriched = [a for a in enriched if a["row_status"] == status_filter]
 
@@ -620,7 +620,8 @@ def bulk_translate(
 
 def get_missing_translations(locales: List[str]) -> List[Dict]:
     """
-    Find all articles × languages where status is NOT_STARTED or OUTDATED.
+    Find all articles × languages where status is NOT_STARTED.
+    Skips outdated articles — they need re-pulling first.
     Returns list of { intercom_id, locale, title, status }.
     """
     articles = _fetch_pulled_articles()
@@ -629,6 +630,12 @@ def get_missing_translations(locales: List[str]) -> List[Dict]:
 
     for a in articles:
         iid = a.get("intercom_id", "")
+        # Skip outdated articles (source changed since last pull)
+        pulled_at = _parse_ts(a.get("pulled_at"))
+        source_updated = _parse_ts(a.get("source_updated_at"))
+        if pulled_at and source_updated and source_updated > pulled_at:
+            continue
+
         article_translations = translations_map.get(iid, [])
         trans_by_locale = {t.get("target_locale", ""): t for t in article_translations if t.get("target_locale")}
 
@@ -637,7 +644,7 @@ def get_missing_translations(locales: List[str]) -> List[Dict]:
                 continue
             t = trans_by_locale.get(loc)
             status = _compute_article_lang_status(a, loc, t)
-            if status in ("NOT_STARTED", "OUTDATED"):
+            if status == "NOT_STARTED":
                 missing.append({
                     "intercom_id": iid,
                     "locale": loc,
