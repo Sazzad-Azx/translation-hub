@@ -1832,7 +1832,7 @@ body {
 .tr-article-pill:hover { transform: translateY(-2px); box-shadow: 0 7px 20px rgba(46,109,164,.16); }
 
 /* --- Stat Cards --- */
-.tr-stats-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 20px; }
+.tr-stats-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 20px; }
 .tr-stat-card {
     border-radius: 14px; padding: 18px 12px 14px; text-align: center;
     cursor: pointer;

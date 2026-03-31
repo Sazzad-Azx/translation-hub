@@ -733,15 +733,8 @@ def dashboard_stats():
         except Exception:
             pass
 
-        # Count source articles fully translated (all active target languages done)
+        # total_translated is computed after all_pull_rows is fetched (needs outdated check)
         from config import TARGET_LANGUAGES as _TL
-        num_target_langs = len(_TL)
-        langs_per_article: Dict[str, int] = {}
-        for t in all_translations:
-            pid = t.get('parent_intercom_article_id')
-            if pid:
-                langs_per_article[pid] = langs_per_article.get(pid, 0) + 1
-        total_translated = sum(1 for count in langs_per_article.values() if count >= num_target_langs)
 
         # ---------- Source article changes from pull_registry ----------
         # This tracks actual Intercom article edits, not translation rows
@@ -780,6 +773,26 @@ def dashboard_stats():
         # Same logic as Control Tower so both counts always match
         total_articles = len([r for r in all_pull_rows
                               if not _LOCALE_PREFIX.match(r.get('title') or '')])
+
+        # ---------- Fully translated count (excludes outdated articles) ----------
+        # Build set of outdated article IDs (source changed after pull)
+        _outdated_ids = set()
+        _pull_lookup = {}
+        for row in all_pull_rows:
+            iid = row.get('intercom_id', '')
+            _pull_lookup[iid] = row
+            pulled = row.get('pulled_at') or ''
+            source = row.get('source_updated_at') or ''
+            if pulled and source and source > pulled:
+                _outdated_ids.add(iid)
+
+        num_target_langs = len(_TL)
+        langs_per_article: Dict[str, int] = {}
+        for t in all_translations:
+            pid = t.get('parent_intercom_article_id')
+            if pid and t.get('translated_title') and pid not in _outdated_ids:
+                langs_per_article[pid] = langs_per_article.get(pid, 0) + 1
+        total_translated = sum(1 for count in langs_per_article.values() if count >= num_target_langs)
 
         def _parse_ts(s):
             if not s:
