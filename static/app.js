@@ -1189,6 +1189,9 @@ function renderDashboard(data) {
     } else {
         setStatValue('stat-changed-week', formatNumber(data.changed_this_week || 0));
     }
+    // Last synced
+    const syncEl = document.getElementById('dash-last-synced');
+    if (syncEl) syncEl.textContent = 'Last synced: ' + (data.last_synced || '—');
     // stat-cost-month is populated by live OpenAI API embed script in index.html
 
     // Charts

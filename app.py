@@ -975,10 +975,17 @@ def dashboard_stats():
                 'time': _time_ago(ts)
             })
 
+        # Get last sync source time
+        from pull_service import get_last_sync_time
+        last_sync_str = get_last_sync_time()
+        last_synced = _parse_ts(last_sync_str) if last_sync_str else None
+        last_synced_text = _time_ago(last_synced) if last_synced else 'Never'
+
         return jsonify({
             'success': True,
             'total_articles': total_articles,
             'total_translated': total_translated,
+            'last_synced': last_synced_text,
             'changed_this_week': changed_week,
             'changed_this_month': changed_month,
             'cost_week': round(cost_week, 4),
