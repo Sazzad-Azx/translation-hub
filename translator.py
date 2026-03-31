@@ -10,7 +10,7 @@ import json
 import re
 from openai import OpenAI
 from typing import Dict, List, Optional
-from config import OPENAI_API_KEY, OPENAI_MODEL, TARGET_LANGUAGES
+from config import OPENAI_API_KEY, OPENAI_TRANSLATION_MODEL, TARGET_LANGUAGES
 
 # Block-level tags that act as chunk boundaries
 _BLOCK_RE = re.compile(
@@ -76,7 +76,7 @@ class GPTTranslator:
 
     def __init__(self, api_key: str = None, model: str = None):
         self.api_key = api_key or OPENAI_API_KEY
-        self.model = model or OPENAI_MODEL
+        self.model = model or OPENAI_TRANSLATION_MODEL
         self.client = OpenAI(api_key=self.api_key) if self.api_key else None
 
     # ------------------------------------------------------------------

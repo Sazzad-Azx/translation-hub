@@ -627,44 +627,19 @@ def _update_translation_push_status(
     """Update pushed_at and push_error on article_translations."""
     if not REST_BASE:
         return
-    headers = _headers()
-    headers.pop("Prefer", None)
 
-    # Find the translation row
-    try:
-        resp = requests.get(
-            f"{REST_BASE}/{TRANSLATIONS_TABLE}",
-            headers=headers,
-            params={
-                "select": "id",
-                "parent_intercom_article_id": f"eq.{intercom_id}",
-                "target_locale": f"eq.{locale}",
-            },
-            timeout=10,
-        )
-        if not resp.ok or not resp.text:
-            return
-        rows = resp.json()
-        if not isinstance(rows, list) or len(rows) == 0:
-            return
-        trans_id = rows[0]["id"]
-    except Exception:
-        return
-
-    # Patch it
     patch_data: Dict = {"push_error": push_error}
     if pushed_at:
         patch_data["pushed_at"] = pushed_at
     try:
         patch_headers = _headers("return=minimal")
         resp = requests.patch(
-            f"{REST_BASE}/{TRANSLATIONS_TABLE}?id=eq.{trans_id}",
+            f"{REST_BASE}/{TRANSLATIONS_TABLE}?parent_intercom_article_id=eq.{intercom_id}&target_locale=eq.{locale}",
             json=patch_data,
             headers=patch_headers,
             timeout=10,
         )
         if resp.status_code == 400:
-            # Columns might not exist yet; skip silently
             print(f"[push_service] Could not update push status: columns may not exist. Run migration SQL.")
     except Exception:
         pass
@@ -674,7 +649,7 @@ def bulk_push(
     intercom_ids: List[str],
     locale: str,
     intercom_client,
-    concurrency: int = 3,
+    concurrency: int = 5,
 ) -> Dict:
     """
     Push multiple articles for a locale.

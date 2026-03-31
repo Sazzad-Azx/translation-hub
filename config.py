@@ -83,7 +83,8 @@ INTERCOM_BASE_URL = "https://api.intercom.io"
 
 # OpenAI API Configuration
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")  # Can use gpt-4o, gpt-4o-mini, gpt-4-turbo, etc.
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1")  # Used for general app/server tasks
+OPENAI_TRANSLATION_MODEL = os.getenv("OPENAI_TRANSLATION_MODEL", "gpt-4.1-mini")  # Used for article translation
 
 # Translation settings
 TRANSLATION_BATCH_SIZE = 5  # Number of articles to process in parallel

@@ -347,73 +347,34 @@ class IntercomClient:
         Returns:
             Updated/created article or translation dictionary
         """
-        translation_data = {
-            "title": title,
-            "body": body,
-            "locale": locale
-        }
-        
-        if description:
-            translation_data["description"] = description
-        
-        # ── Approach 1: /translations sub-endpoint ──
-        try:
-            existing_translations = self.get_article_translations(article_id)
-            if locale in existing_translations:
-                translation_id = existing_translations[locale]["id"]
-                response = self._make_request(
-                    "PUT",
-                    f"/articles/{article_id}/translations/{translation_id}",
-                    json=translation_data
-                )
-                return response.json()
-        except Exception:
-            pass
-
-        try:
-            response = self._make_request(
-                "POST",
-                f"/articles/{article_id}/translations",
-                json=translation_data
-            )
-            return response.json()
-        except requests.exceptions.HTTPError:
-            pass  # endpoint not available – continue
-        except Exception:
-            pass
-
-        # ── Approach 2: PUT article with translated_content ──
-        try:
-            parent_article = self.get_article(article_id)
-            article_update = {
-                "translated_content": {
-                    locale: {
-                        "title": title,
-                        "body": body,
-                        "state": "published"
-                    }
+        # ── Primary approach: PUT article with translated_content ──
+        # This attaches the translation to the parent article so it appears
+        # when users switch languages on the public Help Center.
+        article_update = {
+            "translated_content": {
+                locale: {
+                    "title": title,
+                    "body": body,
+                    "state": "published"
                 }
             }
-            if description:
-                article_update["translated_content"][locale]["description"] = description
-            if "author_id" in parent_article:
-                article_update["author_id"] = parent_article["author_id"]
+        }
+        if description:
+            article_update["translated_content"][locale]["description"] = description
 
+        try:
             response = self._make_request("PUT", f"/articles/{article_id}", json=article_update)
             result = response.json()
+            print(f"    [OK] Translation for locale '{locale}' attached to article {article_id}")
+            return result
+        except Exception as e:
+            print(f"    [WARN] translated_content PUT failed for article {article_id}, locale {locale}: {e}")
 
-            # Verify translated_content was actually saved
-            verify = self._make_request("GET", f"/articles/{article_id}")
-            if verify.json().get("translated_content"):
-                return result
-            # translated_content silently ignored → fall through
-        except Exception:
-            pass
-
-        # ── Approach 3: Create separate translated article ──
+        # ── Fallback: Create separate translated article ──
+        # Only used if the workspace does not support multi-language.
         locale_upper = locale.upper()
         translated_title = f"[{locale_upper}] {title}"
-        print(f"    [INFO] Creating separate [{locale_upper}] article in Intercom...")
+        print(f"    [FALLBACK] Creating separate [{locale_upper}] article in Intercom...")
         created = self.create_article(
             title=translated_title,
             body=body,

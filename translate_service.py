@@ -564,7 +564,7 @@ def bulk_translate(
                 status="draft",
                 source_locale=BASE_LANGUAGE,
                 engine="openai",
-                model=translator_instance.model or "gpt-4o-mini",
+                model=translator_instance.model or "gpt-4.1-mini",
                 source_checksum=content_hash,
             )
 
