@@ -133,7 +133,7 @@ body {
     width: 42px;
     height: 42px;
     border-radius: 50%;
-    background: linear-gradient(135deg, var(--mid), var(--steel));
+    background: #fff;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -3044,7 +3044,8 @@ textarea.gl-input { resize: vertical; }
     box-shadow: 0 4px 28px rgba(13,33,55,.09);
     animation: pushFadeUp .45s .18s cubic-bezier(.4,0,.2,1) both;
 }
-.push-table-wrap { overflow-x: auto; }
+.push-table-wrap { overflow-x: auto; overflow-y: auto; max-height: 65vh; }
+.push-table thead { position: sticky; top: 0; z-index: 2; }
 .push-table { width: 100%; border-collapse: collapse; min-width: 500px; }
 .push-table thead tr { background: linear-gradient(90deg, #163354 0%, #1A3D63 55%, #1E4E7A 100%); }
 .push-table th {

@@ -5130,7 +5130,7 @@ function pushRenderTable() {
         });
     });
 
-    // Article title links — drawer disabled
+    // Article title links — no drawer
     tbody.querySelectorAll('.push-article-link').forEach(link => {
         link.style.cursor = 'default';
         link.style.pointerEvents = 'none';

@@ -1207,12 +1207,13 @@ def test_connection():
     """Test API connections (Intercom required; OpenAI optional for article fetch)."""
     try:
         init_clients()
-        articles = []
+        # Quick Intercom connectivity check (fetch 1 article)
+        intercom_ok = False
         try:
-            articles = intercom_client.get_articles()
+            resp = intercom_client._make_request("GET", "/articles", params={"page": 1, "per_page": 1})
+            intercom_ok = resp.status_code == 200
         except Exception:
             pass
-        intercom_ok = len(articles) >= 0
         openai_ok = False
         try:
             if translator and translator.client:
@@ -1220,11 +1221,29 @@ def test_connection():
                 openai_ok = len(translated) > 0
         except Exception:
             pass
+        # Article count from pull_registry (help center articles only)
+        import re as _re
+        _LP = _re.compile(r'^\[[A-Z]{2}(?:-[A-Z]{1,4})?\]\s+', _re.IGNORECASE)
+        articles_count = 0
+        try:
+            import requests as _req
+            from config import SUPABASE_URL, SUPABASE_SERVICE_KEY
+            resp = _req.get(
+                f"{SUPABASE_URL}/rest/v1/pull_registry",
+                headers={"apikey": SUPABASE_SERVICE_KEY, "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}"},
+                params={"select": "title", "limit": "5000"},
+                timeout=15,
+            )
+            if resp.ok:
+                rows = resp.json() or []
+                articles_count = len([r for r in rows if not _LP.match(r.get('title') or '')])
+        except Exception:
+            pass
         return jsonify({
             'success': True,
             'intercom': intercom_ok,
             'openai': openai_ok,
-            'articles_count': len(articles)
+            'articles_count': articles_count
         })
     except Exception as e:
         return jsonify({
