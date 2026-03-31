@@ -272,10 +272,13 @@ def sync_source_list(intercom_client) -> Dict:
     Fetch the article listing from Intercom and upsert into pull_registry
     (title, state, source_updated_at, url). Does NOT fetch the full body.
     Also resolves collection names from Intercom Help Center.
+    Only syncs articles that belong to a Help Center collection.
     Returns { synced: int, total: int }
     """
     # Fetch collection names for mapping parent_id → name
     collection_map: Dict[str, str] = {}
+    # Build set of collection IDs that belong to any Help Center
+    help_center_collection_ids: set = set()
     try:
         collections = intercom_client.get_collections()
         for c in collections:
@@ -283,6 +286,9 @@ def sync_source_list(intercom_client) -> Dict:
             cname = c.get("name", "") or ""
             if cid and cname:
                 collection_map[cid] = cname
+            # Only include collections that belong to a help center
+            if cid and c.get("help_center_id"):
+                help_center_collection_ids.add(cid)
     except Exception:
         pass  # Non-critical – articles still sync without collection names
 
@@ -300,6 +306,7 @@ def sync_source_list(intercom_client) -> Dict:
 
     synced = 0
     skipped_locale = 0
+    skipped_no_helpcenter = 0
     for a in articles:
         iid = str(a.get("id", ""))
         if not iid:
@@ -310,13 +317,19 @@ def sync_source_list(intercom_client) -> Dict:
         if _LOCALE_PREFIX_RE.match(title):
             skipped_locale += 1
             continue
+
+        # Skip articles not belonging to any Help Center collection
+        article_collection_id = str(a.get("parent_id") or a.get("collection_id") or "")
+        if help_center_collection_ids and article_collection_id not in help_center_collection_ids:
+            skipped_no_helpcenter += 1
+            continue
+
         description = a.get("description") or ""
         state = a.get("state") or "published"
         url = a.get("url") or ""
         source_updated = _ts_to_iso(a.get("updated_at"))
         author_id = str(a.get("author_id") or "")
-        # parent_id is the collection_id in many Intercom responses
-        collection_id = str(a.get("parent_id") or a.get("collection_id") or "")
+        collection_id = article_collection_id
         collection_name = collection_map.get(collection_id, "")
 
         existing = get_pull_article(iid)
@@ -362,7 +375,11 @@ def sync_source_list(intercom_client) -> Dict:
     # Clean up any existing [LOCALE] rows already in pull_registry
     _cleanup_locale_articles()
 
-    return {"synced": synced, "total": len(articles), "skipped_locale": skipped_locale}
+    # Remove articles from pull_registry that are not in any Help Center collection
+    if help_center_collection_ids:
+        _cleanup_non_helpcenter_articles(help_center_collection_ids)
+
+    return {"synced": synced, "total": len(articles), "skipped_locale": skipped_locale, "skipped_no_helpcenter": skipped_no_helpcenter}
 
 
 def _cleanup_locale_articles():
@@ -400,6 +417,62 @@ def _cleanup_locale_articles():
         print(f"    [WARN] Locale cleanup failed: {e}")
 
 
+def _cleanup_non_helpcenter_articles(valid_collection_ids: set):
+    """Remove articles from pull_registry whose collection_id is not in any Help Center."""
+    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+        return
+    try:
+        headers = _headers()
+        # Fetch all collection_id values from pull_registry
+        all_rows = []
+        offset = 0
+        while True:
+            resp = requests.get(
+                f"{REST_BASE}/{TABLE}",
+                headers=headers,
+                params={"select": "intercom_id,collection_id", "limit": "1000", "offset": str(offset)},
+                timeout=30,
+            )
+            if resp.status_code != 200:
+                break
+            batch = resp.json()
+            if not batch:
+                break
+            all_rows.extend(batch)
+            if len(batch) < 1000:
+                break
+            offset += 1000
+
+        to_delete = [r["intercom_id"] for r in all_rows
+                     if str(r.get("collection_id") or "") not in valid_collection_ids]
+        if not to_delete:
+            return
+        del_headers = _headers("return=minimal")
+        # Delete translations from article_translations first
+        trans_deleted = 0
+        for i in range(0, len(to_delete), 50):
+            batch = to_delete[i:i + 50]
+            ids_csv = ",".join(f'"{iid}"' for iid in batch)
+            requests.delete(
+                f"{REST_BASE}/article_translations?parent_intercom_article_id=in.({ids_csv})",
+                headers=del_headers,
+                timeout=15,
+            )
+            trans_deleted += len(batch)
+        # Delete from pull_registry
+        for i in range(0, len(to_delete), 50):
+            batch = to_delete[i:i + 50]
+            ids_csv = ",".join(f'"{iid}"' for iid in batch)
+            requests.delete(
+                f"{REST_BASE}/{TABLE}?intercom_id=in.({ids_csv})",
+                headers=del_headers,
+                timeout=15,
+            )
+        print(f"    [INFO] Cleaned up {len(to_delete)} non-Help-Center articles from pull_registry + their translations")
+    except Exception as e:
+        print(f"    [WARN] Non-Help-Center cleanup failed: {e}")
+
+
 # ---------------------------------------------------------------------------
 # Pull individual articles (fetch full body + store)
 # ---------------------------------------------------------------------------
@@ -432,6 +505,13 @@ def pull_articles(intercom_ids: List[str], intercom_client) -> List[Dict]:
             collection_id = str(article.get("parent_id") or article.get("collection_id") or "")
             c_hash = _content_hash(body)
 
+            # Only update source_updated_at if the content actually changed
+            # This prevents push-triggered Intercom timestamp bumps from
+            # showing articles as "recently updated source"
+            existing = get_pull_article(iid)
+            old_hash = existing.get("content_hash", "") if existing else ""
+            content_changed = (old_hash != c_hash)
+
             now = datetime.now(timezone.utc).isoformat()
             row = {
                 "intercom_id": iid,
@@ -439,7 +519,6 @@ def pull_articles(intercom_ids: List[str], intercom_client) -> List[Dict]:
                 "description": description,
                 "state": state,
                 "url": url,
-                "source_updated_at": source_updated,
                 "pulled_at": now,
                 "pull_status": "success",
                 "pull_error": "",
@@ -449,6 +528,9 @@ def pull_articles(intercom_ids: List[str], intercom_client) -> List[Dict]:
                 "collection_id": collection_id,
                 "updated_at": now,
             }
+            # Only update source_updated_at when content genuinely changed
+            if content_changed or not existing:
+                row["source_updated_at"] = source_updated
 
             _upsert_pull_row(iid, row)
 

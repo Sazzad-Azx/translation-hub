@@ -712,23 +712,18 @@ def dashboard_stats():
     """
     Dashboard statistics: total articles, translations, cost analysis,
     top changed articles, and recent activity.
+    Optional query params: start_date, end_date (YYYY-MM-DD) for source changes filter.
     """
     import datetime
     try:
-        init_clients()
         now = datetime.datetime.utcnow()
         week_ago = now - datetime.timedelta(days=7)
         month_ago = now - datetime.timedelta(days=30)
 
-        # ---------- Total articles (quick count from Intercom first page) ----------
-        total_articles = 0
-        try:
-            import requests as _req
-            resp = intercom_client._make_request("GET", "/articles", params={"page": 1, "per_page": 1})
-            data = resp.json()
-            total_articles = data.get("total_count", len(data.get("data", [])))
-        except Exception:
-            pass
+
+        # ---------- Total articles count is derived after pull_registry fetch below ----------
+        import re as _re
+        _LOCALE_PREFIX = _re.compile(r'^\[[A-Z]{2}(?:-[A-Z]{1,4})?\]\s+', _re.IGNORECASE)
 
         # ---------- Translations from Supabase (for translated count + cost) ----------
         all_translations = []
@@ -738,7 +733,15 @@ def dashboard_stats():
         except Exception:
             pass
 
-        total_translated = len(all_translations)
+        # Count source articles fully translated (all active target languages done)
+        from config import TARGET_LANGUAGES as _TL
+        num_target_langs = len(_TL)
+        langs_per_article: Dict[str, int] = {}
+        for t in all_translations:
+            pid = t.get('parent_intercom_article_id')
+            if pid:
+                langs_per_article[pid] = langs_per_article.get(pid, 0) + 1
+        total_translated = sum(1 for count in langs_per_article.values() if count >= num_target_langs)
 
         # ---------- Source article changes from pull_registry ----------
         # This tracks actual Intercom article edits, not translation rows
@@ -755,7 +758,7 @@ def dashboard_stats():
                         "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
                     },
                     params={
-                        "select": "intercom_id,title,source_updated_at",
+                        "select": "intercom_id,title,source_updated_at,pulled_at",
                         "limit": 1000,
                         "offset": offset,
                     },
@@ -772,6 +775,11 @@ def dashboard_stats():
                 offset += 1000
         except Exception:
             pass
+
+        # ---------- Total articles (from pull_registry, excluding [LOCALE] prefixed) ----------
+        # Same logic as Control Tower so both counts always match
+        total_articles = len([r for r in all_pull_rows
+                              if not _LOCALE_PREFIX.match(r.get('title') or '')])
 
         def _parse_ts(s):
             if not s:
@@ -899,7 +907,7 @@ def dashboard_stats():
 
         # --- Pulled: group by article from pull_registry ---
         for row in all_pull_rows:
-            pulled_at_str = row.get('source_updated_at') or ''
+            pulled_at_str = row.get('pulled_at') or ''
             ts = _parse_ts(pulled_at_str)
             if ts:
                 title = row.get('title') or 'Untitled'

@@ -1165,7 +1165,13 @@ function renderDashboard(data) {
     // Stat cards
     setStatValue('stat-total-articles', formatNumber(data.total_articles || 0));
     setStatValue('stat-translated', formatNumber(data.total_translated || 0));
-    setStatValue('stat-changed-week', formatNumber(data.changed_this_week || 0));
+    // Source changes: show 7d or 30d based on toggle state
+    window._sourceChangesRange = window._sourceChangesRange || '7d';
+    if (window._sourceChangesRange === '30d') {
+        setStatValue('stat-changed-week', formatNumber(data.changed_this_month || 0));
+    } else {
+        setStatValue('stat-changed-week', formatNumber(data.changed_this_week || 0));
+    }
     // stat-cost-month is populated by live OpenAI API embed script in index.html
 
     // Charts
@@ -1177,6 +1183,15 @@ function renderDashboard(data) {
 
     // Recent activity
     renderActivityFeed(data.recent_activities || []);
+}
+
+function toggleSourceChangesRange() {
+    window._sourceChangesRange = window._sourceChangesRange === '7d' ? '30d' : '7d';
+    const label = document.getElementById('stat-changed-label');
+    if (label) {
+        label.textContent = window._sourceChangesRange === '30d' ? 'Source Changes (30 Days)' : 'Source Changes (7 Days)';
+    }
+    if (state.dashboardStats) renderDashboard(state.dashboardStats);
 }
 
 function setStatValue(id, value) {

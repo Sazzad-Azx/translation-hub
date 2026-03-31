@@ -314,13 +314,13 @@
                         <span class="stat-label">Translated</span>
                     </div>
                 </div>
-                <div class="stat-card">
+                <div class="stat-card" style="cursor:pointer" onclick="toggleSourceChangesRange()">
                     <div class="stat-icon stat-icon-changed">
                         <i class="fas fa-calendar-week"></i>
                     </div>
                     <div class="stat-info">
                         <span class="stat-value" id="stat-changed-week">--</span>
-                        <span class="stat-label">Source Changes (Week)</span>
+                        <span class="stat-label" id="stat-changed-label">Source Changes (7 Days)</span>
                     </div>
                 </div>
                 <div class="stat-card">
@@ -1814,7 +1814,7 @@
                 label.textContent = 'All Time';
             }
             document.getElementById('dateFilterDropdown').classList.remove('df-open');
-            // Update the stat label
+            // Update the cost stat label
             const statLabel = document.querySelector('#stat-cost-month').closest('.stat-info').querySelector('.stat-label');
             if (active && active.dataset.preset === 'all') {
                 statLabel.textContent = 'API Cost (All Time)';
