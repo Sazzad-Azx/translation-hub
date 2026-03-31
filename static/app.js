@@ -232,6 +232,11 @@ function showApp() {
         setupEventListeners();
         testConnection();
         loadDashboardData();
+        // Restore section from URL hash on page load
+        const hash = window.location.hash.replace('#', '');
+        if (hash) {
+            switchSection(hash);
+        }
     }
 }
 
@@ -932,6 +937,7 @@ function setupNavigation() {
             e.preventDefault();
             const sectionId = item.getAttribute('data-section');
             switchSection(sectionId);
+            window.location.hash = sectionId;
         });
     });
 
