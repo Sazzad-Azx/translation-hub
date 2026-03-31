@@ -18,8 +18,7 @@ import requests
 from typing import Optional, Dict, List
 
 # ─── Config ────────────────────────────────────────────────────
-SUPABASE_URL = os.getenv("SUPABASE_URL", "")
-SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
+from config import SUPABASE_URL, SUPABASE_SERVICE_KEY as SUPABASE_KEY
 SUPER_ADMIN_EMAIL = os.getenv("SUPER_ADMIN_EMAIL", "sazzad@nextventures.io")
 SUPER_ADMIN_PASSWORD = os.getenv("SUPER_ADMIN_PASSWORD", "Sazzad123")
 AUTH_SECRET = os.getenv("AUTH_SECRET", os.getenv("JWT_SECRET_KEY", "fnth-default-secret-change-me"))
@@ -285,7 +284,8 @@ def update_admin(admin_id: int, data: dict) -> dict:
     if not update:
         return {"success": False, "error": "No fields to update"}
 
-    update["updated_at"] = "now()"
+    from datetime import datetime, timezone
+    update["updated_at"] = datetime.now(timezone.utc).isoformat()
 
     try:
         r = requests.patch(
