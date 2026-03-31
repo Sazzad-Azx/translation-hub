@@ -2,6 +2,12 @@
 // FundedNext Translation Hub - Frontend Application
 // ============================================================
 
+// Register Chart.js datalabels plugin globally if available
+if (typeof Chart !== 'undefined' && typeof ChartDataLabels !== 'undefined') {
+    Chart.register(ChartDataLabels);
+    Chart.defaults.set('plugins.datalabels', { display: false }); // off by default, enable per chart
+}
+
 // Loader HTML helpers
 const FN_LOADER = '<span class="fn-loader"></span>';
 const FN_LOADER_INLINE = '<span class="fn-loader-inline"></span>';
@@ -1251,12 +1257,22 @@ function renderChangesChart(period, data) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            layout: { padding: { top: 20 } },
             plugins: {
-                legend: { display: false }
+                legend: { display: false },
+                datalabels: {
+                    display: true,
+                    anchor: 'end',
+                    align: 'top',
+                    color: '#2563eb',
+                    font: { size: 11, weight: '600' },
+                    formatter: function(v) { return v > 0 ? v : ''; }
+                }
             },
             scales: {
                 y: {
                     beginAtZero: true,
+                    grace: '15%',
                     ticks: { stepSize: 1, font: { size: 11 }, color: '#94a3b8' },
                     grid: { color: '#f1f5f9' }
                 },
@@ -1375,6 +1391,14 @@ function renderCostChart(period, data) {
                             return ' ' + context.dataset.label + ':  $' + (context.parsed.y || 0).toFixed(2);
                         }
                     }
+                },
+                datalabels: {
+                    display: true,
+                    anchor: 'end',
+                    align: 'top',
+                    font: { size: 10, weight: '600' },
+                    formatter: function(v) { return v > 0 ? '$' + v.toFixed(2) : ''; },
+                    color: function(context) { return context.datasetIndex === 0 ? '#2d8296' : '#94a3b8'; }
                 }
             },
             scales: {
