@@ -341,12 +341,17 @@ def sync_source_list(intercom_client) -> Dict:
             "description": description,
             "state": state,
             "url": url,
-            "source_updated_at": source_updated,
             "author_id": author_id,
             "collection_id": collection_id,
             "collection_name": collection_name,
             "updated_at": now,
         }
+        # Only set source_updated_at for new articles.
+        # For existing articles, source_updated_at is only updated during
+        # full pull when content_hash actually changes — prevents push-triggered
+        # Intercom timestamp bumps from marking articles as outdated.
+        if not existing:
+            row["source_updated_at"] = source_updated
 
         if existing:
             # Update

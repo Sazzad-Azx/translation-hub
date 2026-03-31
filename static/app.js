@@ -4835,6 +4835,13 @@ async function initPushSection() {
     await refreshTargetLanguages();
     pushPopulateLangDropdown();
     pushSetupEventListeners();
+    // Auto-select all languages by default
+    document.querySelectorAll('.push-lang-cb').forEach(cb => { cb.checked = true; });
+    const allCb = document.getElementById('push-lang-select-all');
+    if (allCb) allCb.checked = true;
+    state.push.locales = Object.keys(TARGET_LANGUAGES);
+    const badge = document.getElementById('push-lang-badge');
+    if (badge) badge.textContent = state.push.locales.length;
     state.push._initDone = true;
     pushLoadArticles();
 }
@@ -5137,7 +5144,7 @@ function pushRenderTable() {
 // ---------------------------------------------------------------------------
 function pushRenderBadge(status, reason) {
     const map = {
-        READY:               { cls: 'push-badge-ready',          label: 'Ready' },
+        READY:               { cls: 'push-badge-ready',          label: 'Translated' },
         LIVE:                { cls: 'push-badge-live',           label: 'Live' },
         OUTDATED:            { cls: 'push-badge-outdated',       label: 'Outdated' },
         MISSING:             { cls: 'push-badge-missing',        label: 'Missing' },
@@ -5206,8 +5213,8 @@ function pushRenderPagination() {
 // Push Selected
 // ---------------------------------------------------------------------------
 function pushStartSelected() {
-    if (state.push.locales.length === 0) { pushShowToast('Select at least one language first.', 'warn'); return; }
-    if (state.push.selectedIds.size === 0) { pushShowToast('Select at least one article first.', 'warn'); return; }
+    if (state.push.locales.length === 0) { showModalAlert('No Language Selected', 'Please select at least one language first.'); return; }
+    if (state.push.selectedIds.size === 0) { showModalAlert('No Article Selected', 'Please select at least one article first.'); return; }
 
     const pairs = [];
     state.push.selectedIds.forEach(iid => {
@@ -5220,7 +5227,7 @@ function pushStartSelected() {
         });
     });
 
-    if (pairs.length === 0) { pushShowToast('No ready translations in the selection.', 'warn'); return; }
+    if (pairs.length === 0) { showModalAlert('No Translations to Push', 'No translations available to push. Articles must be translated first before they can be pushed to Intercom.'); return; }
     pushShowConfirm(pairs, 'selected');
 }
 
@@ -5228,7 +5235,7 @@ function pushStartSelected() {
 // Push All Ready
 // ---------------------------------------------------------------------------
 function pushStartAllReady() {
-    if (state.push.locales.length === 0) { pushShowToast('Select at least one language first.', 'warn'); return; }
+    if (state.push.locales.length === 0) { showModalAlert('No Language Selected', 'Please select at least one language first.'); return; }
 
     const pairs = [];
     state.push.articles.forEach(a => {
@@ -5239,7 +5246,7 @@ function pushStartAllReady() {
         });
     });
 
-    if (pairs.length === 0) { pushShowToast('No articles are ready to push.', 'warn'); return; }
+    if (pairs.length === 0) { showModalAlert('No Translations to Push', 'No translations available to push. Articles must be translated first before they can be pushed to Intercom.'); return; }
     pushShowConfirm(pairs, 'all_ready');
 }
 
@@ -5261,7 +5268,7 @@ function pushShowConfirm(pairs, action) {
         body.innerHTML = `
             <p><strong>${actionLabel}</strong> — publishing <strong>${pairs.length}</strong> translation${pairs.length !== 1 ? 's' : ''} to the live platform:</p>
             <ul style="margin:10px 0 10px 18px;">${rows}</ul>
-            <p style="color:#64748b;font-size:12px;">Only <em>Ready</em> and <em>Outdated</em> items are included. Missing or failed translations are skipped.</p>
+            <p style="color:#64748b;font-size:12px;">Only <em>Translated</em> items are included. Missing or failed translations are skipped.</p>
         `;
     }
     document.getElementById('push-confirm-overlay')?.classList.remove('hidden');
@@ -5444,6 +5451,28 @@ function pushCloseDrawer() {
 // ---------------------------------------------------------------------------
 // Toast
 // ---------------------------------------------------------------------------
+function showModalAlert(title, message) {
+    const overlay = document.getElementById('generic-confirm-overlay');
+    const titleEl = document.getElementById('generic-confirm-title');
+    const body = document.getElementById('generic-confirm-body');
+    const okBtn = document.getElementById('generic-confirm-ok');
+    const cancelBtn = document.getElementById('generic-confirm-cancel');
+    if (!overlay || !titleEl || !body) return;
+    titleEl.innerHTML = `<i class="fas fa-exclamation-triangle" style="color:var(--warning);"></i> ${escapeHtml(title)}`;
+    body.innerHTML = `<p>${message}</p>`;
+    if (okBtn) okBtn.style.display = 'none';
+    if (cancelBtn) cancelBtn.textContent = 'OK';
+    overlay.classList.remove('hidden');
+    const closeHandler = () => {
+        overlay.classList.add('hidden');
+        if (okBtn) okBtn.style.display = '';
+        if (cancelBtn) cancelBtn.textContent = 'Cancel';
+    };
+    if (cancelBtn) cancelBtn.onclick = closeHandler;
+    const closeBtn = document.getElementById('generic-confirm-close');
+    if (closeBtn) closeBtn.onclick = closeHandler;
+}
+
 function pushShowToast(msg, type = 'info') {
     const toast = document.getElementById('push-toast');
     if (!toast) return;
