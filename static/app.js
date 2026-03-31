@@ -974,6 +974,11 @@ function switchSection(sectionId) {
     // Close sidebar on mobile
     document.getElementById('sidebar').classList.remove('open');
 
+    // Refresh dashboard data when navigating back to it
+    if (sectionId === 'dashboard') {
+        loadDashboardData();
+    }
+
     // Lazy-load sections on first visit
     if (sectionId === 'content-hub' && !state.hub.loaded) {
         initContentHub();
