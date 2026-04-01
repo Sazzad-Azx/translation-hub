@@ -1471,9 +1471,9 @@ body {
 .ch-tab-outdated.active { background: linear-gradient(135deg,#1A3D63,#2E6DA4); color: #fff; border-color: transparent; box-shadow: 0 4px 14px rgba(26,61,99,.3); }
 .ch-tab-outdated.active .ch-tab-count { background: rgba(255,255,255,.2); color: #fff; }
 
-.ch-tab-complete { background: #fff; color: #065F46; border-color: #6EE7B7; }
-.ch-tab-complete .ch-tab-count { background: #ECFDF5; color: #065F46; }
-.ch-tab-complete:hover { background: #ECFDF5; }
+.ch-tab-complete { background: #fff; color: #5B21B6; border-color: #C4B5FD; }
+.ch-tab-complete .ch-tab-count { background: #F5F3FF; color: #5B21B6; }
+.ch-tab-complete:hover { background: #F5F3FF; }
 .ch-tab-complete.active { background: linear-gradient(135deg,#1A3D63,#2E6DA4); color: #fff; border-color: transparent; box-shadow: 0 4px 14px rgba(26,61,99,.3); }
 .ch-tab-complete.active .ch-tab-count { background: rgba(255,255,255,.2); color: #fff; }
 
@@ -1627,8 +1627,8 @@ body {
 .ch-health-NEEDS_TRANSLATION .ch-health-dot { background: #0284C7; }
 .ch-health-OUTDATED          { background: #FFFBEB; color: #92400E; border: 1px solid #FDE68A; }
 .ch-health-OUTDATED .ch-health-dot { background: #D97706; }
-.ch-health-COMPLETE          { background: #ECFDF5; color: #065F46; border: 1px solid #6EE7B7; }
-.ch-health-COMPLETE .ch-health-dot { background: #10B981; box-shadow: 0 0 6px #10B981; }
+.ch-health-COMPLETE          { background: #F5F3FF; color: #5B21B6; border: 1px solid #C4B5FD; }
+.ch-health-COMPLETE .ch-health-dot { background: #7C3AED; box-shadow: 0 0 6px #7C3AED; }
 .ch-health-FAILED            { background: #FFF1F2; color: #9F1239; border: 1px solid #FECDD3; }
 .ch-health-FAILED .ch-health-dot { background: #E11D48; }
 

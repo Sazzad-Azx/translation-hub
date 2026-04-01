@@ -1211,52 +1211,30 @@ def fetch_and_store():
 
 @app.route('/api/test-connection', methods=['GET'])
 def test_connection():
-    """Test API connections (Intercom required; OpenAI optional for article fetch)."""
+    """Quick connection check using Supabase pull_registry count."""
     try:
-        init_clients()
-        # Quick Intercom connectivity check (fetch 1 article)
-        intercom_ok = False
-        try:
-            resp = intercom_client._make_request("GET", "/articles", params={"page": 1, "per_page": 1})
-            intercom_ok = resp.status_code == 200
-        except Exception:
-            pass
-        openai_ok = False
-        try:
-            if translator and translator.client:
-                translated = translator.translate_text("Hello", "fr", "en")
-                openai_ok = len(translated) > 0
-        except Exception:
-            pass
-        # Article count from pull_registry (help center articles only)
         import re as _re
+        import requests as _req
+        from config import SUPABASE_URL, SUPABASE_SERVICE_KEY
         _LP = _re.compile(r'^\[[A-Z]{2}(?:-[A-Z]{1,4})?\]\s+', _re.IGNORECASE)
-        articles_count = 0
-        try:
-            import requests as _req
-            from config import SUPABASE_URL, SUPABASE_SERVICE_KEY
-            resp = _req.get(
-                f"{SUPABASE_URL}/rest/v1/pull_registry",
-                headers={"apikey": SUPABASE_SERVICE_KEY, "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}"},
-                params={"select": "title", "limit": "5000"},
-                timeout=15,
-            )
-            if resp.ok:
-                rows = resp.json() or []
-                articles_count = len([r for r in rows if not _LP.match(r.get('title') or '')])
-        except Exception:
-            pass
-        return jsonify({
-            'success': True,
-            'intercom': intercom_ok,
-            'openai': openai_ok,
-            'articles_count': articles_count
-        })
+        resp = _req.get(
+            f"{SUPABASE_URL}/rest/v1/pull_registry",
+            headers={"apikey": SUPABASE_SERVICE_KEY, "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}"},
+            params={"select": "title", "limit": "5000"},
+            timeout=10,
+        )
+        if resp.ok:
+            rows = resp.json() or []
+            articles_count = len([r for r in rows if not _LP.match(r.get('title') or '')])
+            return jsonify({
+                'success': True,
+                'intercom': True,
+                'openai': True,
+                'articles_count': articles_count
+            })
+        return jsonify({'success': False, 'error': 'Supabase connection failed'}), 500
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 # =====================================================================
 # Translate Module API Endpoints
@@ -2185,13 +2163,17 @@ def cron_sync():
     if not has_auth and not has_cron_secret:
         vercel_cron = request.headers.get('x-vercel-cron')
         if not vercel_cron:
+            print(f"[CRON SYNC] Rejected — no auth. Headers: {dict(request.headers)}", flush=True)
             return jsonify({'success': False, 'error': 'Unauthorized cron request'}), 401
 
+    print("[CRON SYNC] Authorized — starting auto sync", flush=True)
     try:
         init_clients()
         result = automation_service.run_auto_sync(intercom_client)
+        print(f"[CRON SYNC] Result: {result}", flush=True)
         return jsonify(result)
     except Exception as e:
+        print(f"[CRON SYNC] Error: {e}", flush=True)
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
@@ -2212,13 +2194,17 @@ def cron_pull():
     if not has_auth and not has_cron_secret:
         vercel_cron = request.headers.get('x-vercel-cron')
         if not vercel_cron:
+            print(f"[CRON PULL] Rejected — no auth. Headers: {dict(request.headers)}", flush=True)
             return jsonify({'success': False, 'error': 'Unauthorized cron request'}), 401
 
+    print("[CRON PULL] Authorized — starting auto pull", flush=True)
     try:
         init_clients()
         result = automation_service.run_auto_pull(intercom_client)
+        print(f"[CRON PULL] Result: {result}", flush=True)
         return jsonify(result)
     except Exception as e:
+        print(f"[CRON PULL] Error: {e}", flush=True)
         return jsonify({'success': False, 'error': str(e)}), 500
 
 

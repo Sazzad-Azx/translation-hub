@@ -2286,7 +2286,7 @@ function renderHealthBadge(health) {
         'OUTDATED':          '<span class="ch-health-badge ch-health-OUTDATED"><div class="ch-health-dot"></div>Outdated</span>',
         'NEEDS_TRANSLATION': '<span class="ch-health-badge ch-health-NEEDS_TRANSLATION"><div class="ch-health-dot"></div>Needs Translation</span>',
         'NEEDS_PUSH':        '<span class="ch-health-badge ch-health-NEEDS_PUSH"><div class="ch-health-dot"></div>Ready to Push</span>',
-        'COMPLETE':          '<span class="ch-health-badge ch-health-COMPLETE"><div class="ch-health-dot"></div>Complete</span>',
+        'COMPLETE':          '<span class="ch-health-badge ch-health-COMPLETE"><div class="ch-health-dot"></div>Live</span>',
         'FAILED':            '<span class="ch-health-badge ch-health-FAILED"><div class="ch-health-dot"></div>Failed</span>',
     };
     return map[health] || map['NEEDS_PULL'];
