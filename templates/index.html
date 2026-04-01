@@ -28,6 +28,15 @@
         .df-cal-table td.df-in-range { background:rgba(46,109,164,0.08); }
         .df-cal-month-title { font-size:13px; font-weight:700; color:#0D2137; text-align:center; margin-bottom:6px; }
     </style>
+    <script>
+        // Hide login screen before first paint if a token exists (prevents flash)
+        if (localStorage.getItem('auth_token')) {
+            document.documentElement.classList.add('has-token');
+        }
+    </script>
+    <style>
+        .has-token #login-screen { display: none !important; }
+    </style>
 </head>
 <body>
 

@@ -222,6 +222,7 @@ async function initializeApp() {
 }
 
 function showLogin() {
+    document.documentElement.classList.remove('has-token');
     document.getElementById('login-screen').classList.remove('hidden');
     document.getElementById('app-wrapper').classList.add('hidden');
 }
