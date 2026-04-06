@@ -1146,18 +1146,24 @@ async function testConnection() {
 
 // ---- Dashboard Data ----
 async function loadDashboardData() {
-    try {
-        const response = await fetch('/api/dashboard/stats');
-        if (!response.ok) throw new Error('Stats endpoint not available');
-        const data = await response.json();
-        if (data.success) {
-            state.dashboardStats = data;
-            renderDashboard(data);
-        }
-    } catch (error) {
-        console.warn('Dashboard stats:', error.message);
-        // If endpoint not available, render with placeholder data
+    // Fetch stats and costs in parallel — stats render instantly, costs fill in when ready
+    const statsPromise = fetch('/api/dashboard/stats').then(r => r.ok ? r.json() : null).catch(() => null);
+    const costsPromise = fetch('/api/dashboard/costs').then(r => r.ok ? r.json() : null).catch(() => null);
+
+    // Render stats as soon as they arrive (non-cost cards, changes chart, articles, activity)
+    const statsData = await statsPromise;
+    if (statsData && statsData.success) {
+        state.dashboardStats = statsData;
+        renderDashboard(statsData);
+    } else {
         renderDashboard(getPlaceholderStats());
+    }
+
+    // Render cost data when it arrives (API Cost card + Cost Analysis chart)
+    const costsData = await costsPromise;
+    if (costsData && costsData.success) {
+        Object.assign(state.dashboardStats, costsData);
+        renderCostData(costsData);
     }
 }
 
@@ -1193,17 +1199,24 @@ function renderDashboard(data) {
     // Last synced
     const syncEl = document.getElementById('dash-last-synced');
     if (syncEl) syncEl.textContent = 'Last synced: ' + (data.last_synced || '—');
-    // stat-cost-month is populated by live OpenAI API embed script in index.html
 
-    // Charts
+    // Charts — only render changes chart here; cost chart rendered by renderCostData
     renderChangesChart('week', data);
-    renderCostChart('week', data);
 
     // Ranking table
     renderRankingTable(data.top_articles || []);
 
     // Recent activity
     renderActivityFeed(data.recent_activities || []);
+}
+
+function renderCostData(data) {
+    // API Cost (All Time) card
+    if (data.cost_all_time !== undefined) {
+        setStatValue('stat-cost-month', '$' + data.cost_all_time.toFixed(2));
+    }
+    // Cost Analysis chart
+    renderCostChart('week', data);
 }
 
 function toggleSourceChangesRange() {
@@ -1302,11 +1315,11 @@ function renderCostChart(period, data) {
     if (period === 'month') {
         labels = data.cost_monthly_labels || generateMonthLabels();
         currentValues = data.cost_monthly || generateZeros(labels.length);
-        previousValues = data.cost_prev_monthly || currentValues.map(v => v * (0.6 + Math.random() * 0.6));
+        previousValues = generateZeros(labels.length);
     } else {
         labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
         currentValues = data.cost_weekly || [0, 0, 0, 0, 0, 0, 0];
-        previousValues = data.cost_prev_weekly || currentValues.map(v => v * (0.6 + Math.random() * 0.6));
+        previousValues = data.cost_prev_weekly || [0, 0, 0, 0, 0, 0, 0];
     }
 
     // Create gradient fill for "This period" line

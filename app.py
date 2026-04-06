@@ -707,6 +707,172 @@ def get_article_translation(translation_id):
         }), 500
 
 
+# ── Daily API Cost Caching (Vercel → Supabase) ──
+COST_API_URL = 'https://intercom-analyzer-shizans-projects-a7b50fa1.vercel.app/api'
+COST_TARGET_KEYS = ['key_24T9PNCgnvWHZvxc', 'key_DDHe898miisDLF3w']
+
+def _fetch_and_upsert_dates(dates_to_fetch):
+    """Fetch per-key costs for a list of dates from Vercel API and upsert to Supabase."""
+    import datetime
+    import requests as _req
+    from config import SUPABASE_URL, SUPABASE_SERVICE_KEY
+
+    if not dates_to_fetch:
+        return
+
+    rows_to_upsert = []
+    for d in dates_to_fetch:
+        ds = d.isoformat()
+        try:
+            api_resp = _req.get(
+                f'{COST_API_URL}/openai-usage',
+                params={'start_date': ds, 'end_date': ds},
+                timeout=15
+            )
+            if api_resp.status_code == 200:
+                data = api_resp.json()
+                api_keys = data.get('apiKeys', [])
+                if not isinstance(api_keys, list):
+                    api_keys = list(api_keys.values())
+                found_keys = set()
+                for key in api_keys:
+                    if key.get('keyId') in COST_TARGET_KEYS:
+                        found_keys.add(key['keyId'])
+                        rows_to_upsert.append({
+                            'date': ds,
+                            'key_id': key['keyId'],
+                            'cost': round(key.get('cost', 0), 6),
+                            'requests': key.get('requests', 0),
+                            'updated_at': datetime.datetime.utcnow().isoformat() + 'Z',
+                        })
+                # Store $0 rows for target keys not found, so this date
+                # is marked as "checked" and won't be re-fetched every load.
+                for missing_key in set(COST_TARGET_KEYS) - found_keys:
+                    rows_to_upsert.append({
+                        'date': ds,
+                        'key_id': missing_key,
+                        'cost': 0,
+                        'requests': 0,
+                        'updated_at': datetime.datetime.utcnow().isoformat() + 'Z',
+                    })
+        except Exception:
+            continue
+
+    if rows_to_upsert:
+        headers = {
+            'apikey': SUPABASE_SERVICE_KEY,
+            'Authorization': f'Bearer {SUPABASE_SERVICE_KEY}',
+            'Content-Type': 'application/json',
+            'Prefer': 'resolution=merge-duplicates',
+        }
+        _req.post(
+            f'{SUPABASE_URL}/rest/v1/daily_api_costs',
+            headers=headers,
+            json=rows_to_upsert,
+            timeout=15
+        )
+
+
+def _get_missing_dates():
+    """Return list of missing dates (excluding today) since 2025-01-01."""
+    import datetime
+    import requests as _req
+    from config import SUPABASE_URL, SUPABASE_SERVICE_KEY
+
+    today = datetime.date.today()
+    start_date = datetime.date(2026, 1, 1)
+
+    resp = _req.get(
+        f'{SUPABASE_URL}/rest/v1/daily_api_costs',
+        headers={
+            'apikey': SUPABASE_SERVICE_KEY,
+            'Authorization': f'Bearer {SUPABASE_SERVICE_KEY}',
+        },
+        params={
+            'select': 'date',
+            'date': f'gte.{start_date.isoformat()}',
+            'order': 'date.asc',
+        },
+        timeout=15
+    )
+    existing_dates = set()
+    if resp.status_code == 200 and resp.text:
+        for row in resp.json():
+            existing_dates.add(row['date'])
+
+    missing = []
+    d = start_date
+    while d < today:  # exclude today
+        if d.isoformat() not in existing_dates:
+            missing.append(d)
+        d += datetime.timedelta(days=1)
+    return missing
+
+
+def _sync_past_costs():
+    """Sync missing past days (synchronous). These are finalized and won't change."""
+    missing = _get_missing_dates()
+    if missing:
+        _fetch_and_upsert_dates(missing)
+
+
+def _sync_today_cost():
+    """Refresh today's cost (background). Today is still accumulating."""
+    import datetime
+    _fetch_and_upsert_dates([datetime.date.today()])
+
+
+def _get_cached_daily_costs(days=None, start_date=None, end_date=None):
+    """Read cached daily costs from Supabase.
+    If days is given, only return last N days.
+    If start_date/end_date are given (YYYY-MM-DD strings), filter to that range.
+    Otherwise return all cached data.
+    Returns list of {date, cost} dicts (summed across target keys per day).
+    """
+    import datetime
+    import requests as _req
+    from config import SUPABASE_URL, SUPABASE_SERVICE_KEY
+
+    params = {
+        'select': 'date,cost,key_id',
+        'key_id': f'in.({",".join(COST_TARGET_KEYS)})',
+        'order': 'date.asc',
+    }
+    if start_date:
+        params['date'] = f'gte.{start_date}'
+    elif days:
+        sd = (datetime.date.today() - datetime.timedelta(days=days)).isoformat()
+        params['date'] = f'gte.{sd}'
+
+    if end_date:
+        if 'date' in params:
+            # PostgREST: use 'and' filter for range
+            params['and'] = f'(date.gte.{start_date},date.lte.{end_date})'
+            del params['date']
+        else:
+            params['date'] = f'lte.{end_date}'
+
+    resp = _req.get(
+        f'{SUPABASE_URL}/rest/v1/daily_api_costs',
+        headers={
+            'apikey': SUPABASE_SERVICE_KEY,
+            'Authorization': f'Bearer {SUPABASE_SERVICE_KEY}',
+        },
+        params=params,
+        timeout=15
+    )
+    if resp.status_code != 200:
+        return []
+
+    # Sum costs per day across keys
+    daily = {}
+    for row in resp.json():
+        d = row['date']
+        daily[d] = daily.get(d, 0) + (row.get('cost') or 0)
+
+    return [{'date': d, 'cost': round(c, 4)} for d, c in sorted(daily.items())]
+
+
 @app.route('/api/dashboard/stats', methods=['GET'])
 def dashboard_stats():
     """
@@ -714,8 +880,9 @@ def dashboard_stats():
     top changed articles, and recent activity.
     Optional query params: start_date, end_date (YYYY-MM-DD) for source changes filter.
     """
-    import datetime
+    import datetime, time as _time
     try:
+        _t0 = _time.time()
         now = datetime.datetime.utcnow()
         week_ago = now - datetime.timedelta(days=7)
         month_ago = now - datetime.timedelta(days=30)
@@ -732,6 +899,7 @@ def dashboard_stats():
             all_translations = list_article_translations()
         except Exception:
             pass
+        print(f"[TIMING] translations fetch: {_time.time()-_t0:.1f}s", flush=True)
 
         # total_translated is computed after all_pull_rows is fetched (needs outdated check)
         from config import TARGET_LANGUAGES as _TL
@@ -768,6 +936,7 @@ def dashboard_stats():
                 offset += 1000
         except Exception:
             pass
+        print(f"[TIMING] pull_registry fetch: {_time.time()-_t0:.1f}s", flush=True)
 
         # ---------- Total articles (from pull_registry, excluding [LOCALE] prefixed) ----------
         # Same logic as Control Tower so both counts always match
@@ -816,60 +985,24 @@ def dashboard_stats():
                 if ts >= month_ago:
                     changed_month += 1
 
-        # ---------- Cost estimation (GPT-4o-mini pricing) ----------
-        # Cost is based on actual translations done, not source changes
-        AVG_INPUT_TOKENS = 800
-        AVG_OUTPUT_TOKENS = 1200
-        INPUT_COST_PER_TOKEN = 0.15 / 1_000_000
-        OUTPUT_COST_PER_TOKEN = 0.60 / 1_000_000
-        cost_per_translation = (AVG_INPUT_TOKENS * INPUT_COST_PER_TOKEN) + (AVG_OUTPUT_TOKENS * OUTPUT_COST_PER_TOKEN)
-
-        # Count translations done this week/month for cost
-        translations_week = 0
-        translations_month = 0
-        for t in all_translations:
-            ts = _parse_ts(t.get('updated_at') or t.get('created_at'))
-            if ts:
-                if ts >= week_ago:
-                    translations_week += 1
-                if ts >= month_ago:
-                    translations_month += 1
-
-        cost_week = translations_week * cost_per_translation
-        cost_month = translations_month * cost_per_translation
-
         # ---------- Weekly breakdown (per day of week) — source article changes ----------
         changes_weekly = [0] * 7  # Mon-Sun
-        cost_weekly = [0.0] * 7
         for row in all_pull_rows:
             ts = _parse_ts(row.get('source_updated_at'))
             if ts and ts >= week_ago:
                 day_idx = ts.weekday()  # 0=Mon
                 changes_weekly[day_idx] += 1
 
-        # Cost weekly breakdown — based on translations done
-        for t in all_translations:
-            ts = _parse_ts(t.get('updated_at') or t.get('created_at'))
-            if ts and ts >= week_ago:
-                day_idx = ts.weekday()
-                cost_weekly[day_idx] += cost_per_translation
-
         # ---------- Monthly breakdown (per week) — source article changes ----------
         changes_monthly = [0] * 5
-        cost_monthly = [0.0] * 5
-        changes_monthly_labels = []
+        changes_monthly_labels = [f'W{j}' for j in range(1, 6)]
         for i in range(4, -1, -1):
             wk_start = now - datetime.timedelta(days=i * 7 + 7)
             wk_end = now - datetime.timedelta(days=i * 7)
-            changes_monthly_labels.append(f'W{5 - i}')
             for row in all_pull_rows:
                 ts = _parse_ts(row.get('source_updated_at'))
                 if ts and wk_start <= ts < wk_end:
                     changes_monthly[4 - i] += 1
-            for t in all_translations:
-                ts = _parse_ts(t.get('updated_at') or t.get('created_at'))
-                if ts and wk_start <= ts < wk_end:
-                    cost_monthly[4 - i] += cost_per_translation
 
         # ---------- Build English titles lookup from pull_registry ----------
         english_titles = {}
@@ -981,6 +1114,7 @@ def dashboard_stats():
         last_synced = _parse_ts(last_sync_str) if last_sync_str else None
         last_synced_text = _time_ago(last_synced) if last_synced else 'Never'
 
+        print(f"[TIMING] TOTAL: {_time.time()-_t0:.1f}s", flush=True)
         return jsonify({
             'success': True,
             'total_articles': total_articles,
@@ -988,14 +1122,9 @@ def dashboard_stats():
             'last_synced': last_synced_text,
             'changed_this_week': changed_week,
             'changed_this_month': changed_month,
-            'cost_week': round(cost_week, 4),
-            'cost_month': round(cost_month, 4),
             'changes_weekly': changes_weekly,
-            'cost_weekly': [round(c, 4) for c in cost_weekly],
             'changes_monthly': changes_monthly,
             'changes_monthly_labels': changes_monthly_labels,
-            'cost_monthly': [round(c, 4) for c in cost_monthly],
-            'cost_monthly_labels': changes_monthly_labels,
             'top_articles': top_articles,
             'recent_activities': recent_activities
         })
@@ -1011,6 +1140,72 @@ def escapeHtml(text):
     if not text:
         return ''
     return text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;')
+
+
+@app.route('/api/dashboard/costs', methods=['GET'])
+def dashboard_costs():
+    """
+    Dashboard cost data: API cost (all time), weekly/monthly breakdowns.
+    Syncs missing past days in background, returns cached data immediately.
+    Optional query params: start_date, end_date (YYYY-MM-DD) for filtered cost.
+    """
+    import datetime, threading
+    try:
+        # Sync missing past days and today in background (non-blocking)
+        threading.Thread(target=_sync_past_costs, daemon=True).start()
+        threading.Thread(target=_sync_today_cost, daemon=True).start()
+
+        # Check for date filter params
+        q_start = request.args.get('start_date')  # YYYY-MM-DD or None
+        q_end = request.args.get('end_date')       # YYYY-MM-DD or None
+
+        # Return whatever is already cached
+        cached_costs = _get_cached_daily_costs(start_date=q_start, end_date=q_end)
+        _cost_by_date = {row['date']: row['cost'] for row in cached_costs}
+
+        today = datetime.date.today()
+        _weekday = today.weekday()
+        this_monday = today - datetime.timedelta(days=_weekday)
+        last_monday = this_monday - datetime.timedelta(days=7)
+
+        cost_weekly = [0.0] * 7
+        cost_prev_weekly = [0.0] * 7
+        for i in range(7):
+            d_this = (this_monday + datetime.timedelta(days=i)).isoformat()
+            d_last = (last_monday + datetime.timedelta(days=i)).isoformat()
+            cost_weekly[i] = round(_cost_by_date.get(d_this, 0), 4)
+            cost_prev_weekly[i] = round(_cost_by_date.get(d_last, 0), 4)
+
+        cost_week = round(sum(cost_weekly), 4)
+
+        cost_monthly = [0.0] * 5
+        cost_monthly_labels = [f'W{j}' for j in range(1, 6)]
+        for i in range(4, -1, -1):
+            wk_start = today - datetime.timedelta(days=i * 7 + 7)
+            wk_end = today - datetime.timedelta(days=i * 7)
+            d = wk_start
+            while d < wk_end:
+                cost_monthly[4 - i] += _cost_by_date.get(d.isoformat(), 0)
+                d += datetime.timedelta(days=1)
+            cost_monthly[4 - i] = round(cost_monthly[4 - i], 4)
+
+        cost_month = round(sum(cost_monthly), 4)
+
+        return jsonify({
+            'success': True,
+            'cost_all_time': round(sum(row['cost'] for row in cached_costs), 2),
+            'cost_week': round(cost_week, 4),
+            'cost_month': round(cost_month, 4),
+            'cost_weekly': [round(c, 4) for c in cost_weekly],
+            'cost_prev_weekly': [round(c, 4) for c in cost_prev_weekly],
+            'cost_monthly': [round(c, 4) for c in cost_monthly],
+            'cost_monthly_labels': cost_monthly_labels,
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 
 @app.route('/api/dashboard/articles', methods=['GET'])

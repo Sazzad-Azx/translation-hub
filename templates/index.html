@@ -1687,7 +1687,7 @@
     // ── Date Filter & Live Cost ──
     (function(){
         const COST_API = 'https://intercom-analyzer-shizans-projects-a7b50fa1.vercel.app/api';
-        const TARGET_KEY = 'key_24T9PNCgnvWHZvxc';
+        const TARGET_KEYS = ['key_24T9PNCgnvWHZvxc', 'key_DDHe898miisDLF3w'];
         const fmt = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
         const fmtDisplay = d => d ? d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—';
 
@@ -1720,8 +1720,8 @@
                     const data = await res.json();
                     if (data && data.apiKeys) {
                         const keys = Array.isArray(data.apiKeys) ? data.apiKeys : Object.values(data.apiKeys);
-                        const t = keys.find(k => k.keyId === TARGET_KEY);
-                        if (t) total += t.cost || 0;
+                        keys.filter(k => TARGET_KEYS.includes(k.keyId))
+                            .forEach(k => { total += k.cost || 0; });
                     }
                 } catch(x) {}
             }
