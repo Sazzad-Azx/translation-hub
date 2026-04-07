@@ -5274,37 +5274,27 @@ async function pushStartSelected() {
     if (state.push.locales.length === 0) { showModalAlert('No Language Selected', 'Please select at least one language first.'); return; }
     if (state.push.selectedIds.size === 0) { showModalAlert('No Article Selected', 'Please select at least one article first.'); return; }
 
-    // Collect articles from current page
-    let allArticles = [...state.push.articles];
-
-    // Find IDs not loaded on the current page
-    const loadedIds = new Set(allArticles.map(a => String(a.intercom_id)));
-    const missingIds = Array.from(state.push.selectedIds).filter(id => !loadedIds.has(String(id)));
-
-    // Fetch missing articles' push status from API (unpaginated)
-    if (missingIds.length > 0 && state.push.locales.length > 0) {
-        try {
-            const params = new URLSearchParams({
-                locales: state.push.locales.join(','),
-                search: '',
-                page: '1',
-                page_size: '5000',
-            });
-            const resp = await fetch(`/api/push/articles-multi?${params}`);
-            const data = await resp.json();
-            if (data.success && data.articles) {
-                // Add only the missing ones
-                for (const a of data.articles) {
-                    if (missingIds.includes(String(a.intercom_id)) && !loadedIds.has(String(a.intercom_id))) {
-                        allArticles.push(a);
-                        loadedIds.add(String(a.intercom_id));
-                    }
-                }
-            }
-        } catch (e) {
-            console.error('Failed to fetch missing push articles:', e);
+    // Always fetch fresh push status from the API for all selected articles.
+    // state.push.articles may not include them (pagination, race conditions).
+    let allArticles = [];
+    try {
+        const params = new URLSearchParams({
+            locales: state.push.locales.join(','),
+            search: '',
+            page: '1',
+            page_size: '5000',
+        });
+        const resp = await fetch(`/api/push/articles-multi?${params}`);
+        const data = await resp.json();
+        if (data.success && data.articles) {
+            allArticles = data.articles;
         }
+    } catch (e) {
+        console.error('Failed to fetch push articles:', e);
     }
+
+    // Fallback to in-memory if API failed
+    if (allArticles.length === 0) allArticles = state.push.articles;
 
     const pairs = [];
     state.push.selectedIds.forEach(iid => {
@@ -5324,11 +5314,31 @@ async function pushStartSelected() {
 // ---------------------------------------------------------------------------
 // Push All Ready
 // ---------------------------------------------------------------------------
-function pushStartAllReady() {
+async function pushStartAllReady() {
     if (state.push.locales.length === 0) { showModalAlert('No Language Selected', 'Please select at least one language first.'); return; }
 
+    // Fetch all articles with fresh push status from API
+    let allArticles = [];
+    try {
+        const params = new URLSearchParams({
+            locales: state.push.locales.join(','),
+            search: state.push.search || '',
+            page: '1',
+            page_size: '5000',
+        });
+        const resp = await fetch(`/api/push/articles-multi?${params}`);
+        const data = await resp.json();
+        if (data.success && data.articles) {
+            allArticles = data.articles;
+        }
+    } catch (e) {
+        console.error('Failed to fetch push articles:', e);
+    }
+
+    if (allArticles.length === 0) allArticles = state.push.articles;
+
     const pairs = [];
-    state.push.articles.forEach(a => {
+    allArticles.forEach(a => {
         const ld = a.locale_data || {};
         state.push.locales.forEach(loc => {
             const s = (ld[loc] || {}).status;
