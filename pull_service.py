@@ -672,20 +672,32 @@ def get_articles_needing_pull() -> List[str]:
     headers = _headers()
     headers.pop("Prefer", None)
     try:
-        resp = requests.get(
-            f"{REST_BASE}/{TABLE}",
-            headers=headers,
-            params={"select": "intercom_id,pull_status,pulled_at,source_updated_at"},
-            timeout=20,
-        )
-        if not resp.ok:
-            return []
-        rows = resp.json() if resp.text else []
-        if not isinstance(rows, list):
-            return []
+        all_rows: list = []
+        offset = 0
+        batch_size = 1000
+        while True:
+            resp = requests.get(
+                f"{REST_BASE}/{TABLE}",
+                headers=headers,
+                params={
+                    "select": "intercom_id,pull_status,pulled_at,source_updated_at",
+                    "limit": str(batch_size),
+                    "offset": str(offset),
+                },
+                timeout=20,
+            )
+            if not resp.ok:
+                break
+            batch = resp.json() if resp.text else []
+            if not isinstance(batch, list) or len(batch) == 0:
+                break
+            all_rows.extend(batch)
+            if len(batch) < batch_size:
+                break
+            offset += batch_size
 
         ids = []
-        for r in rows:
+        for r in all_rows:
             status = _compute_needs_pull(r)
             if status in ("never_pulled", "updated_in_source"):
                 ids.append(r["intercom_id"])
@@ -705,17 +717,29 @@ def get_pull_stats() -> Dict:
     headers = _headers()
     headers.pop("Prefer", None)
     try:
-        resp = requests.get(
-            f"{REST_BASE}/{TABLE}",
-            headers=headers,
-            params={"select": "pull_status,pulled_at,source_updated_at"},
-            timeout=15,
-        )
-        if not resp.ok:
-            return {"total": 0}
-        rows = resp.json() if resp.text else []
-        if not isinstance(rows, list):
-            return {"total": 0}
+        rows: list = []
+        offset = 0
+        batch_size = 1000
+        while True:
+            resp = requests.get(
+                f"{REST_BASE}/{TABLE}",
+                headers=headers,
+                params={
+                    "select": "pull_status,pulled_at,source_updated_at",
+                    "limit": str(batch_size),
+                    "offset": str(offset),
+                },
+                timeout=15,
+            )
+            if not resp.ok:
+                return {"total": 0}
+            batch = resp.json() if resp.text else []
+            if not isinstance(batch, list) or len(batch) == 0:
+                break
+            rows.extend(batch)
+            if len(batch) < batch_size:
+                break
+            offset += batch_size
 
         total = len(rows)
         pulled = sum(1 for r in rows if r.get("pulled_at"))

@@ -388,21 +388,31 @@ def list_content_hub_articles(
     headers.pop("Prefer", None)
 
     # Fetch all pull_registry rows (metadata only – no body_html)
-    params: Dict = {
+    base_params: Dict = {
         "select": "id,intercom_id,title,description,state,url,source_updated_at,pulled_at,pull_status,pull_error,content_hash,collection_id,collection_name,created_at,updated_at",
         "order": "title.asc",
-        "limit": "5000",
     }
     if search:
-        params["title"] = f"ilike.*{search}*"
+        base_params["title"] = f"ilike.*{search}*"
 
-    resp = requests.get(f"{REST_BASE}/{PULL_TABLE}", headers=headers, params=params, timeout=20)
-    if not resp.ok:
+    all_articles: list = []
+    offset = 0
+    batch_size = 1000
+    while True:
+        params = {**base_params, "limit": str(batch_size), "offset": str(offset)}
+        resp = requests.get(f"{REST_BASE}/{PULL_TABLE}", headers=headers, params=params, timeout=20)
+        if not resp.ok:
+            break
+        batch = resp.json() if resp.text else []
+        if not isinstance(batch, list) or len(batch) == 0:
+            break
+        all_articles.extend(batch)
+        if len(batch) < batch_size:
+            break
+        offset += batch_size
+
+    if not all_articles:
         return {"articles": [], "total": 0, "page": page, "page_size": page_size, "counts": {}}
-
-    all_articles = resp.json() if resp.text else []
-    if not isinstance(all_articles, list):
-        all_articles = []
 
     # Filter out [LOCALE] translated articles created by Push Approach 3
     all_articles = [a for a in all_articles
@@ -517,18 +527,29 @@ def list_collections() -> List[Dict]:
     headers = _headers()
     headers.pop("Prefer", None)
     try:
-        resp = requests.get(
-            f"{REST_BASE}/{PULL_TABLE}",
-            headers=headers,
-            params={
-                "select": "intercom_id,title,description,collection_id,collection_name,pulled_at,pull_status,source_updated_at",
-                "limit": "5000",
-            },
-            timeout=20,
-        )
-        if not resp.ok:
-            return []
-        rows = resp.json() if resp.text else []
+        rows: list = []
+        offset = 0
+        batch_size = 1000
+        while True:
+            resp = requests.get(
+                f"{REST_BASE}/{PULL_TABLE}",
+                headers=headers,
+                params={
+                    "select": "intercom_id,title,description,collection_id,collection_name,pulled_at,pull_status,source_updated_at",
+                    "limit": str(batch_size),
+                    "offset": str(offset),
+                },
+                timeout=20,
+            )
+            if not resp.ok:
+                break
+            batch = resp.json() if resp.text else []
+            if not isinstance(batch, list) or len(batch) == 0:
+                break
+            rows.extend(batch)
+            if len(batch) < batch_size:
+                break
+            offset += batch_size
         if not isinstance(rows, list):
             return []
 

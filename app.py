@@ -1403,14 +1403,26 @@ def test_connection():
         import requests as _req
         from config import SUPABASE_URL, SUPABASE_SERVICE_KEY
         _LP = _re.compile(r'^\[[A-Z]{2}(?:-[A-Z]{1,4})?\]\s+', _re.IGNORECASE)
-        resp = _req.get(
-            f"{SUPABASE_URL}/rest/v1/pull_registry",
-            headers={"apikey": SUPABASE_SERVICE_KEY, "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}"},
-            params={"select": "title", "limit": "5000"},
-            timeout=10,
-        )
-        if resp.ok:
-            rows = resp.json() or []
+        _headers = {"apikey": SUPABASE_SERVICE_KEY, "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}"}
+        rows = []
+        _offset = 0
+        while True:
+            resp = _req.get(
+                f"{SUPABASE_URL}/rest/v1/pull_registry",
+                headers=_headers,
+                params={"select": "title", "limit": "1000", "offset": str(_offset)},
+                timeout=10,
+            )
+            if not resp.ok:
+                break
+            batch = resp.json() or []
+            if not batch:
+                break
+            rows.extend(batch)
+            if len(batch) < 1000:
+                break
+            _offset += 1000
+        if rows:
             articles_count = len([r for r in rows if not _LP.match(r.get('title') or '')])
             return jsonify({
                 'success': True,

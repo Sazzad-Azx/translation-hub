@@ -123,16 +123,27 @@ def _fetch_pulled_articles(search: str = "") -> List[Dict]:
         "select": "id,intercom_id,title,state,url,source_updated_at,pulled_at,pull_status,content_hash,collection_name,body_html",
         "pulled_at": "not.is.null",
         "order": "title.asc",
-        "limit": "5000",
     }
     if search:
         params["title"] = f"ilike.*{search}*"
     try:
-        resp = requests.get(f"{REST_BASE}/{PULL_TABLE}", headers=headers, params=params, timeout=20)
-        if not resp.ok:
-            return []
-        rows = resp.json() if resp.text else []
-        return rows if isinstance(rows, list) else []
+        all_rows: list = []
+        offset = 0
+        batch_size = 1000
+        while True:
+            params["limit"] = str(batch_size)
+            params["offset"] = str(offset)
+            resp = requests.get(f"{REST_BASE}/{PULL_TABLE}", headers=headers, params=params, timeout=20)
+            if not resp.ok:
+                break
+            batch = resp.json() if resp.text else []
+            if not isinstance(batch, list) or len(batch) == 0:
+                break
+            all_rows.extend(batch)
+            if len(batch) < batch_size:
+                break
+            offset += batch_size
+        return all_rows
     except Exception:
         return []
 
