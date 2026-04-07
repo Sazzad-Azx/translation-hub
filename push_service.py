@@ -91,20 +91,30 @@ def _fetch_pulled_articles(search: str = "") -> List[Dict]:
         return []
     headers = _headers()
     headers.pop("Prefer", None)
-    params: Dict = {
+    base_params: Dict = {
         "select": "id,intercom_id,title,state,url,source_updated_at,pulled_at,pull_status,content_hash,collection_name,body_html",
         "pulled_at": "not.is.null",
         "order": "title.asc",
-        "limit": "5000",
     }
     if search:
-        params["title"] = f"ilike.*{search}*"
+        base_params["title"] = f"ilike.*{search}*"
     try:
-        resp = requests.get(f"{REST_BASE}/{PULL_TABLE}", headers=headers, params=params, timeout=20)
-        if not resp.ok:
-            return []
-        rows = resp.json() if resp.text else []
-        return rows if isinstance(rows, list) else []
+        all_rows: list = []
+        offset = 0
+        batch_size = 1000
+        while True:
+            params = {**base_params, "limit": str(batch_size), "offset": str(offset)}
+            resp = requests.get(f"{REST_BASE}/{PULL_TABLE}", headers=headers, params=params, timeout=20)
+            if not resp.ok:
+                break
+            batch = resp.json() if resp.text else []
+            if not isinstance(batch, list) or len(batch) == 0:
+                break
+            all_rows.extend(batch)
+            if len(batch) < batch_size:
+                break
+            offset += batch_size
+        return all_rows
     except Exception:
         return []
 
@@ -115,39 +125,39 @@ def _fetch_translations_for_locale(locale: str) -> Dict[str, Dict]:
         return {}
     headers = _headers()
     headers.pop("Prefer", None)
-    # Try with pushed_at/push_error columns first, fall back without
     select_cols = "id,parent_intercom_article_id,target_locale,translated_title,translated_body_html,status,updated_at,source_checksum,engine,model,pushed_at,push_error"
+    fallback_cols = "id,parent_intercom_article_id,target_locale,translated_title,translated_body_html,status,updated_at,source_checksum,engine,model"
     try:
-        resp = requests.get(
-            f"{REST_BASE}/{TRANSLATIONS_TABLE}",
-            headers=headers,
-            params={
-                "select": select_cols,
-                "target_locale": f"eq.{locale}",
-                "limit": "5000",
-            },
-            timeout=20,
-        )
-        if resp.status_code == 400:
-            # Columns might not exist yet, try without them
-            select_cols = "id,parent_intercom_article_id,target_locale,translated_title,translated_body_html,status,updated_at,source_checksum,engine,model"
+        all_rows: list = []
+        offset = 0
+        batch_size = 1000
+        use_cols = select_cols
+        while True:
             resp = requests.get(
                 f"{REST_BASE}/{TRANSLATIONS_TABLE}",
                 headers=headers,
                 params={
-                    "select": select_cols,
+                    "select": use_cols,
                     "target_locale": f"eq.{locale}",
-                    "limit": "5000",
+                    "limit": str(batch_size),
+                    "offset": str(offset),
                 },
                 timeout=20,
             )
-        if not resp.ok:
-            return {}
-        rows = resp.json() if resp.text else []
-        if not isinstance(rows, list):
-            return {}
+            if resp.status_code == 400 and use_cols == select_cols:
+                use_cols = fallback_cols
+                continue  # retry same offset with fallback columns
+            if not resp.ok:
+                break
+            batch = resp.json() if resp.text else []
+            if not isinstance(batch, list) or len(batch) == 0:
+                break
+            all_rows.extend(batch)
+            if len(batch) < batch_size:
+                break
+            offset += batch_size
         result: Dict[str, Dict] = {}
-        for r in rows:
+        for r in all_rows:
             pid = r.get("parent_intercom_article_id", "")
             if pid:
                 result[pid] = r

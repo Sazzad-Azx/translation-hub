@@ -22,24 +22,29 @@ class IntercomClient:
         }
     
     def _make_request(self, method: str, endpoint: str, **kwargs) -> requests.Response:
-        """Make HTTP request with retry logic"""
+        """Make HTTP request with retry logic.
+
+        Uses short sleeps between retries to stay within serverless function
+        timeouts (Vercel 10-60s).  Rate-limit (429) retries use at most 3s
+        delay so the total wall time stays under ~10s per attempt.
+        """
         url = f"{self.base_url}{endpoint}"
-        
+
         for attempt in range(MAX_RETRIES):
             try:
                 response = requests.request(method, url, headers=self.headers, **kwargs)
-                
+
                 # Debug: Print response details on error
                 if response.status_code >= 400:
                     print(f"API Error {response.status_code}: {response.text[:200]}")
-                
-                # Handle rate limiting
+
+                # Handle rate limiting — keep sleep short for serverless compat
                 if response.status_code == 429:
-                    retry_after = int(response.headers.get("Retry-After", RETRY_DELAY))
-                    print(f"Rate limited. Waiting {retry_after} seconds...")
+                    retry_after = min(int(response.headers.get("Retry-After", RETRY_DELAY)), 3)
+                    print(f"Rate limited. Waiting {retry_after} seconds (attempt {attempt + 1})...")
                     time.sleep(retry_after)
                     continue
-                
+
                 if response.status_code >= 400:
                     # Include response body in error for better diagnostics
                     error_body = response.text[:500]
@@ -48,13 +53,14 @@ class IntercomClient:
                         response=response,
                     )
                 return response
-                
+
             except requests.exceptions.RequestException as e:
                 if attempt == MAX_RETRIES - 1:
                     raise
+                wait = min(RETRY_DELAY * (attempt + 1), 3)
                 print(f"Request failed (attempt {attempt + 1}/{MAX_RETRIES}): {e}")
-                time.sleep(RETRY_DELAY * (attempt + 1))
-        
+                time.sleep(wait)
+
         raise Exception(f"Failed to make request after {MAX_RETRIES} attempts")
     
     def get_articles(self, collection_id: Optional[str] = None, tag_id: Optional[str] = None) -> List[Dict]:

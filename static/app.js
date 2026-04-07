@@ -5344,7 +5344,8 @@ async function pushExecuteConfirmed() {
     pushHideConfirm();
 
     let ok = 0, fail = 0;
-    for (const {iid, locale} of pairs) {
+    for (let pi = 0; pi < pairs.length; pi++) {
+        const {iid, locale} = pairs[pi];
         pushSetCellStatus(iid, locale, 'PENDING', 'Pushing…');
         try {
             const res = await fetch('/api/push/execute', {
@@ -5364,6 +5365,8 @@ async function pushExecuteConfirmed() {
             pushSetCellStatus(iid, locale, 'FAILED', e.message);
             fail++;
         }
+        // Small delay between pushes to avoid Intercom rate limits
+        if (pi < pairs.length - 1) await new Promise(r => setTimeout(r, 500));
     }
 
     const msg = fail === 0
