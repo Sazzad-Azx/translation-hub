@@ -5343,7 +5343,13 @@ async function pushExecuteConfirmed() {
     if (pairs.length === 0) { pushHideConfirm(); return; }
     pushHideConfirm();
 
-    let ok = 0, fail = 0;
+    const totalJobs = pairs.length;
+    let completed = 0, ok = 0, fail = 0;
+    const origTitle = document.title;
+
+    pushShowToast(`Pushing 0/${totalJobs}...`, 'fn-loader');
+    document.title = `Pushing 0/${totalJobs}... — Translation Hub`;
+
     for (let pi = 0; pi < pairs.length; pi++) {
         const {iid, locale} = pairs[pi];
         pushSetCellStatus(iid, locale, 'PENDING', 'Pushing…');
@@ -5365,14 +5371,23 @@ async function pushExecuteConfirmed() {
             pushSetCellStatus(iid, locale, 'FAILED', e.message);
             fail++;
         }
+        completed++;
+        document.title = `Pushing ${completed}/${totalJobs}... — Translation Hub`;
+        pushShowToast(`Pushing ${completed}/${totalJobs}...`, 'fn-loader');
         // Small delay between pushes to avoid Intercom rate limits
         if (pi < pairs.length - 1) await new Promise(r => setTimeout(r, 500));
     }
 
-    const msg = fail === 0
-        ? `✓ ${ok} push${ok !== 1 ? 'es' : ''} completed successfully.`
-        : `${ok} succeeded, ${fail} failed.`;
-    pushShowToast(msg, fail === 0 ? 'success' : 'warn');
+    document.title = `Done — ${ok} pushed, ${fail} failed`;
+    const msg = `Completed: ${ok} success, ${fail} failed out of ${totalJobs} pushes.`;
+    pushShowToast(msg, fail > 0 ? 'fa-exclamation-triangle' : 'fa-check-circle');
+
+    setTimeout(() => { document.title = origTitle; }, 5000);
+    setTimeout(() => {
+        const toast = document.getElementById('push-toast');
+        if (toast) toast.classList.add('hidden');
+    }, 6000);
+
     // Re-bind failed badges and show retry button if any failed
     const tbody = document.getElementById('push-table-body');
     if (tbody) pushBindFailedBadges(tbody);
@@ -5456,14 +5471,14 @@ async function pushRetrySingle(iid, locale) {
         const data = await res.json();
         if (data.success) {
             pushSetCellStatus(iid, locale, 'LIVE', 'Published successfully');
-            pushShowToast('✓ Retry succeeded!', 'success');
+            pushShowToast('Retry succeeded!', 'fa-check-circle');
         } else {
             pushSetCellStatus(iid, locale, 'FAILED', data.error || 'Push failed');
-            pushShowToast('Retry failed: ' + (data.error || 'Unknown error'), 'warn');
+            pushShowToast('Retry failed: ' + (data.error || 'Unknown error'), 'fa-exclamation-triangle');
         }
     } catch (e) {
         pushSetCellStatus(iid, locale, 'FAILED', e.message);
-        pushShowToast('Retry failed: ' + e.message, 'warn');
+        pushShowToast('Retry failed: ' + e.message, 'fa-exclamation-triangle');
     }
     // Re-bind failed badges after status change
     const tbody = document.getElementById('push-table-body');
@@ -5482,13 +5497,20 @@ async function pushRetryAllFailed() {
             }
         });
     });
-    if (pairs.length === 0) { pushShowToast('No failed pushes to retry.', 'warn'); return; }
+    if (pairs.length === 0) { pushShowToast('No failed pushes to retry.', 'fa-exclamation-triangle'); return; }
 
     const retryBtn = document.getElementById('push-retry-failed-btn');
     if (retryBtn) { retryBtn.disabled = true; retryBtn.innerHTML = '🔄 &nbsp;Retrying…'; }
 
-    let ok = 0, fail = 0;
-    for (const {iid, locale} of pairs) {
+    const totalJobs = pairs.length;
+    let completed = 0, ok = 0, fail = 0;
+    const origTitle = document.title;
+
+    pushShowToast(`Retrying 0/${totalJobs}...`, 'fn-loader');
+    document.title = `Retrying 0/${totalJobs}... — Translation Hub`;
+
+    for (let pi = 0; pi < pairs.length; pi++) {
+        const {iid, locale} = pairs[pi];
         pushSetCellStatus(iid, locale, 'PENDING', 'Retrying…');
         try {
             const res = await fetch('/api/push/execute', {
@@ -5508,15 +5530,25 @@ async function pushRetryAllFailed() {
             pushSetCellStatus(iid, locale, 'FAILED', e.message);
             fail++;
         }
+        completed++;
+        document.title = `Retrying ${completed}/${totalJobs}... — Translation Hub`;
+        pushShowToast(`Retrying ${completed}/${totalJobs}...`, 'fn-loader');
+        if (pi < pairs.length - 1) await new Promise(r => setTimeout(r, 500));
     }
 
+    document.title = `Done — ${ok} retried, ${fail} failed`;
     const msg = fail === 0
-        ? `✓ All ${ok} retries succeeded!`
-        : `${ok} succeeded, ${fail} still failed.`;
-    pushShowToast(msg, fail === 0 ? 'success' : 'warn');
+        ? `Completed: All ${ok} retries succeeded!`
+        : `Completed: ${ok} succeeded, ${fail} still failed.`;
+    pushShowToast(msg, fail > 0 ? 'fa-exclamation-triangle' : 'fa-check-circle');
+
+    setTimeout(() => { document.title = origTitle; }, 5000);
+    setTimeout(() => {
+        const toast = document.getElementById('push-toast');
+        if (toast) toast.classList.add('hidden');
+    }, 6000);
 
     if (retryBtn) { retryBtn.disabled = false; retryBtn.innerHTML = '🔄 &nbsp;Retry Failed'; }
-    // Re-bind failed badges and update button visibility
     const tbody = document.getElementById('push-table-body');
     if (tbody) pushBindFailedBadges(tbody);
     pushUpdateRetryButton();
@@ -5677,23 +5709,21 @@ function showModalAlert(title, message) {
     if (closeBtn) closeBtn.onclick = closeHandler;
 }
 
-function pushShowToast(msg, type = 'info') {
+function pushShowToast(msg, iconClass) {
     const toast = document.getElementById('push-toast');
-    if (!toast) return;
-    const styles = {
-        success: { bg: '#f0fdf4', color: '#065f46', icon: 'fa-check-circle' },
-        warn:    { bg: '#fffbeb', color: '#92400e', icon: 'fa-exclamation-triangle' },
-        error:   { bg: '#fef2f2', color: '#991b1b', icon: 'fa-times-circle' },
-        info:    { bg: '#eff6ff', color: '#1e40af', icon: 'fa-info-circle' },
-    };
-    const s = styles[type] || styles.info;
-    toast.classList.remove('hidden');
-    toast.style.background = s.bg;
-    toast.style.color = s.color;
-    toast.innerHTML = `<i class="fas ${s.icon}"></i> ${escapeHtml(msg)}`;
-    toast.style.opacity = '1';
-    clearTimeout(toast._t);
-    toast._t = setTimeout(() => { toast.style.opacity = '0'; }, 5000);
+    const icon = document.getElementById('push-toast-icon');
+    const text = document.getElementById('push-toast-text');
+    if (toast) { toast.classList.remove('hidden'); toast.style.opacity = '1'; }
+    if (icon) {
+        if (iconClass === 'fn-loader') {
+            icon.className = '';
+            icon.innerHTML = '<span class="fn-loader-inline"></span>';
+        } else {
+            icon.innerHTML = '';
+            icon.className = `fas ${iconClass}`;
+        }
+    }
+    if (text) text.textContent = msg;
 }
 
 // ===========================================================================
