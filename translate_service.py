@@ -143,23 +143,32 @@ def _fetch_all_translations() -> Dict[str, List[Dict]]:
         return {}
     headers = _headers()
     headers.pop("Prefer", None)
+    all_rows: List[Dict] = []
     try:
-        resp = requests.get(
-            f"{REST_BASE}/{TRANSLATIONS_TABLE}",
-            headers=headers,
-            params={
-                "select": "id,parent_intercom_article_id,target_locale,translated_title,status,updated_at,source_checksum,engine,model",
-                "limit": "10000",
-            },
-            timeout=20,
-        )
-        if not resp.ok:
-            return {}
-        rows = resp.json() if resp.text else []
-        if not isinstance(rows, list):
-            return {}
+        offset = 0
+        batch_size = 1000
+        while True:
+            resp = requests.get(
+                f"{REST_BASE}/{TRANSLATIONS_TABLE}",
+                headers=headers,
+                params={
+                    "select": "id,parent_intercom_article_id,target_locale,translated_title,status,updated_at,source_checksum,engine,model",
+                    "limit": str(batch_size),
+                    "offset": str(offset),
+                },
+                timeout=20,
+            )
+            if not resp.ok:
+                break
+            batch = resp.json() if resp.text else []
+            if not isinstance(batch, list) or len(batch) == 0:
+                break
+            all_rows.extend(batch)
+            if len(batch) < batch_size:
+                break
+            offset += batch_size
         result: Dict[str, List[Dict]] = {}
-        for r in rows:
+        for r in all_rows:
             pid = r.get("parent_intercom_article_id", "")
             if pid:
                 result.setdefault(pid, []).append(r)

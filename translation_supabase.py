@@ -134,19 +134,31 @@ def list_article_translations() -> List[Dict]:
         url = f"{REST_BASE}/{TRANSLATIONS_TABLE}"
         headers = dict(_headers())
         headers.pop("Prefer", None)
-        resp = requests.get(
-            url,
-            headers=headers,
-            params={
-                "select": "id,content_item_id,parent_intercom_article_id,source_locale,target_locale,translated_title,status,created_at,updated_at,pushed_at",
-                "order": "updated_at.desc",
-            },
-            timeout=30,
-        )
-        if not resp.ok:
-            return []
-        data = resp.json() if resp.text else []
-        return data if isinstance(data, list) else []
+        all_rows: list = []
+        offset = 0
+        batch_size = 1000
+        while True:
+            resp = requests.get(
+                url,
+                headers=headers,
+                params={
+                    "select": "id,content_item_id,parent_intercom_article_id,source_locale,target_locale,translated_title,status,created_at,updated_at,pushed_at",
+                    "order": "updated_at.desc",
+                    "limit": str(batch_size),
+                    "offset": str(offset),
+                },
+                timeout=30,
+            )
+            if not resp.ok:
+                break
+            batch = resp.json() if resp.text else []
+            if not isinstance(batch, list) or len(batch) == 0:
+                break
+            all_rows.extend(batch)
+            if len(batch) < batch_size:
+                break
+            offset += batch_size
+        return all_rows
     except Exception:
         return []
 
