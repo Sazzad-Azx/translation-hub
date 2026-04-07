@@ -2153,7 +2153,7 @@ def push_articles_list():
         status_filter = request.args.get('status_filter', '').strip()
         page = int(request.args.get('page', 1))
         page_size = int(request.args.get('page_size', 25))
-        if page_size not in (10, 25, 50, 100):
+        if page_size not in (10, 25, 50, 100, 5000):
             page_size = 25
         if page < 1:
             page = 1
@@ -2184,7 +2184,7 @@ def push_articles_multi():
         search = request.args.get('search', '').strip()
         page = int(request.args.get('page', 1))
         page_size = int(request.args.get('page_size', 25))
-        if page_size not in (10, 25, 50, 100):
+        if page_size not in (10, 25, 50, 100, 5000):
             page_size = 25
         if page < 1:
             page = 1
