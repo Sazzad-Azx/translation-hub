@@ -3091,7 +3091,8 @@ textarea.gl-input { resize: vertical; }
 .push-badge-outdated .push-badge-dot { background: #D97706; }
 .push-badge-missing     { background: #FFF1F2; color: #9F1239; border: 1px solid #FECDD3; }
 .push-badge-missing .push-badge-dot { background: #F43F5E; }
-.push-badge-failed      { background: #FFF1F2; color: #9F1239; border: 1px solid #FECDD3; }
+.push-badge-failed      { background: #FFF1F2; color: #9F1239; border: 1px solid #FECDD3; cursor: pointer; }
+.push-badge-failed:hover { background: #FFE4E6; border-color: #FDA4AF; }
 .push-badge-failed .push-badge-dot { background: #E11D48; }
 .push-badge-pending     { background: #E0F0FA; color: #1A3D63; border: 1px solid rgba(74,144,196,.25); }
 .push-badge-pending .push-badge-dot { background: #4A90C4; }
@@ -3099,7 +3100,38 @@ textarea.gl-input { resize: vertical; }
 .push-badge-retranslation .push-badge-dot { background: #D97706; }
 .push-badge-nolang      { background: #E0F0FA; color: #4A90C4; border: 1px solid rgba(74,144,196,.15); }
 .push-badge-nolang .push-badge-dot { background: #93C5E0; }
-.push-td-lang { text-align: center; vertical-align: middle; }
+.push-td-lang { text-align: center; vertical-align: middle; position: relative; }
+
+/* Retry button style */
+.push-btn-retry { background: #FFF1F2; color: #9F1239; border: 1.5px solid #FECDD3; padding: 10px 20px; font-size: 13px; }
+.push-btn-retry:hover { background: #FFE4E6; border-color: #FDA4AF; }
+
+/* Failed popover */
+.push-fail-popover {
+    position: absolute; z-index: 100; bottom: calc(100% + 8px); left: 50%;
+    transform: translateX(-50%); min-width: 220px; max-width: 300px;
+    background: #fff; border: 1px solid #FECDD3; border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.12); padding: 12px 14px;
+    text-align: left; font-size: 12px; color: #374151;
+}
+.push-fail-popover::after {
+    content: ''; position: absolute; top: 100%; left: 50%;
+    transform: translateX(-50%); border: 6px solid transparent;
+    border-top-color: #fff;
+}
+.push-fail-popover::before {
+    content: ''; position: absolute; top: 100%; left: 50%;
+    transform: translateX(-50%); border: 7px solid transparent;
+    border-top-color: #FECDD3;
+}
+.push-fail-popover .fail-title { font-weight: 600; color: #9F1239; margin-bottom: 6px; }
+.push-fail-popover .fail-reason { color: #64748b; margin-bottom: 10px; word-break: break-word; }
+.push-fail-popover .fail-retry-btn {
+    display: inline-flex; align-items: center; gap: 5px; padding: 6px 14px;
+    background: #1A3D63; color: #fff; border: none; border-radius: 6px;
+    font-size: 12px; font-weight: 500; cursor: pointer; transition: background .2s;
+}
+.push-fail-popover .fail-retry-btn:hover { background: #2E6DA4; }
 
 /* --- Pagination --- */
 .push-pagination {

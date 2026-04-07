@@ -534,7 +534,54 @@ def _prepare_body_for_push(body: str) -> str:
         body,
     )
 
-    # Step 2: Ensure spacer before headings that follow block elements
+    # Step 2: Strip video embeds — Intercom API rejects "Video src is not
+    # supported" for <video> and <iframe> video elements.  Replace with a
+    # linked placeholder so readers can still access the video.
+
+    # 2a: Intercom video wrapper divs: <div class="intercom-h2b-video">...<iframe src="URL">...</div>
+    def _video_div_replace(m):
+        iframe_m = _re.search(r'<iframe[^>]*\bsrc=["\']([^"\']*)["\']', m.group(0))
+        url = iframe_m.group(1) if iframe_m else ''
+        if url:
+            return f'<p><a href="{url}">▶ Watch Video</a></p>'
+        return ''
+    body = _re.sub(
+        r'<div[^>]*class=["\'][^"\']*intercom-h2b-video[^"\']*["\'][^>]*>.*?</div>',
+        _video_div_replace,
+        body,
+        flags=_re.DOTALL,
+    )
+
+    # 2b: Standalone <iframe> with video sources (vimeo, youtube, etc.)
+    def _iframe_video_replace(m):
+        src = m.group(1)
+        return f'<p><a href="{src}">▶ Watch Video</a></p>'
+    body = _re.sub(
+        r'<iframe[^>]*\bsrc=["\']([^"\']*(?:vimeo|youtube|youtu\.be|wistia|loom|vidyard)[^"\']*)["\'][^>]*>.*?</iframe>',
+        _iframe_video_replace,
+        body,
+        flags=_re.DOTALL,
+    )
+
+    # 2c: <video> tags with src
+    body = _re.sub(
+        r'<video[^>]*\bsrc=["\']([^"\']*)["\'][^>]*>.*?</video>',
+        r'<p><a href="\1">▶ Watch Video</a></p>',
+        body,
+        flags=_re.DOTALL,
+    )
+    # <video> with <source> children
+    body = _re.sub(
+        r'<video[^>]*>(\s*<source[^>]*\bsrc=["\']([^"\']*)["\'][^>]*/?>)*\s*</video>',
+        r'<p><a href="\2">▶ Watch Video</a></p>',
+        body,
+        flags=_re.DOTALL,
+    )
+    # Remaining <video> tags
+    body = _re.sub(r'<video[^>]*>.*?</video>', '', body, flags=_re.DOTALL)
+    body = _re.sub(r'<video[^>]*/>', '', body)
+
+    # Step 3: Ensure spacer before headings that follow block elements
     SPACER = '<p><br></p>'
 
     def _ensure_spacer(match):

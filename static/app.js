@@ -2516,8 +2516,8 @@ async function hubBulkAction(actionType) {
     }
 
     if (actionType === 'pull') {
-        // Set search before switching so first-time init uses it
-        state.pull.search = searchTitle;
+        // Only use search filter for single article; clear it for multi-select
+        state.pull.search = ids.length === 1 ? searchTitle : '';
         state.pull.page = 1;
 
         switchSection('pull');
@@ -2529,10 +2529,13 @@ async function hubBulkAction(actionType) {
             await _waitForTableLoad('pull-table-body');
         }
 
-        // Set search input value
-        if (searchTitle) {
+        // Set search input value (only for single article)
+        if (ids.length === 1 && searchTitle) {
             const searchInput = document.getElementById('pull-search-input');
             if (searchInput) searchInput.value = searchTitle;
+        } else {
+            const searchInput = document.getElementById('pull-search-input');
+            if (searchInput) searchInput.value = '';
         }
 
         // Select the articles
@@ -2541,8 +2544,8 @@ async function hubBulkAction(actionType) {
         renderPullTable();
 
     } else if (actionType === 'translate') {
-        // Set search before switching so first-time init uses it
-        state.tr.search = searchTitle;
+        // Only use search filter for single article; clear it for multi-select
+        state.tr.search = ids.length === 1 ? searchTitle : '';
         state.tr.page = 1;
 
         switchSection('translate');
@@ -2554,10 +2557,13 @@ async function hubBulkAction(actionType) {
             await _waitForTableLoad('tr-table-body');
         }
 
-        // Set search input value
-        if (searchTitle) {
+        // Set search input value (only for single article)
+        if (ids.length === 1 && searchTitle) {
             const searchInput = document.getElementById('tr-search-input');
             if (searchInput) searchInput.value = searchTitle;
+        } else {
+            const searchInput = document.getElementById('tr-search-input');
+            if (searchInput) searchInput.value = '';
         }
 
         // Select the articles
@@ -2566,8 +2572,9 @@ async function hubBulkAction(actionType) {
         trRenderTable();
 
     } else if (actionType === 'push') {
-        // Set search before switching so first-time init uses it
-        state.push.search = searchTitle;
+        // Only use search filter for single article; clear it for multi-select
+        // so all selected articles appear in the table
+        state.push.search = ids.length === 1 ? searchTitle : '';
         state.push.page = 1;
 
         const wasLoaded = state.push.loaded;
@@ -2582,13 +2589,16 @@ async function hubBulkAction(actionType) {
             });
         }
 
-        // Force reload with search
+        // Force reload articles
         await pushLoadArticles();
 
-        // Set search input value
-        if (searchTitle) {
+        // Set search input value (only for single article)
+        if (ids.length === 1 && searchTitle) {
             const searchInput = document.getElementById('push-search-input');
             if (searchInput) searchInput.value = searchTitle;
+        } else {
+            const searchInput = document.getElementById('push-search-input');
+            if (searchInput) searchInput.value = '';
         }
 
         // Select the articles (normalize to string for consistent matching)
@@ -4966,6 +4976,9 @@ function pushSetupEventListeners() {
     // Push All Ready
     document.getElementById('push-all-ready-btn')?.addEventListener('click', () => pushStartAllReady());
 
+    // Retry Failed
+    document.getElementById('push-retry-failed-btn')?.addEventListener('click', () => pushRetryAllFailed());
+
     // Confirmation modal
     document.getElementById('push-confirm-close')?.addEventListener('click', pushHideConfirm);
     document.getElementById('push-confirm-cancel')?.addEventListener('click', pushHideConfirm);
@@ -5081,6 +5094,7 @@ function pushLoadArticles() {
                 pushRenderPagination();
                 pushUpdateJobCounter();
                 pushUpdateActionButtons();
+                pushUpdateRetryButton();
             })
             .catch(err => {
                 if (tbody) tbody.innerHTML = `<tr><td colspan="${colSpan}" class="empty-cell" style="color:#dc2626;"><i class="fas fa-exclamation-circle"></i> ${escapeHtml(err.message)}</td></tr>`;
@@ -5178,6 +5192,9 @@ function pushRenderTable() {
         link.style.color = 'inherit';
         link.style.textDecoration = 'none';
     });
+
+    // Bind failed badge clicks — show popover with error + retry
+    pushBindFailedBadges(tbody);
 }
 
 // ---------------------------------------------------------------------------
@@ -5353,6 +5370,10 @@ async function pushExecuteConfirmed() {
         ? `✓ ${ok} push${ok !== 1 ? 'es' : ''} completed successfully.`
         : `${ok} succeeded, ${fail} failed.`;
     pushShowToast(msg, fail === 0 ? 'success' : 'warn');
+    // Re-bind failed badges and show retry button if any failed
+    const tbody = document.getElementById('push-table-body');
+    if (tbody) pushBindFailedBadges(tbody);
+    pushUpdateRetryButton();
     // Refresh Content Hub in background so health status updates
     if (state.hub.loaded) loadHubArticles();
 }
@@ -5372,6 +5393,145 @@ function pushSetCellStatus(iid, locale, status, reason) {
         article.locale_data[locale].status = status;
         article.locale_data[locale].reason = reason;
     }
+}
+
+// ---------------------------------------------------------------------------
+// Failed badge click — popover with error details + retry
+// ---------------------------------------------------------------------------
+function pushBindFailedBadges(container) {
+    container.querySelectorAll('.push-td-lang').forEach(cell => {
+        const badge = cell.querySelector('.push-badge-failed');
+        if (!badge) return;
+        badge.addEventListener('click', (e) => {
+            e.stopPropagation();
+            // Close any existing popover
+            document.querySelectorAll('.push-fail-popover').forEach(p => p.remove());
+
+            const iid = cell.dataset.iid;
+            const locale = cell.dataset.locale;
+            const article = state.push.articles.find(a => String(a.intercom_id) === String(iid));
+            const reason = (article?.locale_data?.[locale]?.reason) || 'Unknown error';
+
+            const popover = document.createElement('div');
+            popover.className = 'push-fail-popover';
+            popover.innerHTML = `
+                <div class="fail-title">⚠ Push Failed</div>
+                <div class="fail-reason">${escapeHtml(reason)}</div>
+                <button class="fail-retry-btn" data-iid="${iid}" data-locale="${locale}">
+                    🔄 Retry Push
+                </button>
+            `;
+            cell.appendChild(popover);
+
+            popover.querySelector('.fail-retry-btn').addEventListener('click', async (ev) => {
+                ev.stopPropagation();
+                popover.remove();
+                await pushRetrySingle(iid, locale);
+            });
+
+            // Close popover when clicking outside
+            const closeHandler = (ev) => {
+                if (!popover.contains(ev.target) && ev.target !== badge) {
+                    popover.remove();
+                    document.removeEventListener('click', closeHandler);
+                }
+            };
+            setTimeout(() => document.addEventListener('click', closeHandler), 0);
+        });
+    });
+}
+
+// Retry a single failed push
+async function pushRetrySingle(iid, locale) {
+    pushSetCellStatus(iid, locale, 'PENDING', 'Retrying…');
+    try {
+        const res = await fetch('/api/push/execute', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({intercom_id: iid, locale}),
+        });
+        const data = await res.json();
+        if (data.success) {
+            pushSetCellStatus(iid, locale, 'LIVE', 'Published successfully');
+            pushShowToast('✓ Retry succeeded!', 'success');
+        } else {
+            pushSetCellStatus(iid, locale, 'FAILED', data.error || 'Push failed');
+            pushShowToast('Retry failed: ' + (data.error || 'Unknown error'), 'warn');
+        }
+    } catch (e) {
+        pushSetCellStatus(iid, locale, 'FAILED', e.message);
+        pushShowToast('Retry failed: ' + e.message, 'warn');
+    }
+    // Re-bind failed badges after status change
+    const tbody = document.getElementById('push-table-body');
+    if (tbody) pushBindFailedBadges(tbody);
+    pushUpdateRetryButton();
+}
+
+// Retry all failed pushes
+async function pushRetryAllFailed() {
+    const pairs = [];
+    state.push.articles.forEach(a => {
+        const ld = a.locale_data || {};
+        state.push.locales.forEach(loc => {
+            if ((ld[loc] || {}).status === 'FAILED') {
+                pairs.push({iid: String(a.intercom_id), locale: loc});
+            }
+        });
+    });
+    if (pairs.length === 0) { pushShowToast('No failed pushes to retry.', 'warn'); return; }
+
+    const retryBtn = document.getElementById('push-retry-failed-btn');
+    if (retryBtn) { retryBtn.disabled = true; retryBtn.innerHTML = '🔄 &nbsp;Retrying…'; }
+
+    let ok = 0, fail = 0;
+    for (const {iid, locale} of pairs) {
+        pushSetCellStatus(iid, locale, 'PENDING', 'Retrying…');
+        try {
+            const res = await fetch('/api/push/execute', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({intercom_id: iid, locale}),
+            });
+            const data = await res.json();
+            if (data.success) {
+                pushSetCellStatus(iid, locale, 'LIVE', 'Published successfully');
+                ok++;
+            } else {
+                pushSetCellStatus(iid, locale, 'FAILED', data.error || 'Push failed');
+                fail++;
+            }
+        } catch (e) {
+            pushSetCellStatus(iid, locale, 'FAILED', e.message);
+            fail++;
+        }
+    }
+
+    const msg = fail === 0
+        ? `✓ All ${ok} retries succeeded!`
+        : `${ok} succeeded, ${fail} still failed.`;
+    pushShowToast(msg, fail === 0 ? 'success' : 'warn');
+
+    if (retryBtn) { retryBtn.disabled = false; retryBtn.innerHTML = '🔄 &nbsp;Retry Failed'; }
+    // Re-bind failed badges and update button visibility
+    const tbody = document.getElementById('push-table-body');
+    if (tbody) pushBindFailedBadges(tbody);
+    pushUpdateRetryButton();
+    if (state.hub.loaded) loadHubArticles();
+}
+
+// Show/hide "Retry Failed" button based on whether any FAILED cells exist
+function pushUpdateRetryButton() {
+    const retryBtn = document.getElementById('push-retry-failed-btn');
+    if (!retryBtn) return;
+    let hasFailed = false;
+    state.push.articles.forEach(a => {
+        const ld = a.locale_data || {};
+        state.push.locales.forEach(loc => {
+            if ((ld[loc] || {}).status === 'FAILED') hasFailed = true;
+        });
+    });
+    retryBtn.style.display = hasFailed ? '' : 'none';
 }
 
 // ---------------------------------------------------------------------------

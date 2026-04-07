@@ -40,7 +40,13 @@ class IntercomClient:
                     time.sleep(retry_after)
                     continue
                 
-                response.raise_for_status()
+                if response.status_code >= 400:
+                    # Include response body in error for better diagnostics
+                    error_body = response.text[:500]
+                    raise requests.exceptions.HTTPError(
+                        f"{response.status_code} {response.reason} for url: {url} — {error_body}",
+                        response=response,
+                    )
                 return response
                 
             except requests.exceptions.RequestException as e:
