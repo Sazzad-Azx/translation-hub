@@ -5359,27 +5359,40 @@ async function pushStartSelected() {
     if (state.push.locales.length === 0) { showModalAlert('No Language Selected', 'Please select at least one language first.'); return; }
     if (state.push.selectedIds.size === 0) { showModalAlert('No Article Selected', 'Please select at least one article first.'); return; }
 
-    // Always fetch fresh push status from the API for all selected articles.
-    // state.push.articles may not include them (pagination, race conditions).
-    let allArticles = [];
-    try {
-        const params = new URLSearchParams({
-            locales: state.push.locales.join(','),
-            search: '',
-            page: '1',
-            page_size: '5000',
-        });
-        const resp = await fetch(`/api/push/articles-multi?${params}`);
-        const data = await resp.json();
-        if (data.success && data.articles) {
-            allArticles = data.articles;
-        }
-    } catch (e) {
-        console.error('Failed to fetch push articles:', e);
-    }
+    // Fast path: if every selected article is already in memory with its
+    // per-locale status, skip the heavy /api/push/articles-multi fetch and
+    // open the modal instantly. The fetch only runs when the user selected
+    // articles across paginated pages and something isn't in state yet.
+    const selectedIds = [...state.push.selectedIds];
+    const inMemory = state.push.articles || [];
+    const byId = new Map(inMemory.map(a => [String(a.intercom_id), a]));
+    const allPresent = selectedIds.every(iid => {
+        const art = byId.get(String(iid));
+        return art && art.locale_data;
+    });
 
-    // Fallback to in-memory if API failed
-    if (allArticles.length === 0) allArticles = state.push.articles;
+    let allArticles;
+    if (allPresent) {
+        allArticles = inMemory;
+    } else {
+        allArticles = [];
+        try {
+            const params = new URLSearchParams({
+                locales: state.push.locales.join(','),
+                search: '',
+                page: '1',
+                page_size: '5000',
+            });
+            const resp = await fetch(`/api/push/articles-multi?${params}`);
+            const data = await resp.json();
+            if (data.success && data.articles) {
+                allArticles = data.articles;
+            }
+        } catch (e) {
+            console.error('Failed to fetch push articles:', e);
+        }
+        if (allArticles.length === 0) allArticles = inMemory;
+    }
 
     const pairs = [];
     state.push.selectedIds.forEach(iid => {
