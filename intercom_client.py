@@ -477,6 +477,23 @@ class IntercomClient:
         response = self._make_request("POST", "/articles", json=article_data)
         return response.json()
     
+    def delete_article(self, article_id: str) -> bool:
+        """
+        Delete an article from Intercom Help Center.
+
+        Args:
+            article_id: The article ID to delete
+
+        Returns:
+            True if successfully deleted
+        """
+        try:
+            self._make_request("DELETE", f"/articles/{article_id}")
+            return True
+        except Exception as e:
+            print(f"    [WARN] Failed to delete article {article_id}: {e}")
+            return False
+
     def publish_article(self, article_id: str) -> Dict:
         """
         Publish an article

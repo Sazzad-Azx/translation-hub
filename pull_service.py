@@ -471,6 +471,64 @@ def _cleanup_locale_articles():
         print(f"    [WARN] Locale cleanup failed: {e}")
 
 
+def cleanup_locale_articles_from_intercom(intercom_client) -> Dict:
+    """
+    Find and delete [LOCALE]-prefixed duplicate articles from Intercom itself.
+    These orphan articles are created by the push fallback (Approach 3) and inflate
+    collection article counts on the live Intercom Help Center.
+
+    Returns: { success, found, deleted, failed, articles }
+    """
+    if not intercom_client:
+        return {"success": False, "error": "IntercomClient not initialized"}
+
+    try:
+        # Fetch ALL articles from Intercom
+        all_articles = intercom_client.get_articles()
+        locale_articles = []
+        for a in all_articles:
+            title = (a.get("title") or "").strip()
+            aid = str(a.get("id") or "")
+            if aid and _LOCALE_PREFIX_RE.match(title):
+                locale_articles.append({"id": aid, "title": title})
+
+        if not locale_articles:
+            return {
+                "success": True,
+                "found": 0,
+                "deleted": 0,
+                "failed": 0,
+                "articles": [],
+                "message": "No [LOCALE] duplicate articles found in Intercom",
+            }
+
+        deleted = 0
+        failed = 0
+        details = []
+        for art in locale_articles:
+            ok = intercom_client.delete_article(art["id"])
+            if ok:
+                deleted += 1
+                details.append({**art, "status": "deleted"})
+            else:
+                failed += 1
+                details.append({**art, "status": "failed"})
+
+        # Also clean up from Supabase pull_registry
+        _cleanup_locale_articles()
+
+        return {
+            "success": True,
+            "found": len(locale_articles),
+            "deleted": deleted,
+            "failed": failed,
+            "articles": details,
+            "message": f"Deleted {deleted}/{len(locale_articles)} [LOCALE] duplicate articles from Intercom",
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
 def _cleanup_non_helpcenter_articles(valid_collection_ids: set):
     """Remove articles from pull_registry whose collection_id is not in any Help Center."""
     if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
