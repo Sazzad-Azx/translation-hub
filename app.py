@@ -881,6 +881,7 @@ def dashboard_stats():
     Optional query params: start_date, end_date (YYYY-MM-DD) for source changes filter.
     """
     import datetime, time as _time
+    from concurrent.futures import ThreadPoolExecutor
     try:
         _t0 = _time.time()
         now = datetime.datetime.utcnow()
@@ -888,55 +889,83 @@ def dashboard_stats():
         month_ago = now - datetime.timedelta(days=30)
 
 
-        # ---------- Total articles count is derived after pull_registry fetch below ----------
         import re as _re
         _LOCALE_PREFIX = _re.compile(r'^\[[A-Z]{2}(?:-[A-Z]{1,4})?\]\s+', _re.IGNORECASE)
 
-        # ---------- Translations from Supabase (for translated count + cost) ----------
-        all_translations = []
-        try:
-            from translation_supabase import list_article_translations
-            all_translations = list_article_translations()
-        except Exception:
-            pass
-        print(f"[TIMING] translations fetch: {_time.time()-_t0:.1f}s", flush=True)
+        from config import SUPABASE_URL, SUPABASE_SERVICE_KEY, TARGET_LANGUAGES as _TL
+        import requests as _req_pr
 
-        # total_translated is computed after all_pull_rows is fetched (needs outdated check)
-        from config import TARGET_LANGUAGES as _TL
+        _SB_HEADERS = {
+            "apikey": SUPABASE_SERVICE_KEY,
+            "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+        }
 
-        # ---------- Source article changes from pull_registry ----------
-        # This tracks actual Intercom article edits, not translation rows
-        all_pull_rows = []
-        try:
-            import requests as _req_pr
-            from config import SUPABASE_URL, SUPABASE_SERVICE_KEY
-            offset = 0
-            while True:
+        # Dashboard-specific translation fetcher: only the activity feed uses
+        # this result (total_translated now comes from list_translate_articles),
+        # and the feed renders at most 20 entries, so 50 rows is plenty. The
+        # explicit low cap also keeps us well under Supabase's 1000-row default.
+        def _fetch_translations_for_dashboard():
+            try:
                 resp = _req_pr.get(
-                    f"{SUPABASE_URL}/rest/v1/pull_registry",
-                    headers={
-                        "apikey": SUPABASE_SERVICE_KEY,
-                        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
-                    },
+                    f"{SUPABASE_URL}/rest/v1/article_translations",
+                    headers=_SB_HEADERS,
                     params={
-                        "select": "intercom_id,title,source_updated_at,pulled_at",
-                        "limit": 1000,
-                        "offset": offset,
+                        "select": "parent_intercom_article_id,translated_title,created_at,updated_at,pushed_at",
+                        "order": "updated_at.desc",
+                        "limit": 50,
                     },
                     timeout=15,
                 )
                 if resp.status_code != 200:
-                    break
-                batch = resp.json()
-                if not batch:
-                    break
-                all_pull_rows.extend(batch)
-                if len(batch) < 1000:
-                    break
-                offset += 1000
-        except Exception:
-            pass
-        print(f"[TIMING] pull_registry fetch: {_time.time()-_t0:.1f}s", flush=True)
+                    return []
+                data = resp.json()
+                return data if isinstance(data, list) else []
+            except Exception:
+                return []
+
+        def _fetch_all_pull_rows():
+            rows = []
+            offset = 0
+            try:
+                while True:
+                    resp = _req_pr.get(
+                        f"{SUPABASE_URL}/rest/v1/pull_registry",
+                        headers=_SB_HEADERS,
+                        params={
+                            "select": "intercom_id,title,source_updated_at,pulled_at",
+                            "limit": 1000,
+                            "offset": offset,
+                        },
+                        timeout=15,
+                    )
+                    if resp.status_code != 200:
+                        break
+                    batch = resp.json()
+                    if not batch:
+                        break
+                    rows.extend(batch)
+                    if len(batch) < 1000:
+                        break
+                    offset += 1000
+            except Exception:
+                pass
+            return rows
+
+        def _fetch_last_sync_str():
+            try:
+                from pull_service import get_last_sync_time
+                return get_last_sync_time()
+            except Exception:
+                return None
+
+        with ThreadPoolExecutor(max_workers=3) as _ex:
+            _f_trans = _ex.submit(_fetch_translations_for_dashboard)
+            _f_pull = _ex.submit(_fetch_all_pull_rows)
+            _f_sync = _ex.submit(_fetch_last_sync_str)
+            all_translations = _f_trans.result()
+            all_pull_rows = _f_pull.result()
+            last_sync_str = _f_sync.result()
+        print(f"[TIMING] parallel fetch: {_time.time()-_t0:.1f}s", flush=True)
 
         # ---------- Total articles (from pull_registry, excluding [LOCALE] prefixed) ----------
         # Same logic as Control Tower so both counts always match
@@ -1099,9 +1128,7 @@ def dashboard_stats():
                 'time': _time_ago(ts)
             })
 
-        # Get last sync source time
-        from pull_service import get_last_sync_time
-        last_sync_str = get_last_sync_time()
+        # last_sync_str was fetched in parallel above
         last_synced = _parse_ts(last_sync_str) if last_sync_str else None
         last_synced_text = _time_ago(last_synced) if last_synced else 'Never'
 
@@ -2262,6 +2289,26 @@ def push_bulk():
             concurrency=3,
         )
         return jsonify({'success': True, **result})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ============================================================
+# CLEANUP: Remove [LOCALE] duplicate articles from Intercom
+# ============================================================
+
+@app.route('/api/push/cleanup-locale-duplicates', methods=['POST'])
+def cleanup_locale_duplicates():
+    """
+    Find and delete [LOCALE]-prefixed duplicate articles from Intercom.
+    These are orphan articles created by the push fallback that inflate
+    collection article counts on the live Help Center.
+    """
+    from pull_service import cleanup_locale_articles_from_intercom
+    try:
+        init_clients()
+        result = cleanup_locale_articles_from_intercom(intercom_client)
+        return jsonify(result)
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
