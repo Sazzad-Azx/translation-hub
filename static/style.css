@@ -4688,3 +4688,66 @@ textarea.gl-input { resize: vertical; }
     .admin-form-group { min-width: 100%; }
     .user-name { display: none; }
 }
+
+/* ---- Dashboard loading indicators (top progress bar + corner toast) ---- */
+.dash-loading-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    z-index: 9999;
+    overflow: hidden;
+    pointer-events: none;
+    background: rgba(46, 109, 164, 0.12);
+}
+.dash-loading-bar::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    height: 100%;
+    width: 30%;
+    background: linear-gradient(90deg,
+        rgba(46, 109, 164, 0) 0%,
+        var(--primary) 50%,
+        rgba(46, 109, 164, 0) 100%);
+    animation: dashBarSlide 1.3s ease-in-out infinite;
+}
+@keyframes dashBarSlide {
+    0%   { left: -30%; }
+    100% { left: 100%; }
+}
+
+.dash-inline-loading {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: 14px;
+    color: var(--primary);
+    font-size: 14px;
+    font-weight: 500;
+    vertical-align: middle;
+}
+.dash-inline-loading .dash-inline-spinner {
+    width: 13px;
+    height: 13px;
+    border: 2px solid rgba(46, 109, 164, 0.25);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: dashSpin 0.8s linear infinite;
+    flex-shrink: 0;
+}
+.dash-inline-loading .dash-inline-sep {
+    opacity: 0.5;
+}
+.dash-inline-loading .dash-inline-sub {
+    font-weight: 400;
+    opacity: 0.85;
+}
+.dash-inline-loading.is-error {
+    color: #dc2626;
+}
+.dash-inline-loading.is-error i { font-size: 14px; }
+@keyframes dashSpin {
+    to { transform: rotate(360deg); }
+}

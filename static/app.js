@@ -987,9 +987,12 @@ function switchSection(sectionId) {
     // Close sidebar on mobile
     document.getElementById('sidebar').classList.remove('open');
 
-    // Refresh dashboard data when navigating back to it
+    // Refresh dashboard data when navigating back to it; dismiss any lingering
+    // dashboard loading indicator when navigating away.
     if (sectionId === 'dashboard') {
         loadDashboardData();
+    } else {
+        hideDashboardLoading();
     }
 
     // Lazy-load sections on first visit
@@ -1145,7 +1148,70 @@ async function testConnection() {
 }
 
 // ---- Dashboard Data ----
+function formatLastSynced(iso) {
+    if (!iso) return 'Never';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return 'Never';
+    const now = new Date();
+    const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    if (d.toDateString() === now.toDateString()) return 'Today at ' + time;
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (d.toDateString() === yesterday.toDateString()) return 'Yesterday at ' + time;
+    const date = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    return date + ' at ' + time;
+}
+function isOnDashboard() {
+    const active = document.querySelector('.page-section.active');
+    return !!(active && active.id === 'section-dashboard');
+}
+function showDashboardLoading() {
+    if (!isOnDashboard()) return;
+    // Thin indeterminate progress bar at the top of the page.
+    if (!document.getElementById('dash-loading-bar')) {
+        const bar = document.createElement('div');
+        bar.id = 'dash-loading-bar';
+        bar.className = 'dash-loading-bar';
+        document.body.appendChild(bar);
+    }
+    // Append an inline status next to the "Dashboard" title. The "Last synced"
+    // subtitle stays visible on its own line below.
+    if (!document.getElementById('dash-inline-loading')) {
+        const titleEl = document.querySelector('.dash-header .tr-page-title');
+        if (titleEl) {
+            const loading = document.createElement('span');
+            loading.id = 'dash-inline-loading';
+            loading.className = 'dash-inline-loading';
+            loading.innerHTML = '<span class="dash-inline-spinner"></span>'
+                + '<span>Syncing with database</span>'
+                + '<span class="dash-inline-sep">•</span>'
+                + '<span class="dash-inline-sub">Fetching live translation data…</span>';
+            titleEl.insertAdjacentElement('afterend', loading);
+        }
+    }
+}
+function hideDashboardLoading(failed) {
+    const bar = document.getElementById('dash-loading-bar');
+    if (bar) bar.remove();
+    const loading = document.getElementById('dash-inline-loading');
+    if (!loading) return;
+    if (failed && isOnDashboard()) {
+        loading.classList.add('is-error');
+        loading.innerHTML = '<i class="fas fa-exclamation-circle"></i>'
+            + '<span>Could not sync with database</span>';
+        setTimeout(() => loading.remove(), 3500);
+    } else {
+        loading.remove();
+    }
+}
+
 async function loadDashboardData() {
+    // Only show the loading indicator when the user has nothing to look at yet.
+    // Subsequent visits refresh silently — the previous data stays on screen
+    // until the new data replaces it, so announcing a "load" would be noise.
+    const isFirstLoad = !state.dashboardStats;
+    if (isFirstLoad) showDashboardLoading();
+    let loadFailed = false;
     // Fetch stats and costs in parallel — stats render instantly, costs fill in when ready
     const statsPromise = fetch('/api/dashboard/stats').then(r => r.ok ? r.json() : null).catch(() => null);
     const costsPromise = fetch('/api/dashboard/costs').then(r => r.ok ? r.json() : null).catch(() => null);
@@ -1155,8 +1221,10 @@ async function loadDashboardData() {
     if (statsData && statsData.success) {
         state.dashboardStats = statsData;
         renderDashboard(statsData);
-    } else {
+    } else if (isFirstLoad) {
+        // Only fall back to placeholders on first load; on refresh, keep existing data visible.
         renderDashboard(getPlaceholderStats());
+        loadFailed = true;
     }
 
     // Render cost data when it arrives (API Cost card + Cost Analysis chart)
@@ -1165,6 +1233,8 @@ async function loadDashboardData() {
         Object.assign(state.dashboardStats, costsData);
         renderCostData(costsData);
     }
+
+    if (isFirstLoad) hideDashboardLoading(loadFailed);
 }
 
 function getPlaceholderStats() {
@@ -1196,9 +1266,9 @@ function renderDashboard(data) {
     } else {
         setStatValue('stat-changed-week', formatNumber(data.changed_this_week || 0));
     }
-    // Last synced
+    // Last synced — format the ISO timestamp using the browser's local timezone.
     const syncEl = document.getElementById('dash-last-synced');
-    if (syncEl) syncEl.textContent = 'Last synced: ' + (data.last_synced || '—');
+    if (syncEl) syncEl.textContent = 'Last synced: ' + formatLastSynced(data.last_synced);
 
     // Charts — only render changes chart here; cost chart rendered by renderCostData
     renderChangesChart('week', data);

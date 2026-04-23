@@ -391,30 +391,27 @@ def sync_source_list(intercom_client) -> Dict:
 
 
 def _save_last_sync_time():
-    """Store last sync source time in automation_settings."""
+    """Store last sync source time in automation_settings.
+
+    Writes to the `last_run_at` column (the schema has no `value` column —
+    the previous implementation targeted a non-existent column and silently
+    failed on every call). Uses a PostgREST upsert keyed on `key` so the row
+    is created the first time and updated on every subsequent sync.
+    """
     if not REST_BASE:
         return
     try:
         now = datetime.now(timezone.utc).isoformat()
-        headers = _headers("return=minimal")
-        # Try update first
-        r = requests.patch(
-            f"{REST_BASE}/automation_settings?key=eq.last_sync_source",
-            headers=headers,
-            json={"value": now, "updated_at": now},
+        r = requests.post(
+            f"{REST_BASE}/automation_settings?on_conflict=key",
+            headers=_headers("resolution=merge-duplicates,return=minimal"),
+            json={"key": "last_sync_source", "last_run_at": now, "updated_at": now},
             timeout=15,
         )
-        if r.status_code == 404 or (r.ok and r.text == '[]'):
-            # Insert
-            headers2 = _headers("return=minimal")
-            requests.post(
-                f"{REST_BASE}/automation_settings",
-                headers=headers2,
-                json={"key": "last_sync_source", "value": now, "updated_at": now},
-                timeout=15,
-            )
-    except Exception:
-        pass
+        if not r.ok:
+            print(f"[_save_last_sync_time] HTTP {r.status_code}: {r.text[:300]}", flush=True)
+    except Exception as e:
+        print(f"[_save_last_sync_time] error: {e}", flush=True)
 
 
 def get_last_sync_time() -> str:
@@ -427,13 +424,13 @@ def get_last_sync_time() -> str:
         r = requests.get(
             f"{REST_BASE}/automation_settings",
             headers=headers,
-            params={"select": "value", "key": "eq.last_sync_source"},
+            params={"select": "last_run_at", "key": "eq.last_sync_source"},
             timeout=15,
         )
         if r.ok:
             rows = r.json()
             if rows:
-                return rows[0].get("value", "")
+                return rows[0].get("last_run_at") or ""
     except Exception:
         pass
     return ""

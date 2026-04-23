@@ -1128,16 +1128,16 @@ def dashboard_stats():
                 'time': _time_ago(ts)
             })
 
-        # last_sync_str was fetched in parallel above
-        last_synced = _parse_ts(last_sync_str) if last_sync_str else None
-        last_synced_text = _time_ago(last_synced) if last_synced else 'Never'
+        # last_sync_str was fetched in parallel above. Send the raw ISO to the
+        # frontend so it can format with the user's local timezone.
+        last_synced_iso = last_sync_str or None
 
         print(f"[TIMING] TOTAL: {_time.time()-_t0:.1f}s", flush=True)
         return jsonify({
             'success': True,
             'total_articles': total_articles,
             'total_translated': total_translated,
-            'last_synced': last_synced_text,
+            'last_synced': last_synced_iso,
             'changed_this_week': changed_week,
             'changed_this_month': changed_month,
             'changes_weekly': changes_weekly,
