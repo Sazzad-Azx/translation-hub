@@ -479,7 +479,7 @@ def bulk_translate(
     intercom_ids: List[str],
     locales: List[str],
     translator_instance,
-    concurrency: int = 3,
+    concurrency: int = 8,
     glossary_id: Optional[str] = None,
 ) -> Dict:
     """

@@ -3346,9 +3346,22 @@ async function trExecuteBulkTranslate() {
         }
     }
 
-    // Translate one article×locale at a time for live cell updates
+    // Run up to TR_BULK_CONCURRENCY translations in parallel while keeping
+    // per-cell live updates: workers pull from a shared job queue and flip
+    // each cell as its own request returns.
+    const TR_BULK_CONCURRENCY = 8;
+    const jobs = [];
     for (const iid of articleIds) {
         for (const loc of locales) {
+            jobs.push({ iid, loc });
+        }
+    }
+    let jobIndex = 0;
+    async function trBulkWorker() {
+        while (true) {
+            const i = jobIndex++;
+            if (i >= jobs.length) return;
+            const { iid, loc } = jobs[i];
             try {
                 const resp = await fetch('/api/translate-hub/bulk', {
                     method: 'POST',
@@ -3372,6 +3385,8 @@ async function trExecuteBulkTranslate() {
             trShowToast(`Translating ${completed}/${totalJobs}...`, 'fn-loader');
         }
     }
+    const workerCount = Math.min(TR_BULK_CONCURRENCY, jobs.length);
+    await Promise.all(Array.from({ length: workerCount }, () => trBulkWorker()));
 
     document.title = `Done — ${ok} translated, ${fail} failed`;
     const msg = `Completed: ${ok} success, ${fail} failed out of ${totalJobs} jobs.`;

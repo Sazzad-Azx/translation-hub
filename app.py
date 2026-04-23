@@ -1553,7 +1553,7 @@ def translate_hub_bulk():
             intercom_ids=intercom_ids,
             locales=locales,
             translator_instance=translator,
-            concurrency=3,
+            concurrency=8,
             glossary_id=None,  # Auto-uses all active glossaries
         )
         return jsonify({'success': True, **result})
