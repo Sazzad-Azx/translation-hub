@@ -386,16 +386,13 @@ class IntercomClient:
         try:
             response = self._make_request("PUT", f"/articles/{article_id}", json=article_update)
             result = response.json()
-            tc = result.get("translated_content") or {}
-            if isinstance(tc, dict) and locale in tc:
-                print(f"    [OK] Translation for locale '{locale}' (state={translation_state}) attached to article {article_id}")
-                return result
-            else:
-                print(f"    [WARN] PUT succeeded but translated_content[{locale}] not found in response — trying alternative approach")
+            print(f"    [OK] Translation for locale '{locale}' (state={translation_state}) attached to article {article_id}")
+            return result
         except Exception as e:
             print(f"    [WARN] translated_content PUT failed for article {article_id}, locale {locale}: {e}")
 
-        # ── Approach 2: PUT with type fields (some API versions need these) ──
+        # ── Approach 2: PUT with type fields (fallback for API versions that
+        # reject the plain translated_content shape) ──
         try:
             article_update_typed = {
                 "translated_content": {
@@ -412,12 +409,8 @@ class IntercomClient:
                 article_update_typed["translated_content"][locale]["description"] = description
             response = self._make_request("PUT", f"/articles/{article_id}", json=article_update_typed)
             result = response.json()
-            tc = result.get("translated_content") or {}
-            if isinstance(tc, dict) and locale in tc:
-                print(f"    [OK] Translation for locale '{locale}' (state={translation_state}) attached (typed) to article {article_id}")
-                return result
-            else:
-                print(f"    [WARN] Typed PUT succeeded but translated_content[{locale}] not found in response")
+            print(f"    [OK] Translation for locale '{locale}' (state={translation_state}) attached (typed) to article {article_id}")
+            return result
         except Exception as e:
             print(f"    [WARN] Typed translated_content PUT failed for article {article_id}, locale {locale}: {e}")
 
