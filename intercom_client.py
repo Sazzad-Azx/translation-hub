@@ -338,36 +338,45 @@ class IntercomClient:
         locale: str,
         title: str,
         body: str,
-        description: Optional[str] = None
+        description: Optional[str] = None,
+        source_state: str = "published",
     ) -> Dict:
         """
         Create or update a translation for an article.
 
+        The translation's state will match the source article's state so that
+        draft articles stay hidden in all locales on the Help Center.
+
         Tries multiple approaches in order:
-        1. POST /articles/{id}/translations (dedicated translations endpoint)
-        2. PUT /articles/{id} with translated_content (multi-language workspaces)
+        1. PUT /articles/{id} with translated_content (multi-language workspaces)
+        2. PUT with explicit type fields (some API versions need these)
         3. Create a separate article with [LOCALE] prefix (fallback for workspaces
            without multi-language support)
-        
+
         Args:
             article_id: The article ID
             locale: Language code (e.g., 'fr', 'de', 'es')
             title: Translated title
             body: Translated body/content
             description: Optional translated description
-            
+            source_state: The source article's state ('published' or 'draft').
+                          Translation state will match this so draft articles
+                          stay hidden in all locales.
+
         Returns:
             Updated/created article or translation dictionary
         """
-        # ── Primary approach: PUT article with translated_content ──
-        # This attaches the translation to the parent article so it appears
-        # when users switch languages on the public Help Center.
+        # Use the source article's state — draft articles must stay draft
+        # in all locales to avoid showing unpublished content on the Help Center.
+        translation_state = source_state if source_state in ("published", "draft") else "published"
+
+        # ── Approach 1: PUT article with translated_content ──
         article_update = {
             "translated_content": {
                 locale: {
                     "title": title,
                     "body": body,
-                    "state": "published"
+                    "state": translation_state,
                 }
             }
         }
@@ -377,10 +386,40 @@ class IntercomClient:
         try:
             response = self._make_request("PUT", f"/articles/{article_id}", json=article_update)
             result = response.json()
-            print(f"    [OK] Translation for locale '{locale}' attached to article {article_id}")
-            return result
+            tc = result.get("translated_content") or {}
+            if isinstance(tc, dict) and locale in tc:
+                print(f"    [OK] Translation for locale '{locale}' (state={translation_state}) attached to article {article_id}")
+                return result
+            else:
+                print(f"    [WARN] PUT succeeded but translated_content[{locale}] not found in response — trying alternative approach")
         except Exception as e:
             print(f"    [WARN] translated_content PUT failed for article {article_id}, locale {locale}: {e}")
+
+        # ── Approach 2: PUT with type fields (some API versions need these) ──
+        try:
+            article_update_typed = {
+                "translated_content": {
+                    "type": "article_translated_content",
+                    locale: {
+                        "type": "article_content",
+                        "title": title,
+                        "body": body,
+                        "state": translation_state,
+                    }
+                }
+            }
+            if description:
+                article_update_typed["translated_content"][locale]["description"] = description
+            response = self._make_request("PUT", f"/articles/{article_id}", json=article_update_typed)
+            result = response.json()
+            tc = result.get("translated_content") or {}
+            if isinstance(tc, dict) and locale in tc:
+                print(f"    [OK] Translation for locale '{locale}' (state={translation_state}) attached (typed) to article {article_id}")
+                return result
+            else:
+                print(f"    [WARN] Typed PUT succeeded but translated_content[{locale}] not found in response")
+        except Exception as e:
+            print(f"    [WARN] Typed translated_content PUT failed for article {article_id}, locale {locale}: {e}")
 
         # ── Fallback: Create separate translated article ──
         # Only used if the workspace does not support multi-language.
@@ -391,7 +430,7 @@ class IntercomClient:
             title=translated_title,
             body=body,
             description=description or "",
-            state="published",
+            state=translation_state,
         )
         return created
     

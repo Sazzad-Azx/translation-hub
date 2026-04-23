@@ -553,6 +553,10 @@ def list_collections() -> List[Dict]:
         if not isinstance(rows, list):
             return []
 
+        # Filter out [LOCALE] translated articles created by Push Approach 3
+        rows = [a for a in rows
+                if not _LOCALE_PREFIX_RE.match((a.get("title") or ""))]
+
         translations_map = _fetch_all_translations()
 
         collections: Dict[str, Dict] = {}

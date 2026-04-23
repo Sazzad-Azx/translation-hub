@@ -623,6 +623,17 @@ def push_single(intercom_id: str, locale: str, intercom_client) -> Dict:
         _active_pushes[job_key] = "PENDING"
 
     try:
+        # Fetch source article to check its state
+        from pull_service import get_pull_article
+        source_article = get_pull_article(intercom_id)
+        source_state = (source_article.get("state") or "published") if source_article else "published"
+
+        # Block pushing translations for draft articles — they should stay
+        # hidden in all locales on the Help Center.
+        if source_state == "draft":
+            return {"success": False, "intercom_id": intercom_id, "locale": locale,
+                    "message": "Skipped: source article is draft (not published)"}
+
         # Fetch translation
         translation = _fetch_translation_full(intercom_id, locale)
         if not translation:
@@ -638,12 +649,13 @@ def push_single(intercom_id: str, locale: str, intercom_client) -> Dict:
         # Pre-process HTML to ensure heading spacing is preserved
         body = _prepare_body_for_push(body)
 
-        # Push to Intercom
+        # Push to Intercom — state matches source article
         result = intercom_client.create_or_update_translation(
             article_id=intercom_id,
             locale=locale,
             title=title,
             body=body,
+            source_state=source_state,
         )
 
         # Update pushed_at in Supabase
