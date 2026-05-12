@@ -292,6 +292,68 @@ def get_pull_article(intercom_id: str) -> Optional[Dict]:
 # Sync source list (populate pull_registry from Intercom without pulling body)
 # ---------------------------------------------------------------------------
 
+def _fetch_all_existing_intercom_ids() -> set:
+    """Return every intercom_id currently in pull_registry as a set of strings.
+
+    One paginated GET (1000-row pages) rather than 1257+ per-article lookups.
+    """
+    ids: set = set()
+    if not REST_BASE:
+        return ids
+    headers = _headers()
+    headers.pop("Prefer", None)
+    offset = 0
+    batch_size = 1000
+    while True:
+        try:
+            resp = requests.get(
+                f"{REST_BASE}/{TABLE}",
+                headers=headers,
+                params={"select": "intercom_id", "limit": str(batch_size), "offset": str(offset)},
+                timeout=20,
+            )
+        except Exception:
+            break
+        if not resp.ok:
+            break
+        batch = resp.json() if resp.text else []
+        if not isinstance(batch, list) or not batch:
+            break
+        for r in batch:
+            iid = r.get("intercom_id")
+            if iid:
+                ids.add(str(iid))
+        if len(batch) < batch_size:
+            break
+        offset += batch_size
+    return ids
+
+
+def _bulk_upsert_rows(rows: List[Dict], chunk_size: int = 500):
+    """Bulk upsert into pull_registry via PostgREST on_conflict=intercom_id.
+
+    All rows in a single batch should share the same key set so the
+    ON CONFLICT DO UPDATE column list is consistent. We split sync_source_list
+    into two calls (new vs existing) to satisfy that.
+    """
+    if not REST_BASE or not rows:
+        return
+    headers = _headers("resolution=merge-duplicates,return=minimal")
+    for i in range(0, len(rows), chunk_size):
+        batch = rows[i:i + chunk_size]
+        try:
+            resp = requests.post(
+                f"{REST_BASE}/{TABLE}?on_conflict=intercom_id",
+                json=batch,
+                headers=headers,
+                timeout=30,
+            )
+            if not resp.ok:
+                print(f"[_bulk_upsert_rows] HTTP {resp.status_code}: {resp.text[:300]}", flush=True)
+        except Exception as e:
+            print(f"[_bulk_upsert_rows] error: {e}", flush=True)
+
+
 def sync_source_list(intercom_client) -> Dict:
     """
     Fetch the article listing from Intercom and upsert into pull_registry
@@ -329,9 +391,18 @@ def sync_source_list(intercom_client) -> Dict:
             break
         page += 1
 
+    # One bulk GET of every intercom_id already in pull_registry, so we can
+    # decide new-vs-existing without a GET per article (was the dominant cost
+    # that pushed /api/pull/sync-source past Vercel's function timeout).
+    existing_ids = _fetch_all_existing_intercom_ids()
+
+    now = datetime.now(timezone.utc).isoformat()
+    new_rows: List[Dict] = []
+    existing_rows: List[Dict] = []
     synced = 0
     skipped_locale = 0
     skipped_no_helpcenter = 0
+
     for a in articles:
         iid = str(a.get("id", ""))
         if not iid:
@@ -349,58 +420,31 @@ def sync_source_list(intercom_client) -> Dict:
             skipped_no_helpcenter += 1
             continue
 
-        description = a.get("description") or ""
-        state = a.get("state") or "published"
-        url = a.get("url") or ""
-        source_updated = _ts_to_iso(a.get("updated_at"))
-        author_id = str(a.get("author_id") or "")
-        collection_id = article_collection_id
-        collection_name = collection_map.get(collection_id, "")
-
-        existing = get_pull_article(iid)
-        now = datetime.now(timezone.utc).isoformat()
-
         row = {
             "intercom_id": iid,
             "title": title,
-            "description": description,
-            "state": state,
-            "url": url,
-            "author_id": author_id,
-            "collection_id": collection_id,
-            "collection_name": collection_name,
+            "description": a.get("description") or "",
+            "state": a.get("state") or "published",
+            "url": a.get("url") or "",
+            "author_id": str(a.get("author_id") or ""),
+            "collection_id": article_collection_id,
+            "collection_name": collection_map.get(article_collection_id, ""),
             "updated_at": now,
         }
-        # Only set source_updated_at for new articles.
-        # For existing articles, source_updated_at is only updated during
-        # full pull when content_hash actually changes — prevents push-triggered
-        # Intercom timestamp bumps from marking articles as outdated.
-        if not existing:
-            row["source_updated_at"] = source_updated
-
-        if existing:
-            # Update
-            headers = _headers("return=minimal")
-            requests.patch(
-                f"{REST_BASE}/{TABLE}?intercom_id=eq.{iid}",
-                json=row,
-                headers=headers,
-                timeout=15,
-            )
+        if iid in existing_ids:
+            # Preserve existing source_updated_at — full pull updates it only
+            # when content_hash changes, so push-triggered Intercom timestamp
+            # bumps don't mark articles as outdated.
+            existing_rows.append(row)
         else:
-            # Insert
+            row["source_updated_at"] = _ts_to_iso(a.get("updated_at"))
             row["created_at"] = now
-            headers = _headers("return=minimal")
-            resp = requests.post(f"{REST_BASE}/{TABLE}", json=row, headers=headers, timeout=15)
-            if resp.status_code == 409:
-                # Already exists (race condition), just update
-                requests.patch(
-                    f"{REST_BASE}/{TABLE}?intercom_id=eq.{iid}",
-                    json=row,
-                    headers=headers,
-                    timeout=15,
-                )
+            new_rows.append(row)
         synced += 1
+
+    # Two bulk upserts (~3 HTTP roundtrips total instead of ~2,500).
+    _bulk_upsert_rows(new_rows)
+    _bulk_upsert_rows(existing_rows)
 
     # Clean up any existing [LOCALE] rows already in pull_registry
     _cleanup_locale_articles()
