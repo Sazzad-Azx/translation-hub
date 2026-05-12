@@ -77,6 +77,31 @@ def _ts_to_iso(ts) -> Optional[str]:
     return str(ts)
 
 
+def _resolve_collection_id(article: Dict, valid_ids: Optional[set] = None) -> str:
+    """Resolve the collection an article belongs to.
+
+    Intercom's article payload may set the collection via `parent_id` *or* via
+    `parent_ids` (array) only — newer Help Centers (e.g. FN Futures Refer & Earn)
+    use the array form with `parent_id=null`. Reading only `parent_id` causes
+    those articles to be skipped by the Help-Center membership filter.
+
+    Preference order: parent_id → collection_id → first parent_ids entry that
+    is in `valid_ids` → first parent_ids entry.
+    """
+    pid = article.get("parent_id")
+    if pid:
+        return str(pid)
+    cid = article.get("collection_id")
+    if cid:
+        return str(cid)
+    pids = [str(p) for p in (article.get("parent_ids") or []) if p]
+    if valid_ids:
+        for p in pids:
+            if p in valid_ids:
+                return p
+    return pids[0] if pids else ""
+
+
 def table_exists() -> bool:
     """Check whether pull_registry table exists in Supabase."""
     if not REST_BASE:
@@ -319,7 +344,7 @@ def sync_source_list(intercom_client) -> Dict:
             continue
 
         # Skip articles not belonging to any Help Center collection
-        article_collection_id = str(a.get("parent_id") or a.get("collection_id") or "")
+        article_collection_id = _resolve_collection_id(a, help_center_collection_ids)
         if help_center_collection_ids and article_collection_id not in help_center_collection_ids:
             skipped_no_helpcenter += 1
             continue
@@ -614,7 +639,7 @@ def pull_articles(intercom_ids: List[str], intercom_client) -> List[Dict]:
             url = article.get("url") or ""
             source_updated = _ts_to_iso(article.get("updated_at"))
             author_id = str(article.get("author_id") or "")
-            collection_id = str(article.get("parent_id") or article.get("collection_id") or "")
+            collection_id = _resolve_collection_id(article)
             c_hash = _content_hash(body)
 
             # Only update source_updated_at if the content actually changed
