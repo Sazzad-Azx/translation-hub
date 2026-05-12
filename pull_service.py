@@ -401,9 +401,11 @@ def sync_source_list(intercom_client) -> Dict:
     now = datetime.now(timezone.utc).isoformat()
     new_rows: List[Dict] = []
     existing_rows: List[Dict] = []
+    draft_ids: List[str] = []
     synced = 0
     skipped_locale = 0
     skipped_no_helpcenter = 0
+    skipped_draft = 0
 
     for a in articles:
         iid = str(a.get("id", ""))
@@ -420,6 +422,15 @@ def sync_source_list(intercom_client) -> Dict:
         article_collection_id = _resolve_collection_id(a, help_center_collection_ids)
         if help_center_collection_ids and article_collection_id not in help_center_collection_ids:
             skipped_no_helpcenter += 1
+            continue
+
+        # Skip drafts — only published articles are translated. Track the IDs
+        # so a draft demoted from a previously-synced published row can be
+        # removed from pull_registry below.
+        state = (a.get("state") or "published").lower()
+        if state != "published":
+            skipped_draft += 1
+            draft_ids.append(iid)
             continue
 
         row = {
@@ -448,6 +459,10 @@ def sync_source_list(intercom_client) -> Dict:
     _bulk_upsert_rows(new_rows)
     _bulk_upsert_rows(existing_rows)
 
+    # Remove draft rows + their translations. Catches both freshly-demoted
+    # articles and any drafts that pre-date the draft filter.
+    _cleanup_draft_articles(draft_ids)
+
     # Clean up any existing [LOCALE] rows already in pull_registry
     _cleanup_locale_articles()
 
@@ -458,7 +473,13 @@ def sync_source_list(intercom_client) -> Dict:
     # Save last sync timestamp
     _save_last_sync_time()
 
-    return {"synced": synced, "total": len(articles), "skipped_locale": skipped_locale, "skipped_no_helpcenter": skipped_no_helpcenter}
+    return {
+        "synced": synced,
+        "total": len(articles),
+        "skipped_locale": skipped_locale,
+        "skipped_no_helpcenter": skipped_no_helpcenter,
+        "skipped_draft": skipped_draft,
+    }
 
 
 def _save_last_sync_time():
@@ -598,6 +619,71 @@ def cleanup_locale_articles_from_intercom(intercom_client) -> Dict:
         }
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+
+def _cleanup_draft_articles(draft_intercom_ids: List[str]):
+    """Remove draft rows from pull_registry plus their article_translations.
+
+    Two-pronged: (1) delete rows whose intercom_id is in the freshly-fetched
+    draft set (catches newly-demoted articles whose stored state is still
+    'published'), (2) also sweep any rows currently flagged state='draft' in
+    the registry so pre-existing drafts get cleared on first sync after the
+    filter lands.
+    """
+    if not REST_BASE:
+        return
+    del_headers = _headers("return=minimal")
+    sel_headers = _headers()
+    sel_headers.pop("Prefer", None)
+
+    ids_to_delete: set = set(str(x) for x in draft_intercom_ids if x)
+
+    # Pick up any rows already stored as draft, even if Intercom didn't return
+    # them in the current /articles listing.
+    try:
+        resp = requests.get(
+            f"{REST_BASE}/{TABLE}",
+            headers=sel_headers,
+            params={"select": "intercom_id", "state": "eq.draft", "limit": "5000"},
+            timeout=20,
+        )
+        if resp.ok:
+            for r in (resp.json() or []):
+                iid = r.get("intercom_id")
+                if iid:
+                    ids_to_delete.add(str(iid))
+    except Exception:
+        pass
+
+    if not ids_to_delete:
+        return
+
+    id_list = list(ids_to_delete)
+    # Delete translations first (FK-safe order)
+    for i in range(0, len(id_list), 50):
+        batch = id_list[i:i + 50]
+        ids_csv = ",".join(f'"{x}"' for x in batch)
+        try:
+            requests.delete(
+                f"{REST_BASE}/article_translations?parent_intercom_article_id=in.({ids_csv})",
+                headers=del_headers,
+                timeout=15,
+            )
+        except Exception:
+            pass
+    # Then delete the pull_registry rows
+    for i in range(0, len(id_list), 50):
+        batch = id_list[i:i + 50]
+        ids_csv = ",".join(f'"{x}"' for x in batch)
+        try:
+            requests.delete(
+                f"{REST_BASE}/{TABLE}?intercom_id=in.({ids_csv})",
+                headers=del_headers,
+                timeout=15,
+            )
+        except Exception:
+            pass
+    print(f"    [INFO] Cleaned up {len(id_list)} draft articles from pull_registry + their translations", flush=True)
 
 
 def _cleanup_non_helpcenter_articles(valid_collection_ids: set):
