@@ -8,7 +8,9 @@ Columns: id, intercom_id, title, description, state, url, source_updated_at,
 """
 import hashlib
 import re
+import uuid
 import requests
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
@@ -658,76 +660,168 @@ def _cleanup_non_helpcenter_articles(valid_collection_ids: set):
 # Pull individual articles (fetch full body + store)
 # ---------------------------------------------------------------------------
 
-def pull_articles(intercom_ids: List[str], intercom_client) -> List[Dict]:
+def _fetch_existing_pull_hashes(ids: List[str]) -> Dict[str, str]:
+    """Return {intercom_id: content_hash} for any IDs already in pull_registry.
+
+    One filtered GET per 500-id chunk replaces a per-article existence check
+    inside pull_articles (was the dominant Supabase cost).
+    """
+    out: Dict[str, str] = {}
+    if not REST_BASE or not ids:
+        return out
+    headers = _headers()
+    headers.pop("Prefer", None)
+    for i in range(0, len(ids), 500):
+        chunk = ids[i:i + 500]
+        ids_csv = ",".join(f'"{x}"' for x in chunk)
+        try:
+            resp = requests.get(
+                f"{REST_BASE}/{TABLE}",
+                headers=headers,
+                params={"select": "intercom_id,content_hash", "intercom_id": f"in.({ids_csv})"},
+                timeout=20,
+            )
+            if not resp.ok:
+                continue
+            for r in (resp.json() or []):
+                iid = r.get("intercom_id")
+                if iid:
+                    out[str(iid)] = r.get("content_hash") or ""
+        except Exception:
+            continue
+    return out
+
+
+def pull_articles(intercom_ids: List[str], intercom_client, max_workers: int = 8) -> List[Dict]:
     """
     Pull full content for specified articles from Intercom and save to pull_registry.
+
+    Parallelizes Intercom fetches and bulk-upserts to pull_registry so a
+    batch of 100 IDs fits within a single Vercel function invocation.
     Returns a list of result dicts: { intercom_id, status, error? }
     """
-    results = []
+    ids = [str(i).strip() for i in (intercom_ids or []) if i and str(i).strip()]
+    ids = list(dict.fromkeys(ids))  # dedupe, preserve order
+    if not ids:
+        return []
 
-    for iid in intercom_ids:
-        iid = str(iid).strip()
-        if not iid:
+    # Pre-fetch existing row hashes (one bulk GET) so we know per-id whether
+    # to (a) treat as new vs existing and (b) skip source_updated_at when
+    # content is unchanged.
+    existing_hashes = _fetch_existing_pull_hashes(ids)
+
+    # Pre-fetch which articles already have an intercom_content_items row.
+    try:
+        from content_supabase import fetch_existing_content_item_external_ids
+        existing_items = fetch_existing_content_item_external_ids(ids)
+    except Exception:
+        existing_items = set()
+
+    # Fetch article bodies from Intercom in parallel. _make_request retries
+    # rate-limits internally; concurrency=8 stays well under Intercom limits.
+    fetched: Dict[str, object] = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        future_to_iid = {pool.submit(intercom_client.get_article, iid): iid for iid in ids}
+        for fut in as_completed(future_to_iid):
+            iid = future_to_iid[fut]
+            try:
+                fetched[iid] = fut.result()
+            except Exception as e:
+                fetched[iid] = e
+
+    now = datetime.now(timezone.utc).isoformat()
+    rows_with_src: List[Dict] = []   # success + source_updated_at refreshed
+    rows_without_src: List[Dict] = []  # success + source_updated_at preserved
+    failed: List[tuple] = []
+    new_items: List[Dict] = []
+    new_versions: List[Dict] = []
+    results: List[Dict] = []
+
+    for iid in ids:
+        v = fetched.get(iid)
+        if isinstance(v, Exception):
+            err_msg = str(v)
+            failed.append((iid, err_msg))
+            results.append({"intercom_id": iid, "status": "failed", "error": err_msg})
+            safe_err = err_msg.encode("ascii", "replace").decode("ascii")
+            print(f"  [PULL FAIL] ID: {iid} - {safe_err}", flush=True)
             continue
 
-        # Mark as pulling
-        _set_pull_status(iid, "pulling")
+        article = v
+        title = (article.get("title") or "").strip() or "Untitled"
+        body = article.get("body") or ""
+        c_hash = _content_hash(body)
+        is_existing = iid in existing_hashes
+        content_changed = (existing_hashes.get(iid) != c_hash) if is_existing else True
 
-        try:
-            # Fetch full article from Intercom
-            article = intercom_client.get_article(iid)
-            title = (article.get("title") or "").strip() or "Untitled"
-            body = article.get("body") or ""
-            description = article.get("description") or ""
-            state = article.get("state") or "published"
-            url = article.get("url") or ""
-            source_updated = _ts_to_iso(article.get("updated_at"))
-            author_id = str(article.get("author_id") or "")
-            collection_id = _resolve_collection_id(article)
-            c_hash = _content_hash(body)
+        row = {
+            "intercom_id": iid,
+            "title": title,
+            "description": article.get("description") or "",
+            "state": article.get("state") or "published",
+            "url": article.get("url") or "",
+            "pulled_at": now,
+            "pull_status": "success",
+            "pull_error": "",
+            "content_hash": c_hash,
+            "body_html": body,
+            "author_id": str(article.get("author_id") or ""),
+            "collection_id": _resolve_collection_id(article),
+            "updated_at": now,
+        }
+        # source_updated_at refresh rule preserved: only set when new or
+        # when content_hash actually changed.
+        if content_changed or not is_existing:
+            row["source_updated_at"] = _ts_to_iso(article.get("updated_at"))
+            rows_with_src.append(row)
+        else:
+            rows_without_src.append(row)
 
-            # Only update source_updated_at if the content actually changed
-            # This prevents push-triggered Intercom timestamp bumps from
-            # showing articles as "recently updated source"
-            existing = get_pull_article(iid)
-            old_hash = existing.get("content_hash", "") if existing else ""
-            content_changed = (old_hash != c_hash)
-
-            now = datetime.now(timezone.utc).isoformat()
-            row = {
-                "intercom_id": iid,
+        # Replicate _store_to_content_tables semantics: only create a version
+        # when the items row is new (existing item → skip, never accumulate
+        # versions on re-pull).
+        if iid not in existing_items:
+            item_id = str(uuid.uuid4())
+            new_items.append({
+                "id": item_id,
+                "workspace": "default",
+                "project": "default",
+                "external_id": iid,
+                "external_type": "article",
+            })
+            new_versions.append({
+                "id": str(uuid.uuid4()),
+                "content_item_id": item_id,
+                "locale": "en",
                 "title": title,
-                "description": description,
-                "state": state,
-                "url": url,
-                "pulled_at": now,
-                "pull_status": "success",
-                "pull_error": "",
-                "content_hash": c_hash,
-                "body_html": body,
-                "author_id": author_id,
-                "collection_id": collection_id,
-                "updated_at": now,
-            }
-            # Only update source_updated_at when content genuinely changed
-            if content_changed or not existing:
-                row["source_updated_at"] = source_updated
+                "body_raw": body,
+                "body_normalized": {},
+            })
 
-            _upsert_pull_row(iid, row)
+        results.append({"intercom_id": iid, "title": title, "status": "success"})
+        safe_title = title.encode("ascii", "replace").decode("ascii")
+        print(f"  [PULL OK] {safe_title} (ID: {iid})", flush=True)
 
-            # Also store in intercom_content_items/versions for the rest of the app
-            _store_to_content_tables(iid, title, body)
+    # Bulk writes. The two success batches have different column sets, so
+    # PostgREST builds a distinct ON CONFLICT DO UPDATE SET clause per call —
+    # rows without source_updated_at keep their stored value untouched.
+    _bulk_upsert_rows(rows_with_src)
+    _bulk_upsert_rows(rows_without_src)
 
-            results.append({"intercom_id": iid, "title": title, "status": "success"})
-            safe_title = title.encode("ascii", "replace").decode("ascii")
-            print(f"  [PULL OK] {safe_title} (ID: {iid})")
+    # Failed rows: small N. Patch individually so we only touch
+    # pull_status/pull_error and leave the rest of the row intact.
+    for iid, err in failed:
+        try:
+            _set_pull_status(iid, "failed", err)
+        except Exception:
+            pass
 
-        except Exception as e:
-            error_msg = str(e)
-            _set_pull_status(iid, "failed", error_msg)
-            results.append({"intercom_id": iid, "status": "failed", "error": error_msg})
-            safe_err = error_msg.encode("ascii", "replace").decode("ascii")
-            print(f"  [PULL FAIL] ID: {iid} - {safe_err}")
+    try:
+        from content_supabase import bulk_insert_content_items, bulk_insert_content_versions
+        bulk_insert_content_items(new_items)
+        bulk_insert_content_versions(new_versions)
+    except Exception as e:
+        print(f"[pull_articles] content-table bulk write error: {e}", flush=True)
 
     return results
 

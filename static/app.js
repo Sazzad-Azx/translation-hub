@@ -2087,26 +2087,53 @@ async function pullExecuteConfirmed() {
 
     const btn = document.getElementById('pull-selected-btn');
     if (btn) { btn.disabled = true; btn.innerHTML = '<span class="fn-loader-inline"></span> &nbsp;Pulling...'; }
-    showPullToast(`Pulling ${ids.length} article(s)...`, 'loading');
+
+    // Auto-chunk to stay under the server's per-request cap and Vercel
+    // function timeout. 100 matches PULL_BATCH_LIMIT in app.py.
+    const CHUNK_SIZE = 100;
+    const chunks = [];
+    for (let i = 0; i < ids.length; i += CHUNK_SIZE) chunks.push(ids.slice(i, i + CHUNK_SIZE));
+
+    let pulledTotal = 0;
+    let failedTotal = 0;
+    let serverError = null;
+
+    showPullToast(
+        chunks.length > 1
+            ? `Pulling ${ids.length} article(s) in ${chunks.length} batches...`
+            : `Pulling ${ids.length} article(s)...`,
+        'loading'
+    );
 
     try {
-        const resp = await fetch('/api/pull/execute', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ intercom_ids: ids }),
-        });
-        const data = await resp.json();
+        for (let idx = 0; idx < chunks.length; idx++) {
+            const chunk = chunks[idx];
+            if (chunks.length > 1) {
+                showPullToast(`Batch ${idx + 1}/${chunks.length}: pulling ${chunk.length}...`, 'loading');
+            }
+            const resp = await fetch('/api/pull/execute', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ intercom_ids: chunk }),
+            });
+            const data = await resp.json();
+            if (!data.success) {
+                serverError = data.error || 'Unknown error';
+                break;
+            }
+            pulledTotal += data.pulled || 0;
+            failedTotal += data.failed || 0;
+        }
 
-        if (data.success) {
-            const msg = `Pulled ${data.pulled} article(s)` + (data.failed > 0 ? `, ${data.failed} failed` : '');
-            showPullToast(msg, data.failed > 0 ? 'error' : 'success');
+        if (serverError) {
+            showPullToast('Pull failed: ' + serverError, 'error');
+        } else {
+            const msg = `Pulled ${pulledTotal} article(s)` + (failedTotal > 0 ? `, ${failedTotal} failed` : '');
+            showPullToast(msg, failedTotal > 0 ? 'error' : 'success');
             state.pull.selectedIds.clear();
             await loadPullStats();
             await loadPullArticles();
-            // Refresh Content Hub in background so health status updates
             if (state.hub.loaded) loadHubArticles();
-        } else {
-            showPullToast('Pull failed: ' + (data.error || 'Unknown error'), 'error');
         }
     } catch (err) {
         showPullToast('Pull failed: ' + err.message, 'error');

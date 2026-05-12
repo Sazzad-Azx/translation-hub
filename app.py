@@ -1825,6 +1825,17 @@ def pull_execute():
         if not intercom_ids:
             return jsonify({'success': False, 'error': 'No article IDs provided.'}), 400
 
+        # Soft cap per request — even with parallel + bulk writes, a single
+        # invocation has to fit Vercel's function timeout. The client
+        # auto-chunks selections larger than this.
+        PULL_BATCH_LIMIT = 100
+        if len(intercom_ids) > PULL_BATCH_LIMIT:
+            return jsonify({
+                'success': False,
+                'error': f'Too many IDs in one request (max {PULL_BATCH_LIMIT}).',
+                'batch_limit': PULL_BATCH_LIMIT,
+            }), 413
+
         results = do_pull(intercom_ids, intercom_client)
         success_count = sum(1 for r in results if r.get('status') == 'success')
         fail_count = sum(1 for r in results if r.get('status') == 'failed')

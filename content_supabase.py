@@ -69,6 +69,69 @@ def insert_content_version(
     resp.raise_for_status()
 
 
+def fetch_existing_content_item_external_ids(ids: List[str]) -> set:
+    """Return the subset of `ids` that already exist as external_id in
+    intercom_content_items. Used by bulk pull to skip duplicates without
+    a per-article 409 round-trip.
+    """
+    out: set = set()
+    if not REST_BASE or not ids:
+        return out
+    headers = _headers()
+    headers.pop("Prefer", None)
+    for i in range(0, len(ids), 500):
+        chunk = ids[i:i + 500]
+        ids_csv = ",".join(f'"{x}"' for x in chunk)
+        try:
+            resp = requests.get(
+                f"{REST_BASE}/intercom_content_items",
+                headers=headers,
+                params={"select": "external_id", "external_id": f"in.({ids_csv})"},
+                timeout=20,
+            )
+            if not resp.ok:
+                continue
+            for r in (resp.json() or []):
+                eid = r.get("external_id")
+                if eid:
+                    out.add(str(eid))
+        except Exception:
+            continue
+    return out
+
+
+def bulk_insert_content_items(rows: List[Dict], chunk_size: int = 500) -> None:
+    """Bulk POST into intercom_content_items. Rows must include id+external_id."""
+    if not REST_BASE or not rows:
+        return
+    headers = _headers()
+    url = f"{REST_BASE}/intercom_content_items"
+    for i in range(0, len(rows), chunk_size):
+        batch = rows[i:i + chunk_size]
+        try:
+            resp = requests.post(url, json=batch, headers=headers, timeout=30)
+            if not resp.ok:
+                print(f"[bulk_insert_content_items] HTTP {resp.status_code}: {resp.text[:300]}", flush=True)
+        except Exception as e:
+            print(f"[bulk_insert_content_items] error: {e}", flush=True)
+
+
+def bulk_insert_content_versions(rows: List[Dict], chunk_size: int = 500) -> None:
+    """Bulk POST into intercom_content_versions."""
+    if not REST_BASE or not rows:
+        return
+    headers = _headers()
+    url = f"{REST_BASE}/intercom_content_versions"
+    for i in range(0, len(rows), chunk_size):
+        batch = rows[i:i + chunk_size]
+        try:
+            resp = requests.post(url, json=batch, headers=headers, timeout=30)
+            if not resp.ok:
+                print(f"[bulk_insert_content_versions] HTTP {resp.status_code}: {resp.text[:300]}", flush=True)
+        except Exception as e:
+            print(f"[bulk_insert_content_versions] error: {e}", flush=True)
+
+
 def list_articles_from_content() -> List[Dict]:
     """
     List articles stored in intercom_content_items + intercom_content_versions
