@@ -149,8 +149,8 @@ def faq_search():
     Query params: q (required), limit (optional, max 20).
     Returns: {ok: true, results: [{title, snippet, url}]}
     """
-    api_key = request.headers.get('X-API-Key', '')
-    expected = os.environ.get('FAQ_SEARCH_API_KEY', '')
+    api_key = request.headers.get('X-API-Key', '').strip()
+    expected = os.environ.get('FAQ_SEARCH_API_KEY', '').strip()
     if not expected or api_key != expected:
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
 
