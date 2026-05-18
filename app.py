@@ -22,6 +22,7 @@ from translator import GPTTranslator
 from workflow import TranslationWorkflow
 from config import TARGET_LANGUAGES, BASE_LANGUAGE
 import auth_service
+import faq_search_service
 
 app = Flask(__name__)
 app.config['TEMPLATES_AUTO_RELOAD'] = True
@@ -39,7 +40,7 @@ def log_request():
 
 
 # ─── Auth helpers ──────────────────────────────────────────────
-PUBLIC_PATHS = {'/', '/favicon.ico', '/api/health', '/api/auth/login', '/api/cron/sync', '/api/cron/pull'}
+PUBLIC_PATHS = {'/', '/favicon.ico', '/api/health', '/api/auth/login', '/api/cron/sync', '/api/cron/pull', '/api/faq/search'}
 PUBLIC_PREFIXES = ('/static/',)
 
 
@@ -138,6 +139,32 @@ def favicon():
 def health():
     """Health check: returns JSON {ok: true} for monitoring/curl tests."""
     return jsonify({'ok': True})
+
+
+# ─── FAQ search (called by fn-copilot, API key auth) ─────────
+@app.route('/api/faq/search', methods=['GET'])
+def faq_search():
+    """
+    Search English FAQ articles. Protected by X-API-Key header.
+    Query params: q (required), limit (optional, max 20).
+    Returns: {ok: true, results: [{title, snippet, url}]}
+    """
+    api_key = request.headers.get('X-API-Key', '')
+    expected = os.environ.get('FAQ_SEARCH_API_KEY', '')
+    if not expected or api_key != expected:
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
+
+    q = request.args.get('q', '').strip()
+    if not q:
+        return jsonify({'ok': False, 'error': 'q parameter is required'}), 400
+
+    try:
+        limit = min(int(request.args.get('limit', 20)), 20)
+    except (ValueError, TypeError):
+        limit = 20
+
+    results = faq_search_service.search_articles(q, limit=limit)
+    return jsonify({'ok': True, 'results': results})
 
 
 # ─── Auth API routes ──────────────────────────────────────────
