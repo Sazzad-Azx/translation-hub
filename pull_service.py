@@ -621,6 +621,67 @@ def cleanup_locale_articles_from_intercom(intercom_client) -> Dict:
         return {"success": False, "error": str(e)}
 
 
+def _demote_intercom_translations_for_ids(intercom_ids: List[str], sel_headers: Dict):
+    """For each unpublished source article, flip its already-pushed locales on
+    Intercom from published to draft so the public Help Center stops serving
+    them. Best-effort: failures are logged and never block the Supabase cleanup
+    that follows.
+    """
+    if not intercom_ids:
+        return
+    try:
+        from intercom_client import IntercomClient
+    except Exception as e:
+        print(f"    [WARN] demote: IntercomClient import failed: {e}")
+        return
+
+    # Group pushed locales by intercom_id. Only locales that were actually
+    # pushed (pushed_at IS NOT NULL) exist on the Intercom side and need
+    # demoting.
+    locales_by_id: Dict[str, List[str]] = {}
+    for i in range(0, len(intercom_ids), 50):
+        batch = intercom_ids[i:i + 50]
+        ids_csv = ",".join(f'"{x}"' for x in batch)
+        try:
+            resp = requests.get(
+                f"{REST_BASE}/article_translations",
+                headers=sel_headers,
+                params={
+                    "select": "parent_intercom_article_id,target_locale",
+                    "parent_intercom_article_id": f"in.({ids_csv})",
+                    "pushed_at": "not.is.null",
+                    "limit": "5000",
+                },
+                timeout=20,
+            )
+            if not resp.ok:
+                continue
+            for row in (resp.json() or []):
+                pid = str(row.get("parent_intercom_article_id") or "")
+                loc = row.get("target_locale") or ""
+                if not pid or not loc:
+                    continue
+                locales_by_id.setdefault(pid, []).append(loc)
+        except Exception as e:
+            print(f"    [WARN] demote: fetch locales failed: {e}")
+            continue
+
+    if not locales_by_id:
+        return
+
+    try:
+        client = IntercomClient()
+    except Exception as e:
+        print(f"    [WARN] demote: IntercomClient init failed: {e}")
+        return
+
+    for pid, locs in locales_by_id.items():
+        try:
+            client.demote_locales_to_draft(pid, locs)
+        except Exception as e:
+            print(f"    [WARN] demote: PUT failed for {pid}: {e}")
+
+
 def _cleanup_draft_articles(draft_intercom_ids: List[str]):
     """Remove draft rows from pull_registry plus their article_translations.
 
@@ -659,6 +720,12 @@ def _cleanup_draft_articles(draft_intercom_ids: List[str]):
         return
 
     id_list = list(ids_to_delete)
+
+    # Demote any already-pushed translations on Intercom to draft BEFORE we
+    # forget which locales were pushed. Without this, the public Help Center
+    # keeps serving translated versions of articles the user just unpublished.
+    _demote_intercom_translations_for_ids(id_list, sel_headers)
+
     # Delete translations first (FK-safe order)
     for i in range(0, len(id_list), 50):
         batch = id_list[i:i + 50]

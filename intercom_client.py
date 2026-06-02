@@ -332,6 +332,56 @@ class IntercomClient:
                 return {}
             raise
     
+    def demote_locales_to_draft(self, article_id: str, locales: List[str]) -> Dict:
+        """Flip translated_content[locale].state to 'draft' for each given locale.
+
+        Reads the article's current translated_content first so existing
+        title/body/description are preserved verbatim (a PUT replaces the
+        locale block wholesale). Skips locales that don't exist on the article
+        or are already draft. Used by the unpublish-cleanup path so that
+        translations get hidden from the public Help Center whenever the
+        English source is unpublished.
+        """
+        if not locales:
+            return {}
+        try:
+            article = self.get_article(article_id)
+        except Exception as e:
+            print(f"    [WARN] demote: GET /articles/{article_id} failed: {e}")
+            return {}
+
+        existing = article.get("translated_content") or {}
+        new_block: Dict[str, Dict] = {}
+        for loc in locales:
+            entry = existing.get(loc)
+            if not isinstance(entry, dict):
+                continue
+            if (entry.get("state") or "").lower() == "draft":
+                continue
+            new_entry = {
+                "title": entry.get("title", ""),
+                "body": entry.get("body", ""),
+                "state": "draft",
+            }
+            if entry.get("description"):
+                new_entry["description"] = entry["description"]
+            new_block[loc] = new_entry
+
+        if not new_block:
+            return {}
+
+        try:
+            response = self._make_request(
+                "PUT",
+                f"/articles/{article_id}",
+                json={"translated_content": new_block},
+            )
+            print(f"    [OK] Demoted locales {list(new_block.keys())} -> draft on article {article_id}")
+            return response.json()
+        except Exception as e:
+            print(f"    [WARN] demote PUT failed for article {article_id}: {e}")
+            return {}
+
     def create_or_update_translation(
         self,
         article_id: str,
