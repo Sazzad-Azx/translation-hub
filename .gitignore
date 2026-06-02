@@ -52,6 +52,10 @@ Thumbs.db
 *.bak
 *.cache
 
+# Sweep script outputs (run-specific artifacts, not source)
+unpublished_translation_leaks.csv
+unpublished_translation_leaks_applied.csv
+
 # Test files
 test_*.py
 *_test.py
