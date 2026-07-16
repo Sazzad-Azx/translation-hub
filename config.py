@@ -53,6 +53,7 @@ ALL_AVAILABLE_LANGUAGES: Dict[str, str] = {
     "tr": "Turkish",
     "uk": "Ukrainian",
     "ur": "Urdu",
+    "uz": "Uzbek",
     "vi": "Vietnamese",
 }
 
