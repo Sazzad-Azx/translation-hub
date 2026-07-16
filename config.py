@@ -96,11 +96,11 @@ INTERCOM_COLLECTION_ID = os.getenv("INTERCOM_COLLECTION_ID", "")  # Optional: sp
 INTERCOM_TAG_ID = os.getenv("INTERCOM_TAG_ID", "")  # Optional: specific tag
 
 # Supabase Configuration (backend data storage - mirrors Intercom articles)
-SUPABASE_URL = os.getenv("SUPABASE_URL", "https://reiacekmluvuguqfswac.supabase.co")
-SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJlaWFjZWttbHV2dWd1cWZzd2FjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MDAxMTE3NywiZXhwIjoyMDg1NTg3MTc3fQ.dAHUSTH5XhAS6WAGFA1YyqBcIFzjGCWWwsRj1jH8ruo")
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
 # Optional: Postgres connection URI for running migrations (create table). From Dashboard > Database > Connection string (URI).
 SUPABASE_DB_URL = os.getenv("SUPABASE_DB_URL", "")
 
 # Super Admin Configuration (stored in environment variables)
 SUPER_ADMIN_EMAIL = os.getenv("SUPER_ADMIN_EMAIL", "sazzad@nextventures.io")
-SUPER_ADMIN_PASSWORD = os.getenv("SUPER_ADMIN_PASSWORD", "Sazzad123")
+SUPER_ADMIN_PASSWORD = os.getenv("SUPER_ADMIN_PASSWORD", "")

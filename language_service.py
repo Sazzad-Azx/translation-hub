@@ -8,7 +8,7 @@ Mutates config.TARGET_LANGUAGES so all other services pick up changes.
 import os
 import json
 import requests
-from typing import Dict, List
+from typing import Dict, List, Optional
 from pathlib import Path
 
 from config import (
@@ -49,7 +49,7 @@ def auto_create_table() -> dict:
 
 # ── Supabase helpers (automation_settings row) ───────────────────────────
 
-def _read_supabase() -> Dict[str, str] | None:
+def _read_supabase() -> Optional[Dict[str, str]]:
     """Read the active_languages row from automation_settings."""
     if not REST_BASE:
         return None

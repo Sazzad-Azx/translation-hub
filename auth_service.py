@@ -20,8 +20,8 @@ from typing import Optional, Dict, List
 # ─── Config ────────────────────────────────────────────────────
 from config import SUPABASE_URL, SUPABASE_SERVICE_KEY as SUPABASE_KEY
 SUPER_ADMIN_EMAIL = os.getenv("SUPER_ADMIN_EMAIL", "sazzad@nextventures.io")
-SUPER_ADMIN_PASSWORD = os.getenv("SUPER_ADMIN_PASSWORD", "Sazzad123")
-AUTH_SECRET = os.getenv("AUTH_SECRET", os.getenv("JWT_SECRET_KEY", "fnth-default-secret-change-me"))
+SUPER_ADMIN_PASSWORD = os.getenv("SUPER_ADMIN_PASSWORD", "")
+AUTH_SECRET = os.getenv("AUTH_SECRET", os.getenv("JWT_SECRET_KEY", ""))
 
 # Token duration: 24 hours
 TOKEN_TTL = 86400
@@ -37,9 +37,25 @@ def _sb_headers():
 
 
 def _hash_password(password: str) -> str:
-    """SHA-256 hash with a fixed salt prefix."""
-    salted = f"fnth_salt_{password}"
-    return hashlib.sha256(salted.encode("utf-8")).hexdigest()
+    """PBKDF2-HMAC-SHA256 with a random per-record salt, stored as 'salt:hash'."""
+    salt = os.urandom(16).hex()
+    hashed = hashlib.pbkdf2_hmac(
+        'sha256', password.encode('utf-8'), bytes.fromhex(salt), 260000
+    ).hex()
+    return f"{salt}:{hashed}"
+
+
+def _verify_password(password: str, stored: str) -> bool:
+    """Verify password against a stored hash. Handles both PBKDF2 and legacy SHA-256."""
+    if ':' not in stored:
+        # Legacy fixed-salt SHA-256 — accept during transition period
+        legacy_hash = hashlib.sha256(f"fnth_salt_{password}".encode('utf-8')).hexdigest()
+        return hmac.compare_digest(stored, legacy_hash)
+    salt, hashed = stored.split(':', 1)
+    new_hash = hashlib.pbkdf2_hmac(
+        'sha256', password.encode('utf-8'), bytes.fromhex(salt), 260000
+    ).hex()
+    return hmac.compare_digest(hashed, new_hash)
 
 
 # ─── Table bootstrap ──────────────────────────────────────────
@@ -117,6 +133,8 @@ def auto_create_table() -> dict:
 # ─── Stateless Token helpers ──────────────────────────────────
 def _create_token(email: str, role: str, name: str) -> str:
     """Create a self-contained HMAC-signed token embedding user info."""
+    if not AUTH_SECRET:
+        raise EnvironmentError("AUTH_SECRET environment variable is not configured")
     payload = json.dumps({
         "email": email,
         "role": role,
@@ -130,7 +148,7 @@ def _create_token(email: str, role: str, name: str) -> str:
 
 def validate_session(token: str) -> Optional[dict]:
     """Verify an HMAC-signed token and return the payload dict, or None."""
-    if not token:
+    if not token or not AUTH_SECRET:
         return None
     try:
         parts = token.rsplit(".", 1)
@@ -176,7 +194,6 @@ def login(email: str, password: str) -> Optional[dict]:
         }
 
     # 2) Supabase admin check
-    pw_hash = _hash_password(password)
     try:
         r = requests.get(
             f"{SUPABASE_URL}/rest/v1/admins"
@@ -185,7 +202,7 @@ def login(email: str, password: str) -> Optional[dict]:
         )
         if r.status_code == 200:
             rows = r.json()
-            if rows and rows[0].get("password_hash") == pw_hash:
+            if rows and _verify_password(password, rows[0].get("password_hash", "")):
                 admin = rows[0]
                 token = _create_token(
                     admin["email"],

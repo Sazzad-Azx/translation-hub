@@ -574,7 +574,6 @@ def languages_create_table():
     import language_service
     result = language_service.auto_create_table()
     if result.get('success'):
-        language_service._seed_defaults()
         language_service.load_active_languages()
     return jsonify(result)
 
@@ -735,8 +734,9 @@ def get_article_translation(translation_id):
 
 
 # ── Daily API Cost Caching (Vercel → Supabase) ──
-COST_API_URL = 'https://intercom-analyzer-shizans-projects-a7b50fa1.vercel.app/api'
-COST_TARGET_KEYS = ['key_24T9PNCgnvWHZvxc', 'key_DDHe898miisDLF3w']
+COST_API_URL = os.getenv('COST_API_URL', '').rstrip('/')
+_cost_keys_raw = os.getenv('COST_TARGET_KEYS', '')
+COST_TARGET_KEYS = [k.strip() for k in _cost_keys_raw.split(',') if k.strip()]
 
 def _fetch_and_upsert_dates(dates_to_fetch):
     """Fetch per-key costs for a list of dates from Vercel API and upsert to Supabase."""
@@ -1757,13 +1757,14 @@ def pull_create_table():
 
     # Try Management API
     pat = os.getenv('SUPABASE_PAT', '').strip() or os.getenv('SUPABASE_ACCESS_TOKEN', '').strip()
-    supabase_url = os.getenv('SUPABASE_URL', '').strip() or 'https://reiacekmluvuguqfswac.supabase.co'
-    ref = supabase_url.rstrip('/').split('//')[-1].replace('.supabase.co', '')
+    supabase_url = os.getenv('SUPABASE_URL', '').strip()
+    ref = supabase_url.rstrip('/').split('//')[-1].replace('.supabase.co', '') if supabase_url else ''
     if pat and ref:
         try:
+            import requests as _req
             api_url = f'https://api.supabase.com/v1/projects/{ref}/database/query'
             headers = {'Authorization': f'Bearer {pat}', 'Content-Type': 'application/json'}
-            r = requests.post(api_url, json={'query': SETUP_SQL, 'read_only': False}, headers=headers, timeout=30)
+            r = _req.post(api_url, json={'query': SETUP_SQL, 'read_only': False}, headers=headers, timeout=30)
             if r.status_code in (200, 201):
                 return jsonify({'success': True, 'method': 'management_api', 'message': 'Table created successfully.'})
         except Exception:
@@ -1937,8 +1938,8 @@ def glossary_create_tables():
             pass
 
     pat = os.getenv('SUPABASE_PAT', '').strip() or os.getenv('SUPABASE_ACCESS_TOKEN', '').strip()
-    supabase_url = os.getenv('SUPABASE_URL', '').strip() or 'https://reiacekmluvuguqfswac.supabase.co'
-    ref = supabase_url.rstrip('/').split('//')[-1].replace('.supabase.co', '')
+    supabase_url = os.getenv('SUPABASE_URL', '').strip()
+    ref = supabase_url.rstrip('/').split('//')[-1].replace('.supabase.co', '') if supabase_url else ''
     if pat and ref:
         try:
             api_url = f'https://api.supabase.com/v1/projects/{ref}/database/query'
