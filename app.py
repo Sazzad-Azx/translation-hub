@@ -1501,6 +1501,8 @@ def translate_hub_articles():
     List pulled articles with per-language translation status matrix.
     Query params: search, page, page_size, status, language, sort
     """
+    import language_service
+    language_service.load_active_languages()
     from translate_service import list_translate_articles
     try:
         search = request.args.get('search', '').strip()
