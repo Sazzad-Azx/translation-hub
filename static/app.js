@@ -5907,7 +5907,7 @@ const LANG_COUNTRY = {
     'mn': 'mn', 'nb': 'no', 'fa': 'ir', 'pl': 'pl', 'pt': 'pt',
     'ro': 'ro', 'ru': 'ru', 'sr': 'rs', 'zh-CN': 'cn', 'sl': 'si',
     'es': 'es', 'sw': 'ke', 'sv': 'se', 'th': 'th', 'zh-TW': 'tw',
-    'tr': 'tr', 'uk': 'ua', 'ur': 'pk', 'vi': 'vn',
+    'tr': 'tr', 'uk': 'ua', 'ur': 'pk', 'uz': 'uz', 'vi': 'vn',
 };
 
 function langFlagImg(code, size = 28) {
