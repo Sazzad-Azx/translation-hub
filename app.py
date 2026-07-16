@@ -176,7 +176,10 @@ def auth_login():
     password = data.get('password', '')
     if not email or not password:
         return jsonify({'success': False, 'error': 'Email and password required'}), 400
-    result = auth_service.login(email, password)
+    try:
+        result = auth_service.login(email, password)
+    except EnvironmentError as e:
+        return jsonify({'success': False, 'error': f'Server misconfiguration: {e}'}), 500
     if not result:
         return jsonify({'success': False, 'error': 'Invalid email or password'}), 401
     resp = jsonify({'success': True, **result})
