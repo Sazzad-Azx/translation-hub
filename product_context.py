@@ -192,10 +192,72 @@ def supabase_key_value() -> str:
     return current_product()["supabase_key"]
 
 
-def active_languages() -> dict:
-    """Target languages for the active product.
+# Per-product active-language cache. Module-level so it persists across requests
+# on a warm instance (matching the original global config.TARGET_LANGUAGES), but
+# keyed by product id so products never share a language set. language_service
+# populates a product's entry from its own DB via the TARGET_LANGUAGES proxy.
+_LANG_CACHE: dict = {}
 
-    Seed defaults from the registry; language_service overlays the per-product
-    set loaded from that product's DB during a request.
+
+def active_languages_dict() -> dict:
+    """The mutable language dict for the active product.
+
+    Seeded from the product's registry defaults on first access; language_service
+    overwrites it (clear/update via the proxy) with the set loaded from that
+    product's database.
     """
-    return current_product()["default_languages"]
+    pid = current_product()["id"]
+    d = _LANG_CACHE.get(pid)
+    if d is None:
+        d = dict(current_product()["default_languages"])
+        _LANG_CACHE[pid] = d
+    return d
+
+
+def active_languages() -> dict:
+    """Alias — target languages for the active product."""
+    return active_languages_dict()
+
+
+class LazyDict:
+    """A dict-like proxy resolving to the active product's dict on every access.
+
+    Lets ``config.TARGET_LANGUAGES`` stay a single importable name while it
+    follows the active product. Reads, iteration, membership, len and the mutating
+    dict methods (clear/update/get/items/keys/values) all delegate to the freshly
+    resolved dict, so existing call sites and language_service need no changes.
+    """
+    __slots__ = ("_fn",)
+
+    def __init__(self, fn):
+        object.__setattr__(self, "_fn", fn)
+
+    def __getitem__(self, key):
+        return self._fn()[key]
+
+    def __setitem__(self, key, value):
+        self._fn()[key] = value
+
+    def __delitem__(self, key):
+        del self._fn()[key]
+
+    def __contains__(self, key):
+        return key in self._fn()
+
+    def __iter__(self):
+        return iter(self._fn())
+
+    def __len__(self):
+        return len(self._fn())
+
+    def __bool__(self):
+        return bool(self._fn())
+
+    def __eq__(self, other):
+        return self._fn() == other
+
+    def __repr__(self):
+        return repr(self._fn())
+
+    def __getattr__(self, name):
+        return getattr(self._fn(), name)

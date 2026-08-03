@@ -160,3 +160,12 @@ DEFAULT_PRODUCT = "fundednext"
 # dedicated control project.
 CONTROL_SUPABASE_URL = os.getenv("CONTROL_SUPABASE_URL", SUPABASE_URL)
 CONTROL_SUPABASE_KEY = os.getenv("CONTROL_SUPABASE_KEY", SUPABASE_SERVICE_KEY)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Make the shared target-language set follow the active product (multi-tenant).
+# TARGET_LANGUAGES above is the single-tenant seed; override it with a proxy that
+# resolves to the active product's language cache. Imported lazily here to avoid a
+# circular import (product_context only reads config attributes at call time).
+# ─────────────────────────────────────────────────────────────────────────────
+import product_context as _pc  # noqa: E402
+TARGET_LANGUAGES = _pc.LazyDict(_pc.active_languages_dict)

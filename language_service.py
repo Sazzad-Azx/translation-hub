@@ -11,9 +11,8 @@ import requests
 from typing import Dict, List, Optional
 from pathlib import Path
 
+import product_context
 from config import (
-    SUPABASE_URL,
-    SUPABASE_SERVICE_KEY,
     ALL_AVAILABLE_LANGUAGES,
     DEFAULT_TARGET_LANGUAGES,
     TARGET_LANGUAGES,
@@ -21,19 +20,14 @@ from config import (
 
 TABLE = "automation_settings"
 LANG_KEY = "active_languages"
-REST_BASE = f"{SUPABASE_URL.rstrip('/')}/rest/v1" if SUPABASE_URL else ""
+REST_BASE = product_context.LazyStr(product_context.supabase_rest_base)
 
 # Local JSON fallback – stored next to this file (for local dev)
 _LOCAL_FILE = Path(__file__).parent / "active_languages.json"
 
 
 def _headers(prefer: str = "return=representation") -> Dict[str, str]:
-    return {
-        "apikey": SUPABASE_SERVICE_KEY,
-        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
-        "Content-Type": "application/json",
-        "Prefer": prefer,
-    }
+    return product_context.supabase_headers({"Prefer": prefer})
 
 
 # ── Kept for backward compat with app.py routes ─────────────────────────
