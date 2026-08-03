@@ -31,6 +31,26 @@ app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 CORS(app, supports_credentials=True)
 
 
+# The multi-tenant proxies (product_context.LazyDict / LazyStr) behave like
+# dict/str for app logic but aren't real dict/str, so Flask's default JSON
+# encoder can't serialize them if one lands in a response (e.g. TARGET_LANGUAGES
+# returned as `languages`). Teach the encoder to materialize them.
+from flask.json.provider import DefaultJSONProvider
+
+
+class _TenantJSONProvider(DefaultJSONProvider):
+    @staticmethod
+    def default(o):
+        if isinstance(o, product_context.LazyDict):
+            return dict(o)
+        if isinstance(o, product_context.LazyStr):
+            return str(o)
+        return DefaultJSONProvider.default(o)
+
+
+app.json = _TenantJSONProvider(app)
+
+
 @app.before_request
 def log_request():
     """Log method and path for every request (server-side debug)."""
