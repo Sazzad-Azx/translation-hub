@@ -3,9 +3,53 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FundedNext - Translation Hub</title>
+    <title>{{ brand.name }} - Translation Hub</title>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260313z">
+    <!-- Per-product theme overrides (multi-tenant). Only vars the product sets are
+         overridden; the rest fall back to style.css defaults. -->
+    <style>
+        :root {
+            --primary: {{ brand.theme.primary | default('#2E6DA4') }};
+            --primary-hover: {{ brand.theme.primary_hover | default('#1A3D63') }};
+            --steel: {{ brand.theme.accent | default('#4A90C4') }};
+            --sidebar-bg: {{ brand.theme.sidebar_bg | default('#0D2137') }};
+            --sidebar-deep: {{ brand.theme.sidebar_deep | default('#102A4C') }};
+            --bg: {{ brand.theme.bg | default('#F2F8FD') }};
+            --text: {{ brand.theme.text | default('#0D2137') }};
+        }
+        /* Product switcher */
+        .product-switcher { position: relative; }
+        .switcher-btn {
+            display: flex; align-items: center; gap: 10px; width: 100%;
+            background: none; border: none; padding: 4px; border-radius: 10px;
+            cursor: pointer; text-align: left; color: inherit;
+        }
+        .switcher-btn[disabled] { cursor: default; }
+        .switcher-btn:not([disabled]):hover { background: rgba(255,255,255,.06); }
+        .switcher-labels { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+        .switcher-caret { font-size: 11px; opacity: .6; margin-left: auto; }
+        .switcher-menu {
+            position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 60;
+            background: #fff; border-radius: 12px; padding: 6px;
+            box-shadow: 0 18px 44px rgba(13,33,55,.3); display: none;
+        }
+        .product-switcher.open .switcher-menu { display: block; }
+        .switcher-option {
+            display: flex; align-items: center; gap: 10px; width: 100%;
+            background: none; border: none; padding: 9px 10px; border-radius: 9px;
+            cursor: pointer; text-align: left; font: inherit; color: #0D2137;
+        }
+        .switcher-option:hover { background: #f1f6fb; }
+        .switcher-option .opt-badge {
+            width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0;
+            display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 12px;
+            background: linear-gradient(135deg, var(--primary), var(--steel));
+        }
+        .switcher-option .opt-name { font-weight: 700; font-size: 14px; flex: 1; }
+        .switcher-option.active { background: var(--primary-light, #E0F0FA); }
+        .switcher-option .fa-check { color: var(--primary); font-size: 12px; }
+    </style>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -47,9 +91,9 @@
         <!-- Left Brand Panel -->
         <div class="login-left">
             <div class="login-brand">
-                <div class="login-brand-icon">FN</div>
+                <div class="login-brand-icon">{{ brand.short }}</div>
                 <div>
-                    <div class="login-brand-name">FundedNext</div>
+                    <div class="login-brand-name">{{ brand.name }}</div>
                     <div class="login-brand-sub">Translation Hub</div>
                 </div>
             </div>
@@ -59,7 +103,7 @@
 
 
             </div>
-            <div class="login-left-footer">&copy; 2026 NEXT Ventures &middot; FundedNext Translation Hub</div>
+            <div class="login-left-footer">&copy; 2026 {{ brand.company }} &middot; {{ brand.name }} Translation Hub</div>
         </div>
 
         <!-- Right Login Panel -->
@@ -72,7 +116,7 @@
                 <form id="login-form" autocomplete="on">
                     <div class="login-field">
                         <label for="login-email">Email address</label>
-                        <input type="email" id="login-email" placeholder="you@fundednext.com" required autocomplete="email">
+                        <input type="email" id="login-email" placeholder="you@{{ brand.domain }}" required autocomplete="email">
                     </div>
                     <div class="login-field">
                         <label for="login-password">Password</label>
@@ -101,7 +145,7 @@
                     </button>
                 </form>
                 <p class="login-footer-text">
-                    Having trouble? Contact <a href="mailto:support@fundednext.com">support@fundednext.com</a><br>
+                    Having trouble? Contact <a href="mailto:{{ brand.support_email }}">{{ brand.support_email }}</a><br>
                     or reach your workspace admin.
                 </p>
             </div>
@@ -116,12 +160,27 @@
     <!-- Sidebar -->
     <aside class="sidebar" id="sidebar">
         <div class="sidebar-header">
-            <div class="sidebar-logo">
-                <span class="sidebar-logo-badge"><img src="{{ url_for('static', filename='fn-logo.png') }}" alt="FN" style="width:100%;height:100%;object-fit:cover;border-radius:50%;"></span>
-                <div>
-                    <span class="sidebar-brand">FundedNext</span>
-                    <span class="sidebar-subtitle">TRANSLATION HUB</span>
+            <div class="product-switcher" id="product-switcher">
+                <button class="switcher-btn" id="switcher-btn"{% if products|length < 2 %} disabled{% endif %}
+                        aria-haspopup="true" aria-expanded="false">
+                    <span class="sidebar-logo-badge"><img src="{{ url_for('static', filename=brand.logo_file) }}" alt="{{ brand.short }}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;"></span>
+                    <div class="switcher-labels">
+                        <span class="sidebar-brand">{{ brand.name }}</span>
+                        <span class="sidebar-subtitle">TRANSLATION HUB</span>
+                    </div>
+                    {% if products|length > 1 %}<i class="fas fa-chevron-down switcher-caret"></i>{% endif %}
+                </button>
+                {% if products|length > 1 %}
+                <div class="switcher-menu" id="switcher-menu" role="menu">
+                    {% for p in products %}
+                    <button class="switcher-option{% if p.id == active_product %} active{% endif %}" data-product="{{ p.id }}" role="menuitemradio" aria-checked="{{ 'true' if p.id == active_product else 'false' }}">
+                        <span class="opt-badge">{{ p.short }}</span>
+                        <span class="opt-name">{{ p.name }}</span>
+                        {% if p.id == active_product %}<i class="fas fa-check"></i>{% endif %}
+                    </button>
+                    {% endfor %}
                 </div>
+                {% endif %}
             </div>
         </div>
 
@@ -1150,7 +1209,7 @@
             <div class="placeholder-page">
                 <div class="placeholder-icon"><i class="fas fa-bullhorn"></i></div>
                 <h2>Fundee Update</h2>
-                <p>Track and manage updates specific to FundedNext. Monitor article changes, version history, and stakeholder notifications.</p>
+                <p>Track and manage updates specific to {{ brand.name }}. Monitor article changes, version history, and stakeholder notifications.</p>
                 <span class="badge-coming-soon">Coming Soon</span>
             </div>
         </section>

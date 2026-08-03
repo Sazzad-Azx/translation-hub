@@ -52,8 +52,14 @@ def resolve_active_product():
 
 @app.context_processor
 def inject_brand():
-    """Expose the active product's branding to templates as ``brand``."""
-    return {"brand": product_context.current_product()["brand"]}
+    """Expose active product branding + the switcher's product list to templates."""
+    import config as _config
+    prod = product_context.current_product()
+    products = [
+        {"id": pid, "name": spec["name"], "short": spec["short"]}
+        for pid, spec in _config.PRODUCTS.items()
+    ]
+    return {"brand": prod["brand"], "active_product": prod["id"], "products": products}
 
 
 # ─── Auth helpers ──────────────────────────────────────────────
