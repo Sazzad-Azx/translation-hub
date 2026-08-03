@@ -105,3 +105,58 @@ SUPABASE_DB_URL = os.getenv("SUPABASE_DB_URL", "")
 # Super Admin Configuration (stored in environment variables)
 SUPER_ADMIN_EMAIL = os.getenv("SUPER_ADMIN_EMAIL", "sazzad@nextventures.io")
 SUPER_ADMIN_PASSWORD = os.getenv("SUPER_ADMIN_PASSWORD", "")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Multi-product (tenant) registry
+# ─────────────────────────────────────────────────────────────────────────────
+# The hub serves several products (FundedNext, FN Market, ...) from ONE
+# deployment. Each request resolves an "active product" and reads that product's
+# secrets from the environment variables named below (resolved per-request in
+# product_context.py). Non-secret branding/theme lives here in code; secrets
+# never do. FundedNext reuses the ORIGINAL env var names, so its production
+# configuration needs no changes and its behavior is unchanged.
+#
+# Adding a product later = one entry here + its env vars. No code path changes.
+PRODUCTS: Dict[str, dict] = {
+    "fundednext": {
+        "name": "FundedNext",
+        "short": "FN",
+        "company": "NEXT Ventures",
+        "domain": "fundednext.com",
+        "support_email": "support@fundednext.com",
+        "logo_file": "fn-logo.png",
+        "help_center_match": "fundednext",
+        "default_collection": "About FundedNext",
+        # Names of the env vars holding this product's secrets (read per-request):
+        "intercom_token_env": "INTERCOM_ACCESS_TOKEN",
+        "supabase_url_env": "SUPABASE_URL",
+        "supabase_key_env": "SUPABASE_SERVICE_KEY",
+        "supabase_db_url_env": "SUPABASE_DB_URL",
+        "openai_key_env": "OPENAI_API_KEY",
+        "theme": {
+            "primary": "#2E6DA4",
+            "primary_hover": "#1A3D63",
+            "accent": "#4A90C4",
+            "sidebar_bg": "#0D2137",
+            "sidebar_deep": "#102A4C",
+            "bg": "#F2F8FD",
+            "text": "#0D2137",
+        },
+        "default_languages": DEFAULT_TARGET_LANGUAGES,
+    },
+    # "fnmarket": { ... }  # added in Phase 3 (needs FN Market env vars + Supabase)
+}
+
+# The product used when a request specifies none (keeps cron/legacy calls working
+# exactly as today).
+DEFAULT_PRODUCT = "fundednext"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Control plane (auth / admins) — product-INDEPENDENT
+# ─────────────────────────────────────────────────────────────────────────────
+# Login must succeed before any product is chosen, so authentication uses a fixed
+# control database, never the per-request product DB. For now that is FundedNext's
+# existing Supabase (its current env vars). Override only if auth ever moves to a
+# dedicated control project.
+CONTROL_SUPABASE_URL = os.getenv("CONTROL_SUPABASE_URL", SUPABASE_URL)
+CONTROL_SUPABASE_KEY = os.getenv("CONTROL_SUPABASE_KEY", SUPABASE_SERVICE_KEY)

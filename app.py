@@ -23,6 +23,7 @@ from workflow import TranslationWorkflow
 from config import TARGET_LANGUAGES, BASE_LANGUAGE
 import auth_service
 import faq_search_service
+import product_context
 
 app = Flask(__name__)
 app.config['TEMPLATES_AUTO_RELOAD'] = True
@@ -37,6 +38,22 @@ def log_request():
         print(f"{request.method} {request.path}", flush=True)
     except OSError:
         pass
+
+
+@app.before_request
+def resolve_active_product():
+    """Resolve the active product (multi-tenant) onto flask.g for this request.
+
+    Reads X-Product header / ?product= / cookie, falling back to the default
+    product. Purely populates g.product — nothing breaks if a request omits it.
+    """
+    product_context.load_active_product()
+
+
+@app.context_processor
+def inject_brand():
+    """Expose the active product's branding to templates as ``brand``."""
+    return {"brand": product_context.current_product()["brand"]}
 
 
 # ─── Auth helpers ──────────────────────────────────────────────
