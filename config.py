@@ -144,7 +144,37 @@ PRODUCTS: Dict[str, dict] = {
         },
         "default_languages": DEFAULT_TARGET_LANGUAGES,
     },
-    # "fnmarket": { ... }  # added in Phase 3 (needs FN Market env vars + Supabase)
+    "fnmarket": {
+        "name": "FN Market",
+        "short": "FM",
+        "company": "NEXT Ventures",
+        "domain": "fnmarket.com",
+        "support_email": "support@fnmarket.com",
+        # Placeholder logo (reuses FN's asset so nothing 404s) — swap for a real
+        # FN Market logo file in static/ when available.
+        "logo_file": "fn-logo.png",
+        "help_center_match": "fnmarket",
+        "default_collection": "About FN Market",
+        "intercom_token_env": "FNMARKET_INTERCOM_TOKEN",
+        "supabase_url_env": "FNMARKET_SUPABASE_URL",
+        "supabase_key_env": "FNMARKET_SUPABASE_KEY",
+        "supabase_db_url_env": "FNMARKET_SUPABASE_DB_URL",
+        # Reuses FundedNext's OpenAI key/quota; set FNMARKET_OPENAI_KEY + change
+        # this to it later if you want translation cost attributed separately.
+        "openai_key_env": "OPENAI_API_KEY",
+        # Placeholder theme (from the approved concept demo).
+        "theme": {
+            "primary": "#0E9F6E",
+            "primary_hover": "#05704B",
+            "accent": "#34D399",
+            "sidebar_bg": "#0C2620",
+            "sidebar_deep": "#0F3329",
+            "bg": "#EFFBF5",
+            "text": "#0D2137",
+        },
+        # Seed set (same as FundedNext's defaults); edit in-app per product.
+        "default_languages": dict(DEFAULT_TARGET_LANGUAGES),
+    },
 }
 
 # The product used when a request specifies none (keeps cron/legacy calls working
