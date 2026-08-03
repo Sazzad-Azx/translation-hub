@@ -56,6 +56,7 @@ def resolve_product(product_id: str) -> dict:
         },
         "help_center_match": spec["help_center_match"],
         "default_collection": spec["default_collection"],
+        "schema": spec.get("schema", "public"),
         "intercom_token": os.getenv(spec["intercom_token_env"], ""),
         "supabase_url": os.getenv(spec["supabase_url_env"], ""),
         "supabase_key": os.getenv(spec["supabase_key_env"], ""),
@@ -168,14 +169,24 @@ class LazyStr:
 
 
 def supabase_headers(extra: dict = None) -> dict:
-    """Auth headers for the active product's Supabase (service role)."""
-    key = current_product()["supabase_key"]
+    """Auth + schema headers for the active product's Supabase (service role).
+
+    Shared-DB isolation: PostgREST selects the target Postgres schema from
+    Accept-Profile (reads) / Content-Profile (writes). We set both to the active
+    product's schema, so FundedNext hits `public` (its existing tables) and
+    FN Market hits `fnmarket` — same project, physically separate tables.
+    """
+    prod = current_product()
+    key = prod["supabase_key"]
     if not key:
         raise ValueError("SUPABASE_SERVICE_KEY must be set for the active product")
+    schema = prod.get("schema", "public")
     headers = {
         "apikey": key,
         "Authorization": f"Bearer {key}",
         "Content-Type": "application/json",
+        "Accept-Profile": schema,
+        "Content-Profile": schema,
     }
     if extra:
         headers.update(extra)

@@ -127,6 +127,8 @@ PRODUCTS: Dict[str, dict] = {
         "logo_file": "fn-logo.png",
         "help_center_match": "fundednext",
         "default_collection": "About FundedNext",
+        # Postgres schema this product's data lives in (shared-DB isolation).
+        "schema": "public",
         # Names of the env vars holding this product's secrets (read per-request):
         "intercom_token_env": "INTERCOM_ACCESS_TOKEN",
         "supabase_url_env": "SUPABASE_URL",
@@ -155,10 +157,16 @@ PRODUCTS: Dict[str, dict] = {
         "logo_file": "fn-logo.png",
         "help_center_match": "fnmarket",
         "default_collection": "About FN Market",
+        # Shared-DB isolation: FN Market reuses FundedNext's Supabase PROJECT but
+        # its data lives in a separate `fnmarket` Postgres schema (selected per
+        # request via PostgREST Accept-Profile/Content-Profile headers). So the
+        # Supabase URL/key/db-url env vars are the SAME as FundedNext's — only the
+        # schema differs. FN Market needs no FNMARKET_SUPABASE_* vars.
+        "schema": "fnmarket",
         "intercom_token_env": "FNMARKET_INTERCOM_TOKEN",
-        "supabase_url_env": "FNMARKET_SUPABASE_URL",
-        "supabase_key_env": "FNMARKET_SUPABASE_KEY",
-        "supabase_db_url_env": "FNMARKET_SUPABASE_DB_URL",
+        "supabase_url_env": "SUPABASE_URL",
+        "supabase_key_env": "SUPABASE_SERVICE_KEY",
+        "supabase_db_url_env": "SUPABASE_DB_URL",
         # Reuses FundedNext's OpenAI key/quota; set FNMARKET_OPENAI_KEY + change
         # this to it later if you want translation cost attributed separately.
         "openai_key_env": "OPENAI_API_KEY",

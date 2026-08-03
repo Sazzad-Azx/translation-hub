@@ -439,11 +439,7 @@ def _get_article_from_supabase(article_id: str) -> Optional[Dict]:
             _pctx = product_context.current_product(); SUPABASE_URL, SUPABASE_SERVICE_KEY = _pctx["supabase_url"], _pctx["supabase_key"]
             if SUPABASE_URL and SUPABASE_SERVICE_KEY:
                 REST_BASE = f"{SUPABASE_URL.rstrip('/')}/rest/v1"
-                headers = {
-                    "apikey": SUPABASE_SERVICE_KEY,
-                    "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
-                    "Content-Type": "application/json",
-                }
+                headers = product_context.supabase_headers()
                 # Find content_item by external_id
                 items_url = f"{REST_BASE}/intercom_content_items"
                 items_resp = requests.get(
@@ -837,12 +833,7 @@ def _fetch_and_upsert_dates(dates_to_fetch):
             continue
 
     if rows_to_upsert:
-        headers = {
-            'apikey': SUPABASE_SERVICE_KEY,
-            'Authorization': f'Bearer {SUPABASE_SERVICE_KEY}',
-            'Content-Type': 'application/json',
-            'Prefer': 'resolution=merge-duplicates',
-        }
+        headers = product_context.supabase_headers({'Prefer': 'resolution=merge-duplicates'})
         _req.post(
             f'{SUPABASE_URL}/rest/v1/daily_api_costs',
             headers=headers,
@@ -862,10 +853,7 @@ def _get_missing_dates():
 
     resp = _req.get(
         f'{SUPABASE_URL}/rest/v1/daily_api_costs',
-        headers={
-            'apikey': SUPABASE_SERVICE_KEY,
-            'Authorization': f'Bearer {SUPABASE_SERVICE_KEY}',
-        },
+        headers=product_context.supabase_headers(),
         params={
             'select': 'date',
             'date': f'gte.{start_date.isoformat()}',
@@ -932,10 +920,7 @@ def _get_cached_daily_costs(days=None, start_date=None, end_date=None):
 
     resp = _req.get(
         f'{SUPABASE_URL}/rest/v1/daily_api_costs',
-        headers={
-            'apikey': SUPABASE_SERVICE_KEY,
-            'Authorization': f'Bearer {SUPABASE_SERVICE_KEY}',
-        },
+        headers=product_context.supabase_headers(),
         params=params,
         timeout=15
     )
@@ -975,10 +960,7 @@ def dashboard_stats():
         from config import TARGET_LANGUAGES as _TL
         import requests as _req_pr
 
-        _SB_HEADERS = {
-            "apikey": SUPABASE_SERVICE_KEY,
-            "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
-        }
+        _SB_HEADERS = product_context.supabase_headers()
 
         # Dashboard-specific translation fetcher: only the activity feed uses
         # this result (total_translated now comes from list_translate_articles),
@@ -1510,7 +1492,7 @@ def test_connection():
         import requests as _req
         _pctx = product_context.current_product(); SUPABASE_URL, SUPABASE_SERVICE_KEY = _pctx["supabase_url"], _pctx["supabase_key"]
         _LP = _re.compile(r'^\[[A-Z]{2}(?:-[A-Z]{1,4})?\]\s+', _re.IGNORECASE)
-        _headers = {"apikey": SUPABASE_SERVICE_KEY, "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}"}
+        _headers = product_context.supabase_headers()
         rows = []
         _offset = 0
         while True:
@@ -2238,11 +2220,7 @@ def push_ensure_columns():
             return jsonify({'success': False, 'error': 'SUPABASE_URL not set'}), 500
 
         # Try to query pushed_at - if it fails, run the ALTER TABLE
-        h = {
-            "apikey": SUPABASE_SERVICE_KEY,
-            "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
-            "Content-Type": "application/json",
-        }
+        h = product_context.supabase_headers()
         resp = req.get(
             f"{rest_base}/article_translations?select=pushed_at&limit=1",
             headers=h, timeout=10,
