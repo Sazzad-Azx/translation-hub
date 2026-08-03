@@ -430,7 +430,7 @@ def _get_article_from_supabase(article_id: str) -> Optional[Dict]:
         # Try content_items/versions tables
         try:
             import requests
-            from config import SUPABASE_URL, SUPABASE_SERVICE_KEY
+            _pctx = product_context.current_product(); SUPABASE_URL, SUPABASE_SERVICE_KEY = _pctx["supabase_url"], _pctx["supabase_key"]
             if SUPABASE_URL and SUPABASE_SERVICE_KEY:
                 REST_BASE = f"{SUPABASE_URL.rstrip('/')}/rest/v1"
                 headers = {
@@ -787,7 +787,7 @@ def _fetch_and_upsert_dates(dates_to_fetch):
     """Fetch per-key costs for a list of dates from Vercel API and upsert to Supabase."""
     import datetime
     import requests as _req
-    from config import SUPABASE_URL, SUPABASE_SERVICE_KEY
+    _pctx = product_context.current_product(); SUPABASE_URL, SUPABASE_SERVICE_KEY = _pctx["supabase_url"], _pctx["supabase_key"]
 
     if not dates_to_fetch:
         return
@@ -849,7 +849,7 @@ def _get_missing_dates():
     """Return list of missing dates (excluding today) since 2025-01-01."""
     import datetime
     import requests as _req
-    from config import SUPABASE_URL, SUPABASE_SERVICE_KEY
+    _pctx = product_context.current_product(); SUPABASE_URL, SUPABASE_SERVICE_KEY = _pctx["supabase_url"], _pctx["supabase_key"]
 
     today = datetime.date.today()
     start_date = datetime.date(2026, 1, 1)
@@ -903,7 +903,7 @@ def _get_cached_daily_costs(days=None, start_date=None, end_date=None):
     """
     import datetime
     import requests as _req
-    from config import SUPABASE_URL, SUPABASE_SERVICE_KEY
+    _pctx = product_context.current_product(); SUPABASE_URL, SUPABASE_SERVICE_KEY = _pctx["supabase_url"], _pctx["supabase_key"]
 
     params = {
         'select': 'date,cost,key_id',
@@ -964,7 +964,9 @@ def dashboard_stats():
         import re as _re
         _LOCALE_PREFIX = _re.compile(r'^\[[A-Z]{2}(?:-[A-Z]{1,4})?\]\s+', _re.IGNORECASE)
 
-        from config import SUPABASE_URL, SUPABASE_SERVICE_KEY, TARGET_LANGUAGES as _TL
+        _pctx = product_context.current_product()
+        SUPABASE_URL, SUPABASE_SERVICE_KEY = _pctx["supabase_url"], _pctx["supabase_key"]
+        from config import TARGET_LANGUAGES as _TL
         import requests as _req_pr
 
         _SB_HEADERS = {
@@ -1500,7 +1502,7 @@ def test_connection():
     try:
         import re as _re
         import requests as _req
-        from config import SUPABASE_URL, SUPABASE_SERVICE_KEY
+        _pctx = product_context.current_product(); SUPABASE_URL, SUPABASE_SERVICE_KEY = _pctx["supabase_url"], _pctx["supabase_key"]
         _LP = _re.compile(r'^\[[A-Z]{2}(?:-[A-Z]{1,4})?\]\s+', _re.IGNORECASE)
         _headers = {"apikey": SUPABASE_SERVICE_KEY, "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}"}
         rows = []
@@ -1804,7 +1806,7 @@ def pull_create_table():
 
     # Try Management API
     pat = os.getenv('SUPABASE_PAT', '').strip() or os.getenv('SUPABASE_ACCESS_TOKEN', '').strip()
-    supabase_url = os.getenv('SUPABASE_URL', '').strip()
+    supabase_url = product_context.current_product()["supabase_url"].strip()
     ref = supabase_url.rstrip('/').split('//')[-1].replace('.supabase.co', '') if supabase_url else ''
     if pat and ref:
         try:
@@ -1985,7 +1987,7 @@ def glossary_create_tables():
             pass
 
     pat = os.getenv('SUPABASE_PAT', '').strip() or os.getenv('SUPABASE_ACCESS_TOKEN', '').strip()
-    supabase_url = os.getenv('SUPABASE_URL', '').strip()
+    supabase_url = product_context.current_product()["supabase_url"].strip()
     ref = supabase_url.rstrip('/').split('//')[-1].replace('.supabase.co', '') if supabase_url else ''
     if pat and ref:
         try:
@@ -2224,7 +2226,7 @@ def push_ensure_columns():
     """Ensure pushed_at and push_error columns exist in article_translations."""
     try:
         import requests as req
-        from config import SUPABASE_URL, SUPABASE_SERVICE_KEY
+        _pctx = product_context.current_product(); SUPABASE_URL, SUPABASE_SERVICE_KEY = _pctx["supabase_url"], _pctx["supabase_key"]
         rest_base = f"{SUPABASE_URL.rstrip('/')}/rest/v1" if SUPABASE_URL else ""
         if not rest_base:
             return jsonify({'success': False, 'error': 'SUPABASE_URL not set'}), 500
