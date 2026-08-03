@@ -14,7 +14,7 @@ if sys.platform == "win32":
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     except Exception:
         pass
-from flask import Flask, render_template, jsonify, request, send_file
+from flask import Flask, render_template, jsonify, request, send_file, g
 from flask_cors import CORS
 from functools import wraps
 from intercom_client import IntercomClient
@@ -124,20 +124,45 @@ def handle_exception(e):
     return jsonify({'success': False, 'error': 'Error', 'message': str(e)}), 500
 
 
-# Initialize clients
-intercom_client = None
-translator = None
-workflow = None
+# ─── Per-product API clients (multi-tenant) ──────────────────────────────────
+# Clients are bound to the ACTIVE product and cached on flask.g for the duration
+# of a single request. They are deliberately NOT module globals: a warm serverless
+# instance persists module state across requests, so a global client would leak
+# one product's Intercom token / OpenAI key into the next request for a different
+# product. The g-cache is keyed by product id, so if the active product changes
+# mid-request (e.g. the multi-product cron loop) the client is rebuilt correctly.
+
+def get_intercom():
+    """Intercom client for the active product (cached per request)."""
+    prod = product_context.current_product()
+    if getattr(g, "_intercom", None) is None or getattr(g, "_intercom_pid", None) != prod["id"]:
+        g._intercom = IntercomClient(access_token=prod["intercom_token"] or None)
+        g._intercom_pid = prod["id"]
+    return g._intercom
+
+
+def get_translator():
+    """GPT translator for the active product (cached per request)."""
+    prod = product_context.current_product()
+    if getattr(g, "_translator", None) is None or getattr(g, "_translator_pid", None) != prod["id"]:
+        g._translator = GPTTranslator(api_key=prod["openai_key"] or None)
+        g._translator_pid = prod["id"]
+    return g._translator
+
+
+def get_workflow():
+    """Translation workflow bound to the active product's clients (per request)."""
+    prod = product_context.current_product()
+    if getattr(g, "_workflow", None) is None or getattr(g, "_workflow_pid", None) != prod["id"]:
+        g._workflow = TranslationWorkflow(get_intercom(), get_translator())
+        g._workflow_pid = prod["id"]
+    return g._workflow
+
 
 def init_clients():
-    """Initialize API clients"""
-    global intercom_client, translator, workflow
-    if not intercom_client:
-        intercom_client = IntercomClient()
-    if not translator:
-        translator = GPTTranslator()
-    if not workflow:
-        workflow = TranslationWorkflow(intercom_client, translator)
+    """Deprecated no-op. Clients are now resolved per-request via get_intercom()/
+    get_translator()/get_workflow(). Kept so existing call sites stay valid."""
+    return None
 
 @app.route('/')
 def index():
@@ -318,17 +343,17 @@ def get_articles():
             # Fetch from FundedNext Help Center (same source as fetch-and-store)
             all_articles = []
             try:
-                all_articles = intercom_client.get_fundednext_help_center_articles(limit=50, fetch_full=True)
+                all_articles = get_intercom().get_fundednext_help_center_articles(limit=50, fetch_full=True)
             except Exception:
                 pass
             if not all_articles:
                 seen = set()
-                for a in intercom_client.get_all_help_center_articles():
+                for a in get_intercom().get_all_help_center_articles():
                     aid = a.get('id')
                     if aid is not None and str(aid) not in seen:
                         seen.add(str(aid))
                         all_articles.append(a)
-                for a in intercom_client.get_articles():
+                for a in get_intercom().get_articles():
                     aid = a.get('id')
                     if aid is not None and str(aid) not in seen:
                         seen.add(str(aid))
@@ -337,13 +362,13 @@ def get_articles():
             for i, a in enumerate(articles):
                 if not (a.get('body') or a.get('title')):
                     try:
-                        full = intercom_client.get_article(str(a.get('id', '')))
+                        full = get_intercom().get_article(str(a.get('id', '')))
                         if full:
                             articles[i] = full
                     except Exception:
                         pass
         else:
-            articles = intercom_client.get_articles(
+            articles = get_intercom().get_articles(
                 collection_id=collection_id,
                 tag_id=tag_id
             )
@@ -365,7 +390,7 @@ def get_article(article_id):
     """Get a specific article"""
     try:
         init_clients()
-        article = intercom_client.get_article(article_id)
+        article = get_intercom().get_article(article_id)
         
         return jsonify({
             'success': True,
@@ -471,7 +496,7 @@ def preview_translation():
         # If not in Supabase, try Intercom API
         if not article:
             try:
-                article = intercom_client.get_article(article_id)
+                article = get_intercom().get_article(article_id)
             except Exception as e:
                 return jsonify({
                     'success': False,
@@ -486,7 +511,7 @@ def preview_translation():
             }), 400
         
         # Translate
-        translated = translator.translate_article(
+        translated = get_translator().translate_article(
             article,
             target_language=language,
             source_language=BASE_LANGUAGE
@@ -520,7 +545,7 @@ def translate_articles():
             }), 400
         
         # Run workflow
-        results = workflow.run(
+        results = get_workflow().run(
             article_ids=article_ids,
             languages=languages
         )
@@ -1315,17 +1340,17 @@ def dashboard_articles():
                 init_clients()
                 intercom_list = []
                 try:
-                    intercom_list = intercom_client.get_fundednext_help_center_articles(limit=50, fetch_full=False)
+                    intercom_list = get_intercom().get_fundednext_help_center_articles(limit=50, fetch_full=False)
                 except Exception:
                     pass
                 if not intercom_list:
                     seen = set()
-                    for a in intercom_client.get_all_help_center_articles():
+                    for a in get_intercom().get_all_help_center_articles():
                         aid = a.get('id')
                         if aid is not None and str(aid) not in seen:
                             seen.add(str(aid))
                             intercom_list.append(a)
-                    for a in intercom_client.get_articles():
+                    for a in get_intercom().get_articles():
                         aid = a.get('id')
                         if aid is not None and str(aid) not in seen:
                             seen.add(str(aid))
@@ -1367,9 +1392,9 @@ def sync_from_intercom():
         collection_name = data.get('collection_name')
         collection_id = data.get('collection_id')
         if collection_id and collection_name:
-            result = sync_by_collection_id(collection_id, collection_name, intercom_client)
+            result = sync_by_collection_id(collection_id, collection_name, get_intercom())
         elif collection_name:
-            result = sync_collection_from_intercom(collection_name, intercom_client)
+            result = sync_collection_from_intercom(collection_name, get_intercom())
         else:
             return jsonify({
                 'success': False,
@@ -1398,24 +1423,24 @@ def fetch_and_store():
         all_articles = []
 
         try:
-            all_articles = intercom_client.get_fundednext_help_center_articles(limit=limit * 2, fetch_full=True)
+            all_articles = get_intercom().get_fundednext_help_center_articles(limit=limit * 2, fetch_full=True)
         except Exception:
             pass
 
         if not all_articles:
             seen = set()
-            for a in intercom_client.get_all_help_center_articles():
+            for a in get_intercom().get_all_help_center_articles():
                 aid = a.get('id')
                 if aid is not None and str(aid) not in seen:
                     seen.add(str(aid))
                     all_articles.append(a)
-            for a in intercom_client.get_articles():
+            for a in get_intercom().get_articles():
                 aid = a.get('id')
                 if aid is not None and str(aid) not in seen:
                     seen.add(str(aid))
                     all_articles.append(a)
             try:
-                for hc in intercom_client.get_help_centers():
+                for hc in get_intercom().get_help_centers():
                     hc_id = hc.get('id')
                     if hc_id is None:
                         continue
@@ -1423,7 +1448,7 @@ def fetch_and_store():
                         hc_id_int = int(hc_id)
                     except (TypeError, ValueError):
                         continue
-                    for a in intercom_client.search_articles(help_center_id=hc_id_int, state='published', limit=50):
+                    for a in get_intercom().search_articles(help_center_id=hc_id_int, state='published', limit=50):
                         aid = a.get('id')
                         if aid is not None and str(aid) not in seen:
                             seen.add(str(aid))
@@ -1445,7 +1470,7 @@ def fetch_and_store():
         for i, a in enumerate(articles):
             if not (a.get('body') or a.get('title')):
                 try:
-                    full = intercom_client.get_article(str(a.get('id', '')))
+                    full = get_intercom().get_article(str(a.get('id', '')))
                     if full:
                         articles[i] = full
                 except Exception:
@@ -1601,7 +1626,7 @@ def translate_hub_bulk():
         result = bulk_translate(
             intercom_ids=intercom_ids,
             locales=locales,
-            translator_instance=translator,
+            translator_instance=get_translator(),
             concurrency=8,
             glossary_id=None,  # Auto-uses all active glossaries
         )
@@ -1849,7 +1874,7 @@ def pull_sync_source():
         }), 400
     try:
         init_clients()
-        result = sync_source_list(intercom_client)
+        result = sync_source_list(get_intercom())
         return jsonify({'success': True, **result})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -1886,7 +1911,7 @@ def pull_execute():
                 'batch_limit': PULL_BATCH_LIMIT,
             }), 413
 
-        results = do_pull(intercom_ids, intercom_client)
+        results = do_pull(intercom_ids, get_intercom())
         success_count = sum(1 for r in results if r.get('status') == 'success')
         fail_count = sum(1 for r in results if r.get('status') == 'failed')
 
@@ -2321,7 +2346,7 @@ def push_execute():
         locale = (data.get('locale') or '').strip()
         if not intercom_id or not locale:
             return jsonify({'success': False, 'error': 'intercom_id and locale are required'}), 400
-        result = push_single(intercom_id, locale, intercom_client)
+        result = push_single(intercom_id, locale, get_intercom())
         return jsonify(result)
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -2346,7 +2371,7 @@ def push_bulk():
         result = bulk_push(
             intercom_ids=intercom_ids,
             locale=locale,
-            intercom_client=intercom_client,
+            intercom_client=get_intercom(),
             concurrency=3,
         )
         return jsonify({'success': True, **result})
@@ -2368,7 +2393,7 @@ def cleanup_locale_duplicates():
     from pull_service import cleanup_locale_articles_from_intercom
     try:
         init_clients()
-        result = cleanup_locale_articles_from_intercom(intercom_client)
+        result = cleanup_locale_articles_from_intercom(get_intercom())
         return jsonify(result)
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -2444,9 +2469,9 @@ def automation_run_now():
         key = data.get('key', 'auto_sync_pull')
         init_clients()
         if key == 'auto_pull_articles':
-            result = automation_service.run_auto_pull(intercom_client)
+            result = automation_service.run_auto_pull(get_intercom())
         else:
-            result = automation_service.run_auto_sync(intercom_client)
+            result = automation_service.run_auto_sync(get_intercom())
         return jsonify(result)
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -2475,7 +2500,7 @@ def cron_sync():
     print("[CRON SYNC] Authorized — starting auto sync", flush=True)
     try:
         init_clients()
-        result = automation_service.run_auto_sync(intercom_client)
+        result = automation_service.run_auto_sync(get_intercom())
         print(f"[CRON SYNC] Result: {result}", flush=True)
         return jsonify(result)
     except Exception as e:
@@ -2506,7 +2531,7 @@ def cron_pull():
     print("[CRON PULL] Authorized — starting auto pull", flush=True)
     try:
         init_clients()
-        result = automation_service.run_auto_pull(intercom_client)
+        result = automation_service.run_auto_pull(get_intercom())
         print(f"[CRON PULL] Result: {result}", flush=True)
         return jsonify(result)
     except Exception as e:
