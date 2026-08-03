@@ -7,23 +7,17 @@ import requests
 from datetime import datetime, timezone
 from typing import List, Dict, Optional
 
-from config import SUPABASE_URL, SUPABASE_SERVICE_KEY
+import product_context
 
 # Table name for mirrored articles
 ARTICLES_TABLE = "intercom_articles"
 
-REST_BASE = f"{SUPABASE_URL.rstrip('/')}/rest/v1" if SUPABASE_URL else ""
+# Resolves to the ACTIVE product's PostgREST base URL on every access.
+REST_BASE = product_context.LazyStr(product_context.supabase_rest_base)
 
 
 def _headers() -> Dict[str, str]:
-    if not SUPABASE_SERVICE_KEY:
-        raise ValueError("SUPABASE_SERVICE_KEY must be set")
-    return {
-        "apikey": SUPABASE_SERVICE_KEY,
-        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
-        "Content-Type": "application/json",
-        "Prefer": "return=minimal",
-    }
+    return product_context.supabase_headers({"Prefer": "return=minimal"})
 
 
 def ensure_table_sql() -> str:

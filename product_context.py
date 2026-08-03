@@ -103,3 +103,89 @@ def current_product() -> dict:
             g.product = prod
         return prod
     return resolve_product(config.DEFAULT_PRODUCT)
+
+
+# ─── Supabase helpers (resolve the ACTIVE product's DB per call) ──────────────
+# Service modules must call these at request time — never bind SUPABASE_URL /
+# REST_BASE at import, or they freeze to whichever product was default at import
+# and leak across tenants on a warm serverless instance.
+
+def supabase_rest_base() -> str:
+    """PostgREST base URL for the active product's database.
+
+    Returns "" when the product has no Supabase URL configured, preserving the
+    original modules' graceful-skip behavior (their own guards raise/return).
+    """
+    url = current_product()["supabase_url"]
+    return f"{url.rstrip('/')}/rest/v1" if url else ""
+
+
+class LazyStr:
+    """A string-like proxy whose value is recomputed on every access.
+
+    Lets a service module keep a module-level name like ``REST_BASE`` while its
+    value follows the ACTIVE product per call. f-strings, concatenation,
+    truthiness, len, equality and all str methods delegate to the freshly
+    resolved string, so existing call sites need no changes.
+    """
+    __slots__ = ("_fn",)
+
+    def __init__(self, fn):
+        object.__setattr__(self, "_fn", fn)
+
+    def __str__(self):
+        return self._fn()
+
+    def __repr__(self):
+        return self._fn()
+
+    def __format__(self, spec):
+        return format(self._fn(), spec)
+
+    def __bool__(self):
+        return bool(self._fn())
+
+    def __len__(self):
+        return len(self._fn())
+
+    def __eq__(self, other):
+        return self._fn() == other
+
+    def __hash__(self):
+        return hash(self._fn())
+
+    def __add__(self, other):
+        return self._fn() + other
+
+    def __radd__(self, other):
+        return other + self._fn()
+
+    def __getitem__(self, item):
+        return self._fn()[item]
+
+    def __getattr__(self, name):
+        return getattr(self._fn(), name)
+
+
+def supabase_headers(extra: dict = None) -> dict:
+    """Auth headers for the active product's Supabase (service role)."""
+    key = current_product()["supabase_key"]
+    if not key:
+        raise ValueError("SUPABASE_SERVICE_KEY must be set for the active product")
+    headers = {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+    }
+    if extra:
+        headers.update(extra)
+    return headers
+
+
+def active_languages() -> dict:
+    """Target languages for the active product.
+
+    Seed defaults from the registry; language_service overlays the per-product
+    set loaded from that product's DB during a request.
+    """
+    return current_product()["default_languages"]
