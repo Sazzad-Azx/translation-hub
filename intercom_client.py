@@ -5,6 +5,7 @@ import requests
 import time
 from typing import List, Dict, Optional
 from config import INTERCOM_ACCESS_TOKEN, INTERCOM_BASE_URL, MAX_RETRIES, RETRY_DELAY
+import product_context
 
 
 class IntercomClient:
@@ -250,6 +251,8 @@ class IntercomClient:
         and https://developers.intercom.com/docs/references/rest-api/api.intercom.io/help-center/listhelpcenters
         """
         help_centers = self.get_help_centers()
+        # Match the ACTIVE product's help center (e.g. "fundednext", "fnmarket").
+        match = (product_context.current_product().get("help_center_match") or "").lower()
         fundednext_id = None
         first_id = None
         for hc in help_centers:
@@ -261,7 +264,7 @@ class IntercomClient:
                 first_id = hc_id
             display_name = (hc.get("display_name") or hc.get("name") or "").lower()
             identifier = (hc.get("identifier") or "").lower()
-            if "fundednext" in display_name or "fundednext" in identifier:
+            if match and (match in display_name or match in identifier):
                 fundednext_id = hc_id
                 break
         if fundednext_id is None and first_id is not None:
