@@ -2485,6 +2485,29 @@ def automation_run_now():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+def _run_for_all_products(label, fn):
+    """Run fn() once per registered product, each with that product's context.
+
+    A single Vercel cron trigger has no active product, so we loop the registry
+    and set g.product per iteration; get_intercom()/services rebind automatically
+    (their g-cache is keyed by product id). Each product's own automation_settings
+    (in its own DB) still governs whether the run actually does anything.
+
+    NOTE: Vercel Hobby caps a function at 10s. With several products, prefer
+    per-product cron paths or chunking rather than one long loop.
+    """
+    import config as _config
+    results = {}
+    for pid in _config.PRODUCTS:
+        g.product = product_context.resolve_product(pid)
+        try:
+            results[pid] = fn()
+        except Exception as e:
+            print(f"[{label}] product={pid} error: {e}", flush=True)
+            results[pid] = {'success': False, 'error': str(e)}
+    return results
+
+
 @app.route('/api/cron/sync', methods=['GET', 'POST'])
 def cron_sync():
     """
@@ -2505,12 +2528,11 @@ def cron_sync():
             print(f"[CRON SYNC] Rejected — no auth. Headers: {dict(request.headers)}", flush=True)
             return jsonify({'success': False, 'error': 'Unauthorized cron request'}), 401
 
-    print("[CRON SYNC] Authorized — starting auto sync", flush=True)
+    print("[CRON SYNC] Authorized — starting auto sync for all products", flush=True)
     try:
-        init_clients()
-        result = automation_service.run_auto_sync(get_intercom())
-        print(f"[CRON SYNC] Result: {result}", flush=True)
-        return jsonify(result)
+        results = _run_for_all_products("CRON SYNC", lambda: automation_service.run_auto_sync(get_intercom()))
+        print(f"[CRON SYNC] Results: {results}", flush=True)
+        return jsonify({'success': True, 'products': results})
     except Exception as e:
         print(f"[CRON SYNC] Error: {e}", flush=True)
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -2536,12 +2558,11 @@ def cron_pull():
             print(f"[CRON PULL] Rejected — no auth. Headers: {dict(request.headers)}", flush=True)
             return jsonify({'success': False, 'error': 'Unauthorized cron request'}), 401
 
-    print("[CRON PULL] Authorized — starting auto pull", flush=True)
+    print("[CRON PULL] Authorized — starting auto pull for all products", flush=True)
     try:
-        init_clients()
-        result = automation_service.run_auto_pull(get_intercom())
-        print(f"[CRON PULL] Result: {result}", flush=True)
-        return jsonify(result)
+        results = _run_for_all_products("CRON PULL", lambda: automation_service.run_auto_pull(get_intercom()))
+        print(f"[CRON PULL] Results: {results}", flush=True)
+        return jsonify({'success': True, 'products': results})
     except Exception as e:
         print(f"[CRON PULL] Error: {e}", flush=True)
         return jsonify({'success': False, 'error': str(e)}), 500
