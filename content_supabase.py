@@ -8,20 +8,16 @@ import requests
 from datetime import datetime, timezone
 from typing import List, Dict, Optional
 
-from config import SUPABASE_URL, SUPABASE_SERVICE_KEY
+import product_context
 
-REST_BASE = f"{SUPABASE_URL.rstrip('/')}/rest/v1" if SUPABASE_URL else ""
+# Resolve to the ACTIVE product's database on every access (multi-tenant).
+REST_BASE = product_context.LazyStr(product_context.supabase_rest_base)
+SUPABASE_URL = product_context.LazyStr(product_context.supabase_url_value)
+SUPABASE_SERVICE_KEY = product_context.LazyStr(product_context.supabase_key_value)
 
 
 def _headers() -> Dict[str, str]:
-    if not SUPABASE_SERVICE_KEY:
-        raise ValueError("SUPABASE_SERVICE_KEY must be set")
-    return {
-        "apikey": SUPABASE_SERVICE_KEY,
-        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
-        "Content-Type": "application/json",
-        "Prefer": "return=minimal",
-    }
+    return product_context.supabase_headers({"Prefer": "return=minimal"})
 
 
 def insert_content_item(intercom_article_id: str, workspace: str = "default", project: str = "default") -> Optional[str]:

@@ -182,6 +182,16 @@ def supabase_headers(extra: dict = None) -> dict:
     return headers
 
 
+def supabase_url_value() -> str:
+    """Active product's Supabase URL (for module-level guard proxies)."""
+    return current_product()["supabase_url"]
+
+
+def supabase_key_value() -> str:
+    """Active product's Supabase service key (for module-level guard proxies)."""
+    return current_product()["supabase_key"]
+
+
 def active_languages() -> dict:
     """Target languages for the active product.
 

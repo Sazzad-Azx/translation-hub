@@ -7,9 +7,11 @@ No writes, no changes to existing tables or schema.
 import re
 import html as html_lib
 import requests
-from config import SUPABASE_URL, SUPABASE_SERVICE_KEY
+import product_context
 
-_REST = f"{SUPABASE_URL.rstrip('/')}/rest/v1"
+_REST = product_context.LazyStr(product_context.supabase_rest_base)
+SUPABASE_URL = product_context.LazyStr(product_context.supabase_url_value)
+SUPABASE_SERVICE_KEY = product_context.LazyStr(product_context.supabase_key_value)
 _SNIPPET_LEN = 400
 _CANDIDATE_CAP = 200  # over-fetch lightweight candidates, then rank
 _STOP_WORDS = {
@@ -21,10 +23,7 @@ _STOP_WORDS = {
 
 
 def _headers():
-    return {
-        "apikey": SUPABASE_SERVICE_KEY,
-        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
-    }
+    return product_context.supabase_headers()
 
 
 def _strip_html(raw):
