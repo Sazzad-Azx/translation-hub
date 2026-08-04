@@ -399,8 +399,10 @@ def list_push_articles_multi(
     def _fetch_for_locale(loc):
         return loc, _fetch_translations_for_locale(loc)
 
+    # Worker threads don't inherit Flask's g → rebind the active product per thread.
+    _fetch_job = product_context.with_current_product(_fetch_for_locale)
     with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(locales), 6)) as ex:
-        futures = [ex.submit(_fetch_for_locale, loc) for loc in locales]
+        futures = [ex.submit(_fetch_job, loc) for loc in locales]
         for f in concurrent.futures.as_completed(futures):
             try:
                 loc, data = f.result()
@@ -736,8 +738,10 @@ def bulk_push(
     def _push_one(iid):
         return push_single(iid, locale, intercom_client)
 
+    # Worker threads don't inherit Flask's g → rebind the active product per thread.
+    _push_job = product_context.with_current_product(_push_one)
     with concurrent.futures.ThreadPoolExecutor(max_workers=concurrency) as executor:
-        futures = {executor.submit(_push_one, iid): iid for iid in intercom_ids}
+        futures = {executor.submit(_push_job, iid): iid for iid in intercom_ids}
         for future in concurrent.futures.as_completed(futures):
             try:
                 result = future.result()

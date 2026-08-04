@@ -1046,10 +1046,13 @@ def dashboard_stats():
             except Exception:
                 return None
 
+        # Worker threads don't inherit Flask's g → rebind the active product so
+        # dashboard reads hit the active tenant's schema, not the default's.
+        _wcp = product_context.with_current_product
         with ThreadPoolExecutor(max_workers=3) as _ex:
-            _f_trans = _ex.submit(_fetch_translations_for_dashboard)
-            _f_pull = _ex.submit(_fetch_all_pull_rows)
-            _f_sync = _ex.submit(_fetch_last_sync_str)
+            _f_trans = _ex.submit(_wcp(_fetch_translations_for_dashboard))
+            _f_pull = _ex.submit(_wcp(_fetch_all_pull_rows))
+            _f_sync = _ex.submit(_wcp(_fetch_last_sync_str))
             all_translations = _f_trans.result()
             all_pull_rows = _f_pull.result()
             last_sync_str = _f_sync.result()

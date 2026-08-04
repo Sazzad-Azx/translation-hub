@@ -608,9 +608,12 @@ def bulk_translate(
             with _active_jobs_lock:
                 _active_jobs.pop(job_key, None)
 
-    # Execute with thread pool
+    # Execute with thread pool. Wrap so each worker thread runs under the active
+    # product (Flask's g doesn't cross thread boundaries — see with_current_product).
+    import product_context
+    _job = product_context.with_current_product(do_translate)
     with ThreadPoolExecutor(max_workers=concurrency) as executor:
-        futures = {executor.submit(do_translate, iid, loc): (iid, loc)
+        futures = {executor.submit(_job, iid, loc): (iid, loc)
                    for iid, loc in jobs}
         for future in as_completed(futures):
             result = future.result()

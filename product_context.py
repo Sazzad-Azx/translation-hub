@@ -16,7 +16,9 @@ Design notes
 * This module is intentionally free of any global mutable state so two products
   can never bleed into each other through a shared singleton.
 """
+import functools
 import os
+import threading
 
 import config
 
@@ -28,6 +30,47 @@ except Exception:  # pragma: no cover - allows import in non-Flask contexts
 
     def has_request_context():
         return False
+
+
+# Thread-local active-product override. Flask's ``g`` is request/thread-local, so
+# worker threads spawned from a request (ThreadPoolExecutor in bulk translate /
+# push) do NOT see the request's active product and would otherwise fall back to
+# the default product — reading/writing the WRONG tenant's schema. Workers set
+# this override (via ``with_current_product``) so ``current_product()`` resolves
+# the correct product inside the thread.
+_thread_ctx = threading.local()
+
+
+def bind_thread_product(product_id: str) -> None:
+    """Force the active product for the CURRENT thread (worker threads only)."""
+    _thread_ctx.product_id = product_id
+
+
+def clear_thread_product() -> None:
+    """Clear this thread's product override."""
+    if hasattr(_thread_ctx, "product_id"):
+        del _thread_ctx.product_id
+
+
+def with_current_product(fn):
+    """Wrap ``fn`` so it runs under the caller's active product inside a worker
+    thread. Capture the active product id NOW (main/request thread), then rebind
+    it on the worker thread for the duration of the call.
+
+    Usage: ``executor.submit(with_current_product(job), *args)`` — the wrap must
+    happen on the thread that has the request context (the submit loop).
+    """
+    pid = current_product()["id"]
+
+    @functools.wraps(fn)
+    def _wrapped(*args, **kwargs):
+        bind_thread_product(pid)
+        try:
+            return fn(*args, **kwargs)
+        finally:
+            clear_thread_product()
+
+    return _wrapped
 
 
 def resolve_product(product_id: str) -> dict:
@@ -106,6 +149,11 @@ def current_product() -> dict:
             prod = resolve_product(pick_product_id())
             g.product = prod
         return prod
+    # Worker thread (no request context): honor an explicit per-thread override
+    # before falling back to the default product.
+    pid = getattr(_thread_ctx, "product_id", None)
+    if pid:
+        return resolve_product(pid)
     return resolve_product(config.DEFAULT_PRODUCT)
 
 
