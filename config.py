@@ -127,6 +127,13 @@ PRODUCTS: Dict[str, dict] = {
         "logo_file": "fn-logo.png",
         "help_center_match": "fundednext",
         "default_collection": "About FundedNext",
+        # Live cost panel: the external OpenAI-usage analyzer + the key ids to sum.
+        # Products WITHOUT this block hide the cost card/chart and never call the
+        # analyzer (see templates/index.html). Only FundedNext has one today.
+        "cost_analyzer": {
+            "url": "https://intercom-analyzer-shizans-projects-a7b50fa1.vercel.app/api",
+            "target_keys": ["key_24T9PNCgnvWHZvxc", "key_DDHe898miisDLF3w"],
+        },
         # Postgres schema this product's data lives in (shared-DB isolation).
         "schema": "public",
         # Names of the env vars holding this product's secrets (read per-request):

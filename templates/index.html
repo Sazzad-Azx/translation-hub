@@ -285,7 +285,8 @@
                 </div>
             </div>
 
-            <!-- Date Filter Row -->
+            <!-- Date Filter Row (drives the live cost panel — only for products with a cost analyzer) -->
+            {% if brand.cost_analyzer %}
             <div style="display:flex; justify-content:flex-end; margin-bottom:16px; position:relative;">
                 <button id="dateFilterBtn" style="
                     display:inline-flex; align-items:center; gap:8px; padding:9px 18px;
@@ -362,6 +363,7 @@
                     </div>
                 </div>
             </div>
+            {% endif %}
 
             <!-- Stats Cards Row -->
             <div class="stats-row">
@@ -392,6 +394,7 @@
                         <span class="stat-label" id="stat-changed-label">Source Changes (7 Days)</span>
                     </div>
                 </div>
+                {% if brand.cost_analyzer %}
                 <div class="stat-card">
                     <div class="stat-icon stat-icon-cost">
                         <i class="fas fa-dollar-sign"></i>
@@ -401,6 +404,7 @@
                         <span class="stat-label">API Cost (All Time)</span>
                     </div>
                 </div>
+                {% endif %}
             </div>
 
             <!-- Charts Row -->
@@ -417,6 +421,7 @@
                         <canvas id="changesChart"></canvas>
                     </div>
                 </div>
+                {% if brand.cost_analyzer %}
                 <div class="card chart-card">
                     <div class="card-header">
                         <h3>Cost Analysis</h3>
@@ -429,6 +434,7 @@
                         <canvas id="costChart"></canvas>
                     </div>
                 </div>
+                {% endif %}
         </div>
 
             <!-- Bottom Row: Ranking + Recent Activity -->
@@ -1750,11 +1756,12 @@
     </div>
 
     <script src="{{ url_for('static', filename='app.js') }}?v=20260716"></script>
+    {% if brand.cost_analyzer %}
     <script>
-    // ── Date Filter & Live Cost ──
+    // ── Date Filter & Live Cost ── (only rendered for products with a cost analyzer)
     (function(){
-        const COST_API = 'https://intercom-analyzer-shizans-projects-a7b50fa1.vercel.app/api';
-        const TARGET_KEYS = ['key_24T9PNCgnvWHZvxc', 'key_DDHe898miisDLF3w'];
+        const COST_API = {{ brand.cost_analyzer.url | tojson }};
+        const TARGET_KEYS = {{ brand.cost_analyzer.target_keys | tojson }};
         const fmt = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
         const fmtDisplay = d => d ? d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—';
 
@@ -1923,5 +1930,6 @@
         fetchCost(null, null); // All Time on load
     })();
     </script>
+    {% endif %}
 </body>
 </html>

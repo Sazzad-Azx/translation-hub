@@ -53,6 +53,9 @@ def resolve_product(product_id: str) -> dict:
             "support_email": spec["support_email"],
             "logo_file": spec["logo_file"],
             "theme": spec["theme"],
+            # Optional external cost analyzer (url + target_keys). None when the
+            # product has no analyzer → template hides the cost panel entirely.
+            "cost_analyzer": spec.get("cost_analyzer"),
         },
         "help_center_match": spec["help_center_match"],
         "default_collection": spec["default_collection"],
