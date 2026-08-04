@@ -117,6 +117,17 @@ SUPER_ADMIN_PASSWORD = os.getenv("SUPER_ADMIN_PASSWORD", "")
 # configuration needs no changes and its behavior is unchanged.
 #
 # Adding a product later = one entry here + its env vars. No code path changes.
+
+# Shared cost analyzer: FundedNext and FN Market report the SAME API cost /
+# cost-analysis data (one external OpenAI-usage analyzer, one set of key ids),
+# so both product dashboards reference this single block. A future product that
+# needs different (or no) cost data gets its own block, or omits `cost_analyzer`
+# to hide the cost panel entirely.
+_SHARED_COST_ANALYZER = {
+    "url": "https://intercom-analyzer-shizans-projects-a7b50fa1.vercel.app/api",
+    "target_keys": ["key_24T9PNCgnvWHZvxc", "key_DDHe898miisDLF3w"],
+}
+
 PRODUCTS: Dict[str, dict] = {
     "fundednext": {
         "name": "FundedNext",
@@ -127,13 +138,10 @@ PRODUCTS: Dict[str, dict] = {
         "logo_file": "fn-logo.png",
         "help_center_match": "fundednext",
         "default_collection": "About FundedNext",
-        # Live cost panel: the external OpenAI-usage analyzer + the key ids to sum.
-        # Products WITHOUT this block hide the cost card/chart and never call the
-        # analyzer (see templates/index.html). Only FundedNext has one today.
-        "cost_analyzer": {
-            "url": "https://intercom-analyzer-shizans-projects-a7b50fa1.vercel.app/api",
-            "target_keys": ["key_24T9PNCgnvWHZvxc", "key_DDHe898miisDLF3w"],
-        },
+        # Live cost panel: shared analyzer (same data on every product's dashboard).
+        # Omit `cost_analyzer` on a product to hide the cost card/chart entirely
+        # (see templates/index.html).
+        "cost_analyzer": _SHARED_COST_ANALYZER,
         # Postgres schema this product's data lives in (shared-DB isolation).
         "schema": "public",
         # Names of the env vars holding this product's secrets (read per-request):
@@ -164,6 +172,8 @@ PRODUCTS: Dict[str, dict] = {
         "logo_file": "fn-logo.png",
         "help_center_match": "fnmarket",
         "default_collection": "About FN Market",
+        # Shares FundedNext's cost analyzer → identical API cost / cost analysis.
+        "cost_analyzer": _SHARED_COST_ANALYZER,
         # Shared-DB isolation: FN Market reuses FundedNext's Supabase PROJECT but
         # its data lives in a separate `fnmarket` Postgres schema (selected per
         # request via PostgREST Accept-Profile/Content-Profile headers). So the
