@@ -18,7 +18,9 @@ import requests
 from typing import Optional, Dict, List
 
 # ─── Config ────────────────────────────────────────────────────
-from config import SUPABASE_URL, SUPABASE_SERVICE_KEY as SUPABASE_KEY
+# Auth/admins live on the product-INDEPENDENT control plane, never the active
+# product's data DB (login must work before a product is chosen).
+from config import CONTROL_SUPABASE_URL as SUPABASE_URL, CONTROL_SUPABASE_KEY as SUPABASE_KEY
 SUPER_ADMIN_EMAIL = os.getenv("SUPER_ADMIN_EMAIL", "sazzad@nextventures.io")
 SUPER_ADMIN_PASSWORD = os.getenv("SUPER_ADMIN_PASSWORD", "")
 AUTH_SECRET = os.getenv("AUTH_SECRET", os.getenv("JWT_SECRET_KEY", ""))

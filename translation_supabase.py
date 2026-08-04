@@ -7,7 +7,6 @@ import requests
 from datetime import datetime, timezone
 from typing import List, Dict, Optional
 
-from config import SUPABASE_URL, SUPABASE_SERVICE_KEY
 from content_supabase import _headers, insert_content_item, REST_BASE
 
 TRANSLATIONS_TABLE = "article_translations"

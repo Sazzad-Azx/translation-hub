@@ -43,9 +43,12 @@ def _strip_code_fences(text: str) -> str:
     text = re.sub(r'\n?```\s*$', '', text.strip())
     return text
 
-from config import SUPABASE_URL, SUPABASE_SERVICE_KEY, TARGET_LANGUAGES, BASE_LANGUAGE
+import product_context
+from config import TARGET_LANGUAGES, BASE_LANGUAGE
 
-REST_BASE = f"{SUPABASE_URL.rstrip('/')}/rest/v1" if SUPABASE_URL else ""
+REST_BASE = product_context.LazyStr(product_context.supabase_rest_base)
+SUPABASE_URL = product_context.LazyStr(product_context.supabase_url_value)
+SUPABASE_SERVICE_KEY = product_context.LazyStr(product_context.supabase_key_value)
 PULL_TABLE = "pull_registry"
 TRANSLATIONS_TABLE = "article_translations"
 
@@ -68,16 +71,7 @@ _active_jobs_lock = threading.Lock()
 # ---------------------------------------------------------------------------
 
 def _headers(prefer: str = "") -> Dict[str, str]:
-    if not SUPABASE_SERVICE_KEY:
-        raise ValueError("SUPABASE_SERVICE_KEY must be set")
-    h = {
-        "apikey": SUPABASE_SERVICE_KEY,
-        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
-        "Content-Type": "application/json",
-    }
-    if prefer:
-        h["Prefer"] = prefer
-    return h
+    return product_context.supabase_headers({"Prefer": prefer} if prefer else None)
 
 
 def _parse_ts(ts_str: Optional[str]) -> Optional[datetime]:
@@ -614,9 +608,12 @@ def bulk_translate(
             with _active_jobs_lock:
                 _active_jobs.pop(job_key, None)
 
-    # Execute with thread pool
+    # Execute with thread pool. Wrap so each worker thread runs under the active
+    # product (Flask's g doesn't cross thread boundaries — see with_current_product).
+    import product_context
+    _job = product_context.with_current_product(do_translate)
     with ThreadPoolExecutor(max_workers=concurrency) as executor:
-        futures = {executor.submit(do_translate, iid, loc): (iid, loc)
+        futures = {executor.submit(_job, iid, loc): (iid, loc)
                    for iid, loc in jobs}
         for future in as_completed(futures):
             result = future.result()

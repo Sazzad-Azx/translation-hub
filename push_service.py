@@ -19,9 +19,12 @@ import requests
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
-from config import SUPABASE_URL, SUPABASE_SERVICE_KEY, TARGET_LANGUAGES
+import product_context
+from config import TARGET_LANGUAGES
 
-REST_BASE = f"{SUPABASE_URL.rstrip('/')}/rest/v1" if SUPABASE_URL else ""
+REST_BASE = product_context.LazyStr(product_context.supabase_rest_base)
+SUPABASE_URL = product_context.LazyStr(product_context.supabase_url_value)
+SUPABASE_SERVICE_KEY = product_context.LazyStr(product_context.supabase_key_value)
 PULL_TABLE = "pull_registry"
 TRANSLATIONS_TABLE = "article_translations"
 
@@ -34,16 +37,7 @@ _push_lock = threading.Lock()
 # ---------------------------------------------------------------------------
 
 def _headers(prefer: str = "") -> Dict[str, str]:
-    if not SUPABASE_SERVICE_KEY:
-        raise ValueError("SUPABASE_SERVICE_KEY must be set")
-    h = {
-        "apikey": SUPABASE_SERVICE_KEY,
-        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
-        "Content-Type": "application/json",
-    }
-    if prefer:
-        h["Prefer"] = prefer
-    return h
+    return product_context.supabase_headers({"Prefer": prefer} if prefer else None)
 
 
 def _parse_ts(val) -> Optional[datetime]:
@@ -405,8 +399,10 @@ def list_push_articles_multi(
     def _fetch_for_locale(loc):
         return loc, _fetch_translations_for_locale(loc)
 
+    # Worker threads don't inherit Flask's g → rebind the active product per thread.
+    _fetch_job = product_context.with_current_product(_fetch_for_locale)
     with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(locales), 6)) as ex:
-        futures = [ex.submit(_fetch_for_locale, loc) for loc in locales]
+        futures = [ex.submit(_fetch_job, loc) for loc in locales]
         for f in concurrent.futures.as_completed(futures):
             try:
                 loc, data = f.result()
@@ -742,8 +738,10 @@ def bulk_push(
     def _push_one(iid):
         return push_single(iid, locale, intercom_client)
 
+    # Worker threads don't inherit Flask's g → rebind the active product per thread.
+    _push_job = product_context.with_current_product(_push_one)
     with concurrent.futures.ThreadPoolExecutor(max_workers=concurrency) as executor:
-        futures = {executor.submit(_push_one, iid): iid for iid in intercom_ids}
+        futures = {executor.submit(_push_job, iid): iid for iid in intercom_ids}
         for future in concurrent.futures.as_completed(futures):
             try:
                 result = future.result()

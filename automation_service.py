@@ -10,9 +10,11 @@ import requests
 from datetime import datetime, timezone
 from typing import Dict, Optional
 
-from config import SUPABASE_URL, SUPABASE_SERVICE_KEY
+import product_context
 
-REST_BASE = f"{SUPABASE_URL.rstrip('/')}/rest/v1" if SUPABASE_URL else ""
+REST_BASE = product_context.LazyStr(product_context.supabase_rest_base)
+SUPABASE_URL = product_context.LazyStr(product_context.supabase_url_value)
+SUPABASE_SERVICE_KEY = product_context.LazyStr(product_context.supabase_key_value)
 TABLE = "automation_settings"
 
 SETUP_SQL = """
@@ -32,16 +34,7 @@ CREATE TABLE IF NOT EXISTS public.automation_settings (
 # ─── Helpers ──────────────────────────────────────────────────────
 
 def _headers(prefer: str = "") -> Dict[str, str]:
-    if not SUPABASE_SERVICE_KEY:
-        raise ValueError("SUPABASE_SERVICE_KEY must be set")
-    h = {
-        "apikey": SUPABASE_SERVICE_KEY,
-        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
-        "Content-Type": "application/json",
-    }
-    if prefer:
-        h["Prefer"] = prefer
-    return h
+    return product_context.supabase_headers({"Prefer": prefer} if prefer else None)
 
 
 def table_exists() -> bool:

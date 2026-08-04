@@ -7,14 +7,13 @@ from typing import List, Dict, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from intercom_client import IntercomClient
 from translator import GPTTranslator
+import product_context
 from config import (
     TARGET_LANGUAGES,
     BASE_LANGUAGE,
     TRANSLATION_BATCH_SIZE,
     INTERCOM_COLLECTION_ID,
     INTERCOM_TAG_ID,
-    SUPABASE_URL,
-    SUPABASE_SERVICE_KEY
 )
 
 
@@ -52,13 +51,10 @@ class TranslationWorkflow:
             
             # Try content_items/versions tables
             try:
-                if SUPABASE_URL and SUPABASE_SERVICE_KEY:
-                    REST_BASE = f"{SUPABASE_URL.rstrip('/')}/rest/v1"
-                    headers = {
-                        "apikey": SUPABASE_SERVICE_KEY,
-                        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
-                        "Content-Type": "application/json",
-                    }
+                _pctx = product_context.current_product()
+                if _pctx["supabase_url"] and _pctx["supabase_key"]:
+                    REST_BASE = product_context.supabase_rest_base()
+                    headers = product_context.supabase_headers()
                     # Find content_item by external_id
                     items_url = f"{REST_BASE}/intercom_content_items"
                     items_resp = requests.get(

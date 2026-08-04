@@ -54,19 +54,28 @@ function authHeaders() {
     return h;
 }
 
-// Intercept all fetch calls to /api/ to add auth header and handle 401
+// Active product (multi-tenant). The switcher persists this; every /api/ call
+// carries it as X-Product so the server resolves the right product's backend.
+function activeProduct() {
+    return localStorage.getItem('active_product') || 'fundednext';
+}
+
+// Intercept all fetch calls to /api/ to add auth + product headers and handle 401
 const _originalFetch = window.fetch;
 window.fetch = function(url, options = {}) {
     if (typeof url === 'string' && url.startsWith('/api/') && url !== '/api/auth/login') {
         options = options || {};
         options.headers = options.headers || {};
+        const _pid = activeProduct();
         // If headers is a Headers object, convert
         if (options.headers instanceof Headers) {
             if (authState.token) options.headers.set('Authorization', `Bearer ${authState.token}`);
+            options.headers.set('X-Product', _pid);
         } else {
             if (authState.token && !options.headers['Authorization']) {
                 options.headers['Authorization'] = `Bearer ${authState.token}`;
             }
+            if (!options.headers['X-Product']) options.headers['X-Product'] = _pid;
         }
     }
     return _originalFetch.call(this, url, options).then(response => {
@@ -6248,3 +6257,32 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+// ─── Product switcher (multi-tenant) ───────────────────────────────────────
+// Toggles the sidebar switcher and, on selection, persists the active product
+// (localStorage for the fetch header + cookie so the server renders that
+// product's branding on reload) then reloads to load the product's data.
+function wireProductSwitcher() {
+    const sw = document.getElementById('product-switcher');
+    const btn = document.getElementById('switcher-btn');
+    if (!sw || !btn || btn.disabled) return;
+    btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const open = sw.classList.toggle('open');
+        btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+    document.addEventListener('click', () => {
+        sw.classList.remove('open');
+        btn.setAttribute('aria-expanded', 'false');
+    });
+    sw.querySelectorAll('.switcher-option').forEach((opt) => {
+        opt.addEventListener('click', () => {
+            const pid = opt.getAttribute('data-product');
+            if (!pid || pid === activeProduct()) { sw.classList.remove('open'); return; }
+            localStorage.setItem('active_product', pid);
+            document.cookie = 'active_product=' + encodeURIComponent(pid) +
+                '; path=/; max-age=31536000; SameSite=Lax';
+            location.reload();
+        });
+    });
+}
+document.addEventListener('DOMContentLoaded', wireProductSwitcher);

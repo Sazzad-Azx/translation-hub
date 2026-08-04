@@ -105,3 +105,122 @@ SUPABASE_DB_URL = os.getenv("SUPABASE_DB_URL", "")
 # Super Admin Configuration (stored in environment variables)
 SUPER_ADMIN_EMAIL = os.getenv("SUPER_ADMIN_EMAIL", "sazzad@nextventures.io")
 SUPER_ADMIN_PASSWORD = os.getenv("SUPER_ADMIN_PASSWORD", "")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Multi-product (tenant) registry
+# ─────────────────────────────────────────────────────────────────────────────
+# The hub serves several products (FundedNext, FN Market, ...) from ONE
+# deployment. Each request resolves an "active product" and reads that product's
+# secrets from the environment variables named below (resolved per-request in
+# product_context.py). Non-secret branding/theme lives here in code; secrets
+# never do. FundedNext reuses the ORIGINAL env var names, so its production
+# configuration needs no changes and its behavior is unchanged.
+#
+# Adding a product later = one entry here + its env vars. No code path changes.
+
+# Shared cost analyzer: FundedNext and FN Market report the SAME API cost /
+# cost-analysis data (one external OpenAI-usage analyzer, one set of key ids),
+# so both product dashboards reference this single block. A future product that
+# needs different (or no) cost data gets its own block, or omits `cost_analyzer`
+# to hide the cost panel entirely.
+_SHARED_COST_ANALYZER = {
+    "url": "https://intercom-analyzer-shizans-projects-a7b50fa1.vercel.app/api",
+    "target_keys": ["key_24T9PNCgnvWHZvxc", "key_DDHe898miisDLF3w"],
+}
+
+PRODUCTS: Dict[str, dict] = {
+    "fundednext": {
+        "name": "FundedNext",
+        "short": "FN",
+        "company": "NEXT Ventures",
+        "domain": "fundednext.com",
+        "support_email": "support@fundednext.com",
+        "logo_file": "fn-logo.png",
+        "help_center_match": "fundednext",
+        "default_collection": "About FundedNext",
+        # Live cost panel: shared analyzer (same data on every product's dashboard).
+        # Omit `cost_analyzer` on a product to hide the cost card/chart entirely
+        # (see templates/index.html).
+        "cost_analyzer": _SHARED_COST_ANALYZER,
+        # Postgres schema this product's data lives in (shared-DB isolation).
+        "schema": "public",
+        # Names of the env vars holding this product's secrets (read per-request):
+        "intercom_token_env": "INTERCOM_ACCESS_TOKEN",
+        "supabase_url_env": "SUPABASE_URL",
+        "supabase_key_env": "SUPABASE_SERVICE_KEY",
+        "supabase_db_url_env": "SUPABASE_DB_URL",
+        "openai_key_env": "OPENAI_API_KEY",
+        "theme": {
+            "primary": "#2E6DA4",
+            "primary_hover": "#1A3D63",
+            "accent": "#4A90C4",
+            "sidebar_bg": "#0D2137",
+            "sidebar_deep": "#102A4C",
+            "bg": "#F2F8FD",
+            "text": "#0D2137",
+        },
+        "default_languages": DEFAULT_TARGET_LANGUAGES,
+    },
+    "fnmarket": {
+        "name": "FN Market",
+        "short": "FM",
+        "company": "NEXT Ventures",
+        "domain": "fnmarket.com",
+        "support_email": "support@fnmarket.com",
+        # Placeholder logo (reuses FN's asset so nothing 404s) — swap for a real
+        # FN Market logo file in static/ when available.
+        "logo_file": "fn-logo.png",
+        "help_center_match": "fnmarket",
+        "default_collection": "About FN Market",
+        # Shares FundedNext's cost analyzer → identical API cost / cost analysis.
+        "cost_analyzer": _SHARED_COST_ANALYZER,
+        # Shared-DB isolation: FN Market reuses FundedNext's Supabase PROJECT but
+        # its data lives in a separate `fnmarket` Postgres schema (selected per
+        # request via PostgREST Accept-Profile/Content-Profile headers). So the
+        # Supabase URL/key/db-url env vars are the SAME as FundedNext's — only the
+        # schema differs. FN Market needs no FNMARKET_SUPABASE_* vars.
+        "schema": "fnmarket",
+        "intercom_token_env": "FNMARKET_INTERCOM_TOKEN",
+        "supabase_url_env": "SUPABASE_URL",
+        "supabase_key_env": "SUPABASE_SERVICE_KEY",
+        "supabase_db_url_env": "SUPABASE_DB_URL",
+        # Reuses FundedNext's OpenAI key/quota; set FNMARKET_OPENAI_KEY + change
+        # this to it later if you want translation cost attributed separately.
+        "openai_key_env": "OPENAI_API_KEY",
+        # Placeholder theme (from the approved concept demo).
+        "theme": {
+            "primary": "#0E9F6E",
+            "primary_hover": "#05704B",
+            "accent": "#34D399",
+            "sidebar_bg": "#0C2620",
+            "sidebar_deep": "#0F3329",
+            "bg": "#EFFBF5",
+            "text": "#0D2137",
+        },
+        # Seed set (same as FundedNext's defaults); edit in-app per product.
+        "default_languages": dict(DEFAULT_TARGET_LANGUAGES),
+    },
+}
+
+# The product used when a request specifies none (keeps cron/legacy calls working
+# exactly as today).
+DEFAULT_PRODUCT = "fundednext"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Control plane (auth / admins) — product-INDEPENDENT
+# ─────────────────────────────────────────────────────────────────────────────
+# Login must succeed before any product is chosen, so authentication uses a fixed
+# control database, never the per-request product DB. For now that is FundedNext's
+# existing Supabase (its current env vars). Override only if auth ever moves to a
+# dedicated control project.
+CONTROL_SUPABASE_URL = os.getenv("CONTROL_SUPABASE_URL", SUPABASE_URL)
+CONTROL_SUPABASE_KEY = os.getenv("CONTROL_SUPABASE_KEY", SUPABASE_SERVICE_KEY)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Make the shared target-language set follow the active product (multi-tenant).
+# TARGET_LANGUAGES above is the single-tenant seed; override it with a proxy that
+# resolves to the active product's language cache. Imported lazily here to avoid a
+# circular import (product_context only reads config attributes at call time).
+# ─────────────────────────────────────────────────────────────────────────────
+import product_context as _pc  # noqa: E402
+TARGET_LANGUAGES = _pc.LazyDict(_pc.active_languages_dict)

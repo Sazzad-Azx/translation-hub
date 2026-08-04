@@ -14,7 +14,7 @@ if sys.platform == "win32":
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     except Exception:
         pass
-from flask import Flask, render_template, jsonify, request, send_file
+from flask import Flask, render_template, jsonify, request, send_file, g
 from flask_cors import CORS
 from functools import wraps
 from intercom_client import IntercomClient
@@ -23,11 +23,32 @@ from workflow import TranslationWorkflow
 from config import TARGET_LANGUAGES, BASE_LANGUAGE
 import auth_service
 import faq_search_service
+import product_context
 
 app = Flask(__name__)
 app.config['TEMPLATES_AUTO_RELOAD'] = True
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 CORS(app, supports_credentials=True)
+
+
+# The multi-tenant proxies (product_context.LazyDict / LazyStr) behave like
+# dict/str for app logic but aren't real dict/str, so Flask's default JSON
+# encoder can't serialize them if one lands in a response (e.g. TARGET_LANGUAGES
+# returned as `languages`). Teach the encoder to materialize them.
+from flask.json.provider import DefaultJSONProvider
+
+
+class _TenantJSONProvider(DefaultJSONProvider):
+    @staticmethod
+    def default(o):
+        if isinstance(o, product_context.LazyDict):
+            return dict(o)
+        if isinstance(o, product_context.LazyStr):
+            return str(o)
+        return DefaultJSONProvider.default(o)
+
+
+app.json = _TenantJSONProvider(app)
 
 
 @app.before_request
@@ -37,6 +58,28 @@ def log_request():
         print(f"{request.method} {request.path}", flush=True)
     except OSError:
         pass
+
+
+@app.before_request
+def resolve_active_product():
+    """Resolve the active product (multi-tenant) onto flask.g for this request.
+
+    Reads X-Product header / ?product= / cookie, falling back to the default
+    product. Purely populates g.product — nothing breaks if a request omits it.
+    """
+    product_context.load_active_product()
+
+
+@app.context_processor
+def inject_brand():
+    """Expose active product branding + the switcher's product list to templates."""
+    import config as _config
+    prod = product_context.current_product()
+    products = [
+        {"id": pid, "name": spec["name"], "short": spec["short"]}
+        for pid, spec in _config.PRODUCTS.items()
+    ]
+    return {"brand": prod["brand"], "active_product": prod["id"], "products": products}
 
 
 # ─── Auth helpers ──────────────────────────────────────────────
@@ -107,20 +150,45 @@ def handle_exception(e):
     return jsonify({'success': False, 'error': 'Error', 'message': str(e)}), 500
 
 
-# Initialize clients
-intercom_client = None
-translator = None
-workflow = None
+# ─── Per-product API clients (multi-tenant) ──────────────────────────────────
+# Clients are bound to the ACTIVE product and cached on flask.g for the duration
+# of a single request. They are deliberately NOT module globals: a warm serverless
+# instance persists module state across requests, so a global client would leak
+# one product's Intercom token / OpenAI key into the next request for a different
+# product. The g-cache is keyed by product id, so if the active product changes
+# mid-request (e.g. the multi-product cron loop) the client is rebuilt correctly.
+
+def get_intercom():
+    """Intercom client for the active product (cached per request)."""
+    prod = product_context.current_product()
+    if getattr(g, "_intercom", None) is None or getattr(g, "_intercom_pid", None) != prod["id"]:
+        g._intercom = IntercomClient(access_token=prod["intercom_token"] or None)
+        g._intercom_pid = prod["id"]
+    return g._intercom
+
+
+def get_translator():
+    """GPT translator for the active product (cached per request)."""
+    prod = product_context.current_product()
+    if getattr(g, "_translator", None) is None or getattr(g, "_translator_pid", None) != prod["id"]:
+        g._translator = GPTTranslator(api_key=prod["openai_key"] or None)
+        g._translator_pid = prod["id"]
+    return g._translator
+
+
+def get_workflow():
+    """Translation workflow bound to the active product's clients (per request)."""
+    prod = product_context.current_product()
+    if getattr(g, "_workflow", None) is None or getattr(g, "_workflow_pid", None) != prod["id"]:
+        g._workflow = TranslationWorkflow(get_intercom(), get_translator())
+        g._workflow_pid = prod["id"]
+    return g._workflow
+
 
 def init_clients():
-    """Initialize API clients"""
-    global intercom_client, translator, workflow
-    if not intercom_client:
-        intercom_client = IntercomClient()
-    if not translator:
-        translator = GPTTranslator()
-    if not workflow:
-        workflow = TranslationWorkflow(intercom_client, translator)
+    """Deprecated no-op. Clients are now resolved per-request via get_intercom()/
+    get_translator()/get_workflow(). Kept so existing call sites stay valid."""
+    return None
 
 @app.route('/')
 def index():
@@ -301,17 +369,17 @@ def get_articles():
             # Fetch from FundedNext Help Center (same source as fetch-and-store)
             all_articles = []
             try:
-                all_articles = intercom_client.get_fundednext_help_center_articles(limit=50, fetch_full=True)
+                all_articles = get_intercom().get_fundednext_help_center_articles(limit=50, fetch_full=True)
             except Exception:
                 pass
             if not all_articles:
                 seen = set()
-                for a in intercom_client.get_all_help_center_articles():
+                for a in get_intercom().get_all_help_center_articles():
                     aid = a.get('id')
                     if aid is not None and str(aid) not in seen:
                         seen.add(str(aid))
                         all_articles.append(a)
-                for a in intercom_client.get_articles():
+                for a in get_intercom().get_articles():
                     aid = a.get('id')
                     if aid is not None and str(aid) not in seen:
                         seen.add(str(aid))
@@ -320,13 +388,13 @@ def get_articles():
             for i, a in enumerate(articles):
                 if not (a.get('body') or a.get('title')):
                     try:
-                        full = intercom_client.get_article(str(a.get('id', '')))
+                        full = get_intercom().get_article(str(a.get('id', '')))
                         if full:
                             articles[i] = full
                     except Exception:
                         pass
         else:
-            articles = intercom_client.get_articles(
+            articles = get_intercom().get_articles(
                 collection_id=collection_id,
                 tag_id=tag_id
             )
@@ -348,7 +416,7 @@ def get_article(article_id):
     """Get a specific article"""
     try:
         init_clients()
-        article = intercom_client.get_article(article_id)
+        article = get_intercom().get_article(article_id)
         
         return jsonify({
             'success': True,
@@ -388,14 +456,10 @@ def _get_article_from_supabase(article_id: str) -> Optional[Dict]:
         # Try content_items/versions tables
         try:
             import requests
-            from config import SUPABASE_URL, SUPABASE_SERVICE_KEY
+            _pctx = product_context.current_product(); SUPABASE_URL, SUPABASE_SERVICE_KEY = _pctx["supabase_url"], _pctx["supabase_key"]
             if SUPABASE_URL and SUPABASE_SERVICE_KEY:
                 REST_BASE = f"{SUPABASE_URL.rstrip('/')}/rest/v1"
-                headers = {
-                    "apikey": SUPABASE_SERVICE_KEY,
-                    "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
-                    "Content-Type": "application/json",
-                }
+                headers = product_context.supabase_headers()
                 # Find content_item by external_id
                 items_url = f"{REST_BASE}/intercom_content_items"
                 items_resp = requests.get(
@@ -454,7 +518,7 @@ def preview_translation():
         # If not in Supabase, try Intercom API
         if not article:
             try:
-                article = intercom_client.get_article(article_id)
+                article = get_intercom().get_article(article_id)
             except Exception as e:
                 return jsonify({
                     'success': False,
@@ -469,7 +533,7 @@ def preview_translation():
             }), 400
         
         # Translate
-        translated = translator.translate_article(
+        translated = get_translator().translate_article(
             article,
             target_language=language,
             source_language=BASE_LANGUAGE
@@ -503,7 +567,7 @@ def translate_articles():
             }), 400
         
         # Run workflow
-        results = workflow.run(
+        results = get_workflow().run(
             article_ids=article_ids,
             languages=languages
         )
@@ -741,11 +805,17 @@ COST_API_URL = os.getenv('COST_API_URL', '').rstrip('/')
 _cost_keys_raw = os.getenv('COST_TARGET_KEYS', '')
 COST_TARGET_KEYS = [k.strip() for k in _cost_keys_raw.split(',') if k.strip()]
 
+# Cost data is product-agnostic (one shared analyzer + key set), so every product
+# reads/writes the SAME rows in `public.daily_api_costs` — never the active
+# product's isolated schema. This keeps FN Market's Cost Analysis chart identical
+# to FundedNext's, with no per-schema duplication or first-load populate gap.
+COST_SCHEMA = 'public'
+
 def _fetch_and_upsert_dates(dates_to_fetch):
     """Fetch per-key costs for a list of dates from Vercel API and upsert to Supabase."""
     import datetime
     import requests as _req
-    from config import SUPABASE_URL, SUPABASE_SERVICE_KEY
+    _pctx = product_context.current_product(); SUPABASE_URL, SUPABASE_SERVICE_KEY = _pctx["supabase_url"], _pctx["supabase_key"]
 
     if not dates_to_fetch:
         return
@@ -789,12 +859,7 @@ def _fetch_and_upsert_dates(dates_to_fetch):
             continue
 
     if rows_to_upsert:
-        headers = {
-            'apikey': SUPABASE_SERVICE_KEY,
-            'Authorization': f'Bearer {SUPABASE_SERVICE_KEY}',
-            'Content-Type': 'application/json',
-            'Prefer': 'resolution=merge-duplicates',
-        }
+        headers = product_context.supabase_headers({'Prefer': 'resolution=merge-duplicates'}, schema=COST_SCHEMA)
         _req.post(
             f'{SUPABASE_URL}/rest/v1/daily_api_costs',
             headers=headers,
@@ -807,17 +872,14 @@ def _get_missing_dates():
     """Return list of missing dates (excluding today) since 2025-01-01."""
     import datetime
     import requests as _req
-    from config import SUPABASE_URL, SUPABASE_SERVICE_KEY
+    _pctx = product_context.current_product(); SUPABASE_URL, SUPABASE_SERVICE_KEY = _pctx["supabase_url"], _pctx["supabase_key"]
 
     today = datetime.date.today()
     start_date = datetime.date(2026, 1, 1)
 
     resp = _req.get(
         f'{SUPABASE_URL}/rest/v1/daily_api_costs',
-        headers={
-            'apikey': SUPABASE_SERVICE_KEY,
-            'Authorization': f'Bearer {SUPABASE_SERVICE_KEY}',
-        },
+        headers=product_context.supabase_headers(schema=COST_SCHEMA),
         params={
             'select': 'date',
             'date': f'gte.{start_date.isoformat()}',
@@ -861,7 +923,7 @@ def _get_cached_daily_costs(days=None, start_date=None, end_date=None):
     """
     import datetime
     import requests as _req
-    from config import SUPABASE_URL, SUPABASE_SERVICE_KEY
+    _pctx = product_context.current_product(); SUPABASE_URL, SUPABASE_SERVICE_KEY = _pctx["supabase_url"], _pctx["supabase_key"]
 
     params = {
         'select': 'date,cost,key_id',
@@ -884,10 +946,7 @@ def _get_cached_daily_costs(days=None, start_date=None, end_date=None):
 
     resp = _req.get(
         f'{SUPABASE_URL}/rest/v1/daily_api_costs',
-        headers={
-            'apikey': SUPABASE_SERVICE_KEY,
-            'Authorization': f'Bearer {SUPABASE_SERVICE_KEY}',
-        },
+        headers=product_context.supabase_headers(schema=COST_SCHEMA),
         params=params,
         timeout=15
     )
@@ -922,13 +981,12 @@ def dashboard_stats():
         import re as _re
         _LOCALE_PREFIX = _re.compile(r'^\[[A-Z]{2}(?:-[A-Z]{1,4})?\]\s+', _re.IGNORECASE)
 
-        from config import SUPABASE_URL, SUPABASE_SERVICE_KEY, TARGET_LANGUAGES as _TL
+        _pctx = product_context.current_product()
+        SUPABASE_URL, SUPABASE_SERVICE_KEY = _pctx["supabase_url"], _pctx["supabase_key"]
+        from config import TARGET_LANGUAGES as _TL
         import requests as _req_pr
 
-        _SB_HEADERS = {
-            "apikey": SUPABASE_SERVICE_KEY,
-            "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
-        }
+        _SB_HEADERS = product_context.supabase_headers()
 
         # Dashboard-specific translation fetcher: only the activity feed uses
         # this result (total_translated now comes from list_translate_articles),
@@ -988,10 +1046,13 @@ def dashboard_stats():
             except Exception:
                 return None
 
+        # Worker threads don't inherit Flask's g → rebind the active product so
+        # dashboard reads hit the active tenant's schema, not the default's.
+        _wcp = product_context.with_current_product
         with ThreadPoolExecutor(max_workers=3) as _ex:
-            _f_trans = _ex.submit(_fetch_translations_for_dashboard)
-            _f_pull = _ex.submit(_fetch_all_pull_rows)
-            _f_sync = _ex.submit(_fetch_last_sync_str)
+            _f_trans = _ex.submit(_wcp(_fetch_translations_for_dashboard))
+            _f_pull = _ex.submit(_wcp(_fetch_all_pull_rows))
+            _f_sync = _ex.submit(_wcp(_fetch_last_sync_str))
             all_translations = _f_trans.result()
             all_pull_rows = _f_pull.result()
             last_sync_str = _f_sync.result()
@@ -1298,17 +1359,17 @@ def dashboard_articles():
                 init_clients()
                 intercom_list = []
                 try:
-                    intercom_list = intercom_client.get_fundednext_help_center_articles(limit=50, fetch_full=False)
+                    intercom_list = get_intercom().get_fundednext_help_center_articles(limit=50, fetch_full=False)
                 except Exception:
                     pass
                 if not intercom_list:
                     seen = set()
-                    for a in intercom_client.get_all_help_center_articles():
+                    for a in get_intercom().get_all_help_center_articles():
                         aid = a.get('id')
                         if aid is not None and str(aid) not in seen:
                             seen.add(str(aid))
                             intercom_list.append(a)
-                    for a in intercom_client.get_articles():
+                    for a in get_intercom().get_articles():
                         aid = a.get('id')
                         if aid is not None and str(aid) not in seen:
                             seen.add(str(aid))
@@ -1350,9 +1411,9 @@ def sync_from_intercom():
         collection_name = data.get('collection_name')
         collection_id = data.get('collection_id')
         if collection_id and collection_name:
-            result = sync_by_collection_id(collection_id, collection_name, intercom_client)
+            result = sync_by_collection_id(collection_id, collection_name, get_intercom())
         elif collection_name:
-            result = sync_collection_from_intercom(collection_name, intercom_client)
+            result = sync_collection_from_intercom(collection_name, get_intercom())
         else:
             return jsonify({
                 'success': False,
@@ -1381,24 +1442,24 @@ def fetch_and_store():
         all_articles = []
 
         try:
-            all_articles = intercom_client.get_fundednext_help_center_articles(limit=limit * 2, fetch_full=True)
+            all_articles = get_intercom().get_fundednext_help_center_articles(limit=limit * 2, fetch_full=True)
         except Exception:
             pass
 
         if not all_articles:
             seen = set()
-            for a in intercom_client.get_all_help_center_articles():
+            for a in get_intercom().get_all_help_center_articles():
                 aid = a.get('id')
                 if aid is not None and str(aid) not in seen:
                     seen.add(str(aid))
                     all_articles.append(a)
-            for a in intercom_client.get_articles():
+            for a in get_intercom().get_articles():
                 aid = a.get('id')
                 if aid is not None and str(aid) not in seen:
                     seen.add(str(aid))
                     all_articles.append(a)
             try:
-                for hc in intercom_client.get_help_centers():
+                for hc in get_intercom().get_help_centers():
                     hc_id = hc.get('id')
                     if hc_id is None:
                         continue
@@ -1406,7 +1467,7 @@ def fetch_and_store():
                         hc_id_int = int(hc_id)
                     except (TypeError, ValueError):
                         continue
-                    for a in intercom_client.search_articles(help_center_id=hc_id_int, state='published', limit=50):
+                    for a in get_intercom().search_articles(help_center_id=hc_id_int, state='published', limit=50):
                         aid = a.get('id')
                         if aid is not None and str(aid) not in seen:
                             seen.add(str(aid))
@@ -1428,7 +1489,7 @@ def fetch_and_store():
         for i, a in enumerate(articles):
             if not (a.get('body') or a.get('title')):
                 try:
-                    full = intercom_client.get_article(str(a.get('id', '')))
+                    full = get_intercom().get_article(str(a.get('id', '')))
                     if full:
                         articles[i] = full
                 except Exception:
@@ -1458,9 +1519,9 @@ def test_connection():
     try:
         import re as _re
         import requests as _req
-        from config import SUPABASE_URL, SUPABASE_SERVICE_KEY
+        _pctx = product_context.current_product(); SUPABASE_URL, SUPABASE_SERVICE_KEY = _pctx["supabase_url"], _pctx["supabase_key"]
         _LP = _re.compile(r'^\[[A-Z]{2}(?:-[A-Z]{1,4})?\]\s+', _re.IGNORECASE)
-        _headers = {"apikey": SUPABASE_SERVICE_KEY, "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}"}
+        _headers = product_context.supabase_headers()
         rows = []
         _offset = 0
         while True:
@@ -1584,7 +1645,7 @@ def translate_hub_bulk():
         result = bulk_translate(
             intercom_ids=intercom_ids,
             locales=locales,
-            translator_instance=translator,
+            translator_instance=get_translator(),
             concurrency=8,
             glossary_id=None,  # Auto-uses all active glossaries
         )
@@ -1762,7 +1823,7 @@ def pull_create_table():
 
     # Try Management API
     pat = os.getenv('SUPABASE_PAT', '').strip() or os.getenv('SUPABASE_ACCESS_TOKEN', '').strip()
-    supabase_url = os.getenv('SUPABASE_URL', '').strip()
+    supabase_url = product_context.current_product()["supabase_url"].strip()
     ref = supabase_url.rstrip('/').split('//')[-1].replace('.supabase.co', '') if supabase_url else ''
     if pat and ref:
         try:
@@ -1832,7 +1893,7 @@ def pull_sync_source():
         }), 400
     try:
         init_clients()
-        result = sync_source_list(intercom_client)
+        result = sync_source_list(get_intercom())
         return jsonify({'success': True, **result})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -1869,7 +1930,7 @@ def pull_execute():
                 'batch_limit': PULL_BATCH_LIMIT,
             }), 413
 
-        results = do_pull(intercom_ids, intercom_client)
+        results = do_pull(intercom_ids, get_intercom())
         success_count = sum(1 for r in results if r.get('status') == 'success')
         fail_count = sum(1 for r in results if r.get('status') == 'failed')
 
@@ -1943,7 +2004,7 @@ def glossary_create_tables():
             pass
 
     pat = os.getenv('SUPABASE_PAT', '').strip() or os.getenv('SUPABASE_ACCESS_TOKEN', '').strip()
-    supabase_url = os.getenv('SUPABASE_URL', '').strip()
+    supabase_url = product_context.current_product()["supabase_url"].strip()
     ref = supabase_url.rstrip('/').split('//')[-1].replace('.supabase.co', '') if supabase_url else ''
     if pat and ref:
         try:
@@ -2182,17 +2243,13 @@ def push_ensure_columns():
     """Ensure pushed_at and push_error columns exist in article_translations."""
     try:
         import requests as req
-        from config import SUPABASE_URL, SUPABASE_SERVICE_KEY
+        _pctx = product_context.current_product(); SUPABASE_URL, SUPABASE_SERVICE_KEY = _pctx["supabase_url"], _pctx["supabase_key"]
         rest_base = f"{SUPABASE_URL.rstrip('/')}/rest/v1" if SUPABASE_URL else ""
         if not rest_base:
             return jsonify({'success': False, 'error': 'SUPABASE_URL not set'}), 500
 
         # Try to query pushed_at - if it fails, run the ALTER TABLE
-        h = {
-            "apikey": SUPABASE_SERVICE_KEY,
-            "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
-            "Content-Type": "application/json",
-        }
+        h = product_context.supabase_headers()
         resp = req.get(
             f"{rest_base}/article_translations?select=pushed_at&limit=1",
             headers=h, timeout=10,
@@ -2304,7 +2361,7 @@ def push_execute():
         locale = (data.get('locale') or '').strip()
         if not intercom_id or not locale:
             return jsonify({'success': False, 'error': 'intercom_id and locale are required'}), 400
-        result = push_single(intercom_id, locale, intercom_client)
+        result = push_single(intercom_id, locale, get_intercom())
         return jsonify(result)
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -2329,7 +2386,7 @@ def push_bulk():
         result = bulk_push(
             intercom_ids=intercom_ids,
             locale=locale,
-            intercom_client=intercom_client,
+            intercom_client=get_intercom(),
             concurrency=3,
         )
         return jsonify({'success': True, **result})
@@ -2351,7 +2408,7 @@ def cleanup_locale_duplicates():
     from pull_service import cleanup_locale_articles_from_intercom
     try:
         init_clients()
-        result = cleanup_locale_articles_from_intercom(intercom_client)
+        result = cleanup_locale_articles_from_intercom(get_intercom())
         return jsonify(result)
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -2427,12 +2484,35 @@ def automation_run_now():
         key = data.get('key', 'auto_sync_pull')
         init_clients()
         if key == 'auto_pull_articles':
-            result = automation_service.run_auto_pull(intercom_client)
+            result = automation_service.run_auto_pull(get_intercom())
         else:
-            result = automation_service.run_auto_sync(intercom_client)
+            result = automation_service.run_auto_sync(get_intercom())
         return jsonify(result)
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+def _run_for_all_products(label, fn):
+    """Run fn() once per registered product, each with that product's context.
+
+    A single Vercel cron trigger has no active product, so we loop the registry
+    and set g.product per iteration; get_intercom()/services rebind automatically
+    (their g-cache is keyed by product id). Each product's own automation_settings
+    (in its own DB) still governs whether the run actually does anything.
+
+    NOTE: Vercel Hobby caps a function at 10s. With several products, prefer
+    per-product cron paths or chunking rather than one long loop.
+    """
+    import config as _config
+    results = {}
+    for pid in _config.PRODUCTS:
+        g.product = product_context.resolve_product(pid)
+        try:
+            results[pid] = fn()
+        except Exception as e:
+            print(f"[{label}] product={pid} error: {e}", flush=True)
+            results[pid] = {'success': False, 'error': str(e)}
+    return results
 
 
 @app.route('/api/cron/sync', methods=['GET', 'POST'])
@@ -2455,12 +2535,11 @@ def cron_sync():
             print(f"[CRON SYNC] Rejected — no auth. Headers: {dict(request.headers)}", flush=True)
             return jsonify({'success': False, 'error': 'Unauthorized cron request'}), 401
 
-    print("[CRON SYNC] Authorized — starting auto sync", flush=True)
+    print("[CRON SYNC] Authorized — starting auto sync for all products", flush=True)
     try:
-        init_clients()
-        result = automation_service.run_auto_sync(intercom_client)
-        print(f"[CRON SYNC] Result: {result}", flush=True)
-        return jsonify(result)
+        results = _run_for_all_products("CRON SYNC", lambda: automation_service.run_auto_sync(get_intercom()))
+        print(f"[CRON SYNC] Results: {results}", flush=True)
+        return jsonify({'success': True, 'products': results})
     except Exception as e:
         print(f"[CRON SYNC] Error: {e}", flush=True)
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -2486,12 +2565,11 @@ def cron_pull():
             print(f"[CRON PULL] Rejected — no auth. Headers: {dict(request.headers)}", flush=True)
             return jsonify({'success': False, 'error': 'Unauthorized cron request'}), 401
 
-    print("[CRON PULL] Authorized — starting auto pull", flush=True)
+    print("[CRON PULL] Authorized — starting auto pull for all products", flush=True)
     try:
-        init_clients()
-        result = automation_service.run_auto_pull(intercom_client)
-        print(f"[CRON PULL] Result: {result}", flush=True)
-        return jsonify(result)
+        results = _run_for_all_products("CRON PULL", lambda: automation_service.run_auto_pull(get_intercom()))
+        print(f"[CRON PULL] Results: {results}", flush=True)
+        return jsonify({'success': True, 'products': results})
     except Exception as e:
         print(f"[CRON PULL] Error: {e}", flush=True)
         return jsonify({'success': False, 'error': str(e)}), 500

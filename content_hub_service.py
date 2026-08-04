@@ -20,12 +20,15 @@ import requests
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Set, Tuple
 
-from config import SUPABASE_URL, SUPABASE_SERVICE_KEY, TARGET_LANGUAGES
+import product_context
+from config import TARGET_LANGUAGES
 
 # Skip translated articles created by Push Approach 3 (e.g. "[FA] Title")
 _LOCALE_PREFIX_RE = re.compile(r'^\[[A-Z]{2}(?:-[A-Z]{1,4})?\]\s+', re.IGNORECASE)
 
-REST_BASE = f"{SUPABASE_URL.rstrip('/')}/rest/v1" if SUPABASE_URL else ""
+REST_BASE = product_context.LazyStr(product_context.supabase_rest_base)
+SUPABASE_URL = product_context.LazyStr(product_context.supabase_url_value)
+SUPABASE_SERVICE_KEY = product_context.LazyStr(product_context.supabase_key_value)
 PULL_TABLE = "pull_registry"
 TRANSLATIONS_TABLE = "article_translations"
 SETTINGS_TABLE = "automation_settings"
@@ -47,16 +50,7 @@ HEALTH_PRIORITY = {
 # ---------------------------------------------------------------------------
 
 def _headers(prefer: str = "") -> Dict[str, str]:
-    if not SUPABASE_SERVICE_KEY:
-        raise ValueError("SUPABASE_SERVICE_KEY must be set")
-    h = {
-        "apikey": SUPABASE_SERVICE_KEY,
-        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
-        "Content-Type": "application/json",
-    }
-    if prefer:
-        h["Prefer"] = prefer
-    return h
+    return product_context.supabase_headers({"Prefer": prefer} if prefer else None)
 
 
 def _parse_ts(ts_str: Optional[str]) -> Optional[datetime]:
