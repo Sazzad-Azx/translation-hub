@@ -171,19 +171,23 @@ class LazyStr:
         return getattr(self._fn(), name)
 
 
-def supabase_headers(extra: dict = None) -> dict:
+def supabase_headers(extra: dict = None, schema: str = None) -> dict:
     """Auth + schema headers for the active product's Supabase (service role).
 
     Shared-DB isolation: PostgREST selects the target Postgres schema from
     Accept-Profile (reads) / Content-Profile (writes). We set both to the active
     product's schema, so FundedNext hits `public` (its existing tables) and
     FN Market hits `fnmarket` — same project, physically separate tables.
+
+    Pass ``schema`` to force a specific schema regardless of the active product —
+    used for genuinely shared, product-agnostic data (e.g. the cost analyzer's
+    ``daily_api_costs``, which every product reports identically from `public`).
     """
     prod = current_product()
     key = prod["supabase_key"]
     if not key:
         raise ValueError("SUPABASE_SERVICE_KEY must be set for the active product")
-    schema = prod.get("schema", "public")
+    schema = schema or prod.get("schema", "public")
     headers = {
         "apikey": key,
         "Authorization": f"Bearer {key}",

@@ -805,6 +805,12 @@ COST_API_URL = os.getenv('COST_API_URL', '').rstrip('/')
 _cost_keys_raw = os.getenv('COST_TARGET_KEYS', '')
 COST_TARGET_KEYS = [k.strip() for k in _cost_keys_raw.split(',') if k.strip()]
 
+# Cost data is product-agnostic (one shared analyzer + key set), so every product
+# reads/writes the SAME rows in `public.daily_api_costs` — never the active
+# product's isolated schema. This keeps FN Market's Cost Analysis chart identical
+# to FundedNext's, with no per-schema duplication or first-load populate gap.
+COST_SCHEMA = 'public'
+
 def _fetch_and_upsert_dates(dates_to_fetch):
     """Fetch per-key costs for a list of dates from Vercel API and upsert to Supabase."""
     import datetime
@@ -853,7 +859,7 @@ def _fetch_and_upsert_dates(dates_to_fetch):
             continue
 
     if rows_to_upsert:
-        headers = product_context.supabase_headers({'Prefer': 'resolution=merge-duplicates'})
+        headers = product_context.supabase_headers({'Prefer': 'resolution=merge-duplicates'}, schema=COST_SCHEMA)
         _req.post(
             f'{SUPABASE_URL}/rest/v1/daily_api_costs',
             headers=headers,
@@ -873,7 +879,7 @@ def _get_missing_dates():
 
     resp = _req.get(
         f'{SUPABASE_URL}/rest/v1/daily_api_costs',
-        headers=product_context.supabase_headers(),
+        headers=product_context.supabase_headers(schema=COST_SCHEMA),
         params={
             'select': 'date',
             'date': f'gte.{start_date.isoformat()}',
@@ -940,7 +946,7 @@ def _get_cached_daily_costs(days=None, start_date=None, end_date=None):
 
     resp = _req.get(
         f'{SUPABASE_URL}/rest/v1/daily_api_costs',
-        headers=product_context.supabase_headers(),
+        headers=product_context.supabase_headers(schema=COST_SCHEMA),
         params=params,
         timeout=15
     )
