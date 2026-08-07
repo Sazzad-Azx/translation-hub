@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ brand.name }} - Translation Hub</title>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260807b">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260807c">
     <!-- Per-product theme overrides (multi-tenant). Only vars the product sets are
          overridden; the rest fall back to style.css defaults. -->
     <style>
@@ -34,6 +34,9 @@
             --accent-rgb: {{ brand.theme.accent_rgb | default('74,144,196') }};
             --light-rgb: {{ brand.theme.light_rgb | default('147,197,224') }};
             --line-rgb: {{ brand.theme.line_rgb | default('74,144,196') }};
+            /* Dashboard chart colors (consumed by app.js via getComputedStyle) */
+            --chart-bar: {{ brand.theme.chart_bar | default('#2563eb') }};
+            --chart-line: {{ brand.theme.chart_line | default('#2d8296') }};
         }
         /* Product switcher */
         .product-switcher { position: relative; }
@@ -1772,7 +1775,7 @@
         </div>
     </div>
 
-    <script src="{{ url_for('static', filename='app.js') }}?v=20260716"></script>
+    <script src="{{ url_for('static', filename='app.js') }}?v=20260807c"></script>
     {% if brand.cost_analyzer %}
     <script>
     // ── Date Filter & Live Cost ── (only rendered for products with a cost analyzer)

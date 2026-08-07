@@ -208,6 +208,8 @@ PRODUCTS: Dict[str, dict] = {
             "accent_rgb": "91,91,239",   # brand rgb → purple active nav / hover glows
             "light_rgb": "183,194,219",  # navy-tint light rgb → sidebar nav text
             "line_rgb": "150,160,185",   # neutral cool-grey → hairline borders (~#E9ECF4)
+            "chart_bar": "#5B5BEF",      # dashboard bar chart → brand purple
+            "chart_line": "#5B5BEF",     # dashboard cost line → brand purple
         },
         # Seed set (same as FundedNext's defaults); edit in-app per product.
         "default_languages": dict(DEFAULT_TARGET_LANGUAGES),

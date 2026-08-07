@@ -78,6 +78,9 @@
     /* Structural hairline/border tint — decoupled from --accent-rgb so a product
        can keep purple accents but neutral-grey borders (default = FundedNext accent) */
     --line-rgb: 74,144,196;
+    /* Dashboard chart colors (read by app.js); defaults = FundedNext blue/teal */
+    --chart-bar: #2563eb;
+    --chart-line: #2d8296;
     --ease: cubic-bezier(.4,0,.2,1);
 }
 
@@ -528,7 +531,7 @@ body {
     flex-shrink: 0;
 }
 
-.stat-icon-articles { background: linear-gradient(135deg, var(--mist), var(--mist2)); color: var(--mid); }
+.stat-icon-articles { background: linear-gradient(135deg, #E8EEFF, #DBE4FF); color: #4C6FFF; }
 .stat-icon-translated { background: linear-gradient(135deg, #ecfdf5, #d1fae5); color: #059669; }
 .stat-icon-changed { background: linear-gradient(135deg, #fffbeb, #fef3c7); color: #D97706; }
 .stat-icon-cost { background: linear-gradient(135deg, #fff1f2, #fecdd3); color: #E11D48; }

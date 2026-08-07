@@ -1318,6 +1318,21 @@ function formatNumber(n) {
 }
 
 // ---- Charts ----
+// Chart colors follow the active product theme. They read CSS custom
+// properties (--chart-bar / --chart-line) so each tenant's charts match its
+// brand; the fallbacks preserve FundedNext's original blue/teal exactly.
+function cssVar(name, fallback) {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return v || fallback;
+}
+function hexToRgba(hex, a) {
+    const h = hex.replace('#', '');
+    const r = parseInt(h.substring(0, 2), 16),
+          g = parseInt(h.substring(2, 4), 16),
+          b = parseInt(h.substring(4, 6), 16);
+    return `rgba(${r}, ${g}, ${b}, ${a})`;
+}
+
 function renderChangesChart(period, data) {
     data = data || state.dashboardStats || getPlaceholderStats();
     const ctx = document.getElementById('changesChart');
@@ -1336,6 +1351,7 @@ function renderChangesChart(period, data) {
         values = data.changes_weekly || [0, 0, 0, 0, 0, 0, 0];
     }
 
+    const barColor = cssVar('--chart-bar', '#2563eb');
     state.changesChart = new Chart(ctx, {
         type: 'bar',
         data: {
@@ -1343,8 +1359,8 @@ function renderChangesChart(period, data) {
             datasets: [{
                 label: 'Source Article Changes',
                 data: values,
-                backgroundColor: 'rgba(37, 99, 235, 0.15)',
-                borderColor: '#2563eb',
+                backgroundColor: hexToRgba(barColor, 0.15),
+                borderColor: barColor,
                 borderWidth: 2,
                 borderRadius: 6,
                 borderSkipped: false
@@ -1360,7 +1376,7 @@ function renderChangesChart(period, data) {
                     display: true,
                     anchor: 'end',
                     align: 'top',
-                    color: '#2563eb',
+                    color: barColor,
                     font: { size: 11, weight: '600' },
                     formatter: function(v) { return v > 0 ? v : ''; }
                 }
@@ -1402,11 +1418,12 @@ function renderCostChart(period, data) {
     }
 
     // Create gradient fill for "This period" line
+    const lineColor = cssVar('--chart-line', '#2d8296');
     const chartCtx = ctx.getContext('2d');
     const gradient = chartCtx.createLinearGradient(0, 0, 0, 260);
-    gradient.addColorStop(0, 'rgba(45, 130, 150, 0.25)');
-    gradient.addColorStop(0.6, 'rgba(45, 130, 150, 0.06)');
-    gradient.addColorStop(1, 'rgba(45, 130, 150, 0)');
+    gradient.addColorStop(0, hexToRgba(lineColor, 0.25));
+    gradient.addColorStop(0.6, hexToRgba(lineColor, 0.06));
+    gradient.addColorStop(1, hexToRgba(lineColor, 0));
 
     state.costChart = new Chart(ctx, {
         type: 'line',
@@ -1416,16 +1433,16 @@ function renderCostChart(period, data) {
                 {
                     label: period === 'month' ? 'This month' : 'This week',
                     data: currentValues,
-                    borderColor: '#2d8296',
+                    borderColor: lineColor,
                     backgroundColor: gradient,
                     fill: true,
                     tension: 0.4,
                     pointBackgroundColor: '#ffffff',
-                    pointBorderColor: '#2d8296',
+                    pointBorderColor: lineColor,
                     pointBorderWidth: 2.5,
                     pointRadius: 4,
                     pointHoverRadius: 7,
-                    pointHoverBackgroundColor: '#2d8296',
+                    pointHoverBackgroundColor: lineColor,
                     pointHoverBorderColor: '#ffffff',
                     pointHoverBorderWidth: 2,
                     borderWidth: 2.5
