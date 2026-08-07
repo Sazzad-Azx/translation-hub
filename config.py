@@ -210,6 +210,8 @@ PRODUCTS: Dict[str, dict] = {
             "line_rgb": "150,160,185",   # neutral cool-grey → hairline borders (~#E9ECF4)
             "chart_bar": "#5B5BEF",      # dashboard bar chart → brand purple
             "chart_line": "#5B5BEF",     # dashboard cost line → brand purple
+            "grad_a": "#5B5BEF",         # primary-gradient start → bright brand
+            "grad_b": "#4B49DE",         # primary-gradient end → brand-600
         },
         # Seed set (same as FundedNext's defaults); edit in-app per product.
         "default_languages": dict(DEFAULT_TARGET_LANGUAGES),
