@@ -205,8 +205,9 @@ PRODUCTS: Dict[str, dict] = {
             "mist": "#ECECFE",           # light brand tint (--mist / --primary-light)
             "mist2": "#DAD8FB",          # slightly deeper tint for gradients (--mist2)
             "text_muted": "#5A6480",     # ink-soft body/muted text (--text-muted)
-            "accent_rgb": "91,91,239",   # brand rgb → purple active nav / borders
+            "accent_rgb": "91,91,239",   # brand rgb → purple active nav / hover glows
             "light_rgb": "183,194,219",  # navy-tint light rgb → sidebar nav text
+            "line_rgb": "150,160,185",   # neutral cool-grey → hairline borders (~#E9ECF4)
         },
         # Seed set (same as FundedNext's defaults); edit in-app per product.
         "default_languages": dict(DEFAULT_TARGET_LANGUAGES),

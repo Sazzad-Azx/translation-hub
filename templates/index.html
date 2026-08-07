@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ brand.name }} - Translation Hub</title>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260807a">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260807b">
     <!-- Per-product theme overrides (multi-tenant). Only vars the product sets are
          overridden; the rest fall back to style.css defaults. -->
     <style>
@@ -33,6 +33,7 @@
             /* Bare RGB channels for themeable alpha tints */
             --accent-rgb: {{ brand.theme.accent_rgb | default('74,144,196') }};
             --light-rgb: {{ brand.theme.light_rgb | default('147,197,224') }};
+            --line-rgb: {{ brand.theme.line_rgb | default('74,144,196') }};
         }
         /* Product switcher */
         .product-switcher { position: relative; }
