@@ -162,7 +162,7 @@ PRODUCTS: Dict[str, dict] = {
         "default_languages": DEFAULT_TARGET_LANGUAGES,
     },
     "fnmarket": {
-        "name": "FN Market",
+        "name": "FNmarkets",
         "short": "FM",
         "company": "NEXT Ventures",
         "domain": "fnmarket.com",
