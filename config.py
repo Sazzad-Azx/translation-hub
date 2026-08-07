@@ -187,26 +187,26 @@ PRODUCTS: Dict[str, dict] = {
         # Reuses FundedNext's OpenAI key/quota; set FNMARKET_OPENAI_KEY + change
         # this to it later if you want translation cost attributed separately.
         "openai_key_env": "OPENAI_API_KEY",
-        # Purple/indigo theme (matches the FN Market dashboard concept mockups).
-        # Keys beyond the base 7 drive the themeable tokens introduced for the
-        # multi-tenant palette (see the :root override in templates/index.html).
-        # accent_rgb / light_rgb are bare "r,g,b" channels used inside rgba()
-        # tints (sidebar hover/active, borders) — NOT hex.
+        # FNmarkets theme — "Direction B": navy sidebar + purple/indigo brand
+        # accent (matches the final dashboard/control-tower mockups). Keys beyond
+        # the base 7 drive the themeable tokens introduced for the multi-tenant
+        # palette (see the :root override in templates/index.html). accent_rgb /
+        # light_rgb are bare "r,g,b" channels used inside rgba() tints — NOT hex.
         "theme": {
-            "primary": "#5B5BEF",       # brand
-            "primary_hover": "#4B49DE", # brand-600 (button hover)
-            "accent": "#8B7BFF",        # lighter brand (icons/accents/--steel)
-            "sidebar_bg": "#201C4B",    # panel top
-            "sidebar_deep": "#14112F",  # panel bottom
-            "bg": "#F3F2FD",            # app background tint
-            "text": "#171634",          # ink
-            "dark": "#211F45",          # dark-indigo headings (--dark)
-            "light": "#C9C7E6",         # muted sidebar text (--light)
-            "mist": "#ECECFE",          # light brand tint (--mist / --primary-light)
-            "mist2": "#DAD8FB",         # slightly deeper tint for gradients (--mist2)
-            "text_muted": "#5A5878",    # ink-soft body/muted text (--text-muted)
-            "accent_rgb": "91,91,239",  # brand rgb for alpha tints (--accent-rgb)
-            "light_rgb": "156,153,196", # muted-light rgb for alpha tints (--light-rgb)
+            "primary": "#5B5BEF",        # brand (--primary / --mid)
+            "primary_hover": "#4B49DE",  # brand-600 (button hover)
+            "accent": "#8B7BFF",         # lighter brand (icons/accents/--steel)
+            "sidebar_bg": "#122344",     # navy panel top
+            "sidebar_deep": "#0A1730",   # navy panel bottom
+            "bg": "#F4F6FB",             # cool app background tint
+            "text": "#171634",           # ink (--text / --navy)
+            "dark": "#211F45",           # dark-indigo headings (--dark)
+            "light": "#B7C2DB",          # navy-tint sidebar text (--light)
+            "mist": "#ECECFE",           # light brand tint (--mist / --primary-light)
+            "mist2": "#DAD8FB",          # slightly deeper tint for gradients (--mist2)
+            "text_muted": "#5A6480",     # ink-soft body/muted text (--text-muted)
+            "accent_rgb": "91,91,239",   # brand rgb → purple active nav / borders
+            "light_rgb": "183,194,219",  # navy-tint light rgb → sidebar nav text
         },
         # Seed set (same as FundedNext's defaults); edit in-app per product.
         "default_languages": dict(DEFAULT_TARGET_LANGUAGES),
