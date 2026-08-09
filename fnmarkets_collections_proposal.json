@@ -1,0 +1,914 @@
+[
+  {
+    "id": "17734375",
+    "en_name": "Technical Issues &amp; Troubleshooting",
+    "en_desc": "",
+    "translations": {
+      "ar": {
+        "name": "المشاكل التقنية واستكشاف الأخطاء وإصلاحها",
+        "description": "",
+        "already_present": false
+      },
+      "zh-CN": {
+        "name": "技术问题与故障排除",
+        "description": "",
+        "already_present": false
+      },
+      "fr": {
+        "name": "Problèmes techniques et dépannage",
+        "description": "",
+        "already_present": false
+      },
+      "de": {
+        "name": "Technische Probleme & Fehlerbehebung",
+        "description": "",
+        "already_present": false
+      },
+      "hi": {
+        "name": "तकनीकी समस्याएँ और समस्या निवारण",
+        "description": "",
+        "already_present": false
+      },
+      "it": {
+        "name": "Problemi Tecnici e Risoluzione dei Problemi",
+        "description": "",
+        "already_present": false
+      },
+      "ja": {
+        "name": "技術的な問題とトラブルシューティング",
+        "description": "",
+        "already_present": false
+      },
+      "pt-BR": {
+        "name": "Problemas Técnicos e Solução de Problemas",
+        "description": "",
+        "already_present": false
+      },
+      "es": {
+        "name": "Problemas Técnicos y Solución de Problemas",
+        "description": "",
+        "already_present": false
+      },
+      "th": {
+        "name": "ปัญหาทางเทคนิคและการแก้ไขปัญหา",
+        "description": "",
+        "already_present": false
+      }
+    }
+  },
+  {
+    "id": "17734513",
+    "en_name": "Product",
+    "en_desc": "",
+    "translations": {
+      "ar": {
+        "name": "المنتج",
+        "description": "",
+        "already_present": false
+      },
+      "zh-CN": {
+        "name": "产品",
+        "description": "",
+        "already_present": false
+      },
+      "fr": {
+        "name": "Produit",
+        "description": "",
+        "already_present": false
+      },
+      "de": {
+        "name": "Produkt",
+        "description": "",
+        "already_present": false
+      },
+      "hi": {
+        "name": "उत्पाद",
+        "description": "",
+        "already_present": false
+      },
+      "it": {
+        "name": "Prodotto",
+        "description": "",
+        "already_present": false
+      },
+      "ja": {
+        "name": "製品",
+        "description": "",
+        "already_present": false
+      },
+      "pt-BR": {
+        "name": "Produto",
+        "description": "",
+        "already_present": false
+      },
+      "es": {
+        "name": "Producto",
+        "description": "",
+        "already_present": false
+      },
+      "th": {
+        "name": "ผลิตภัณฑ์",
+        "description": "",
+        "already_present": false
+      }
+    }
+  },
+  {
+    "id": "17734538",
+    "en_name": "Active Trader Program",
+    "en_desc": "",
+    "translations": {
+      "ar": {
+        "name": "برنامج المتداول النشط",
+        "description": "",
+        "already_present": false
+      },
+      "zh-CN": {
+        "name": "活跃交易者计划",
+        "description": "",
+        "already_present": false
+      },
+      "fr": {
+        "name": "Programme Trader Actif",
+        "description": "",
+        "already_present": false
+      },
+      "de": {
+        "name": "Aktives Trader-Programm",
+        "description": "",
+        "already_present": false
+      },
+      "hi": {
+        "name": "सक्रिय ट्रेडर कार्यक्रम",
+        "description": "",
+        "already_present": false
+      },
+      "it": {
+        "name": "Programma Trader Attivo",
+        "description": "",
+        "already_present": false
+      },
+      "ja": {
+        "name": "アクティブトレーダープログラム",
+        "description": "",
+        "already_present": false
+      },
+      "pt-BR": {
+        "name": "Programa de Trader Ativo",
+        "description": "",
+        "already_present": false
+      },
+      "es": {
+        "name": "Programa de Trader Activo",
+        "description": "",
+        "already_present": false
+      },
+      "th": {
+        "name": "โปรแกรมผู้ซื้อขายที่ใช้งานอยู่",
+        "description": "",
+        "already_present": false
+      }
+    }
+  },
+  {
+    "id": "17734539",
+    "en_name": "KYC",
+    "en_desc": "",
+    "translations": {
+      "ar": {
+        "name": "اعرف عميلك",
+        "description": "",
+        "already_present": false
+      },
+      "zh-CN": {
+        "name": "身份验证",
+        "description": "",
+        "already_present": false
+      },
+      "fr": {
+        "name": "KYC",
+        "description": "",
+        "already_present": false
+      },
+      "de": {
+        "name": "KYC",
+        "description": "",
+        "already_present": false
+      },
+      "hi": {
+        "name": "केवाईसी",
+        "description": "",
+        "already_present": false
+      },
+      "it": {
+        "name": "KYC",
+        "description": "",
+        "already_present": false
+      },
+      "ja": {
+        "name": "KYC（本人確認）",
+        "description": "",
+        "already_present": false
+      },
+      "pt-BR": {
+        "name": "KYC",
+        "description": "",
+        "already_present": false
+      },
+      "es": {
+        "name": "KYC",
+        "description": "",
+        "already_present": false
+      },
+      "th": {
+        "name": "KYC",
+        "description": "",
+        "already_present": false
+      }
+    }
+  },
+  {
+    "id": "17734541",
+    "en_name": "Deposits &amp; Withdrawals",
+    "en_desc": "",
+    "translations": {
+      "ar": {
+        "name": "الإيداعات والسحوبات",
+        "description": "",
+        "already_present": false
+      },
+      "zh-CN": {
+        "name": "存款与取款",
+        "description": "",
+        "already_present": false
+      },
+      "fr": {
+        "name": "Dépôts et retraits",
+        "description": "",
+        "already_present": false
+      },
+      "de": {
+        "name": "Einzahlungen & Auszahlungen",
+        "description": "",
+        "already_present": false
+      },
+      "hi": {
+        "name": "जमा और निकासी",
+        "description": "",
+        "already_present": false
+      },
+      "it": {
+        "name": "Depositi e Prelievi",
+        "description": "",
+        "already_present": false
+      },
+      "ja": {
+        "name": "入金と出金",
+        "description": "",
+        "already_present": false
+      },
+      "pt-BR": {
+        "name": "Depósitos e Saques",
+        "description": "",
+        "already_present": false
+      },
+      "es": {
+        "name": "Depósitos y Retiros",
+        "description": "",
+        "already_present": false
+      },
+      "th": {
+        "name": "การฝากเงินและการถอนเงิน",
+        "description": "",
+        "already_present": false
+      }
+    }
+  },
+  {
+    "id": "17734556",
+    "en_name": "Partners Program",
+    "en_desc": "",
+    "translations": {
+      "ar": {
+        "name": "برنامج الشركاء",
+        "description": "",
+        "already_present": false
+      },
+      "zh-CN": {
+        "name": "合作伙伴计划",
+        "description": "",
+        "already_present": false
+      },
+      "fr": {
+        "name": "Programme Partenaires",
+        "description": "",
+        "already_present": false
+      },
+      "de": {
+        "name": "Partnerprogramm",
+        "description": "",
+        "already_present": false
+      },
+      "hi": {
+        "name": "साझेदार कार्यक्रम",
+        "description": "",
+        "already_present": false
+      },
+      "it": {
+        "name": "Programma Partner",
+        "description": "",
+        "already_present": false
+      },
+      "ja": {
+        "name": "パートナープログラム",
+        "description": "",
+        "already_present": false
+      },
+      "pt-BR": {
+        "name": "Programa de Parceiros",
+        "description": "",
+        "already_present": false
+      },
+      "es": {
+        "name": "Programa de Socios",
+        "description": "",
+        "already_present": false
+      },
+      "th": {
+        "name": "โปรแกรมพันธมิตร",
+        "description": "",
+        "already_present": false
+      }
+    }
+  },
+  {
+    "id": "17734688",
+    "en_name": "Account Management",
+    "en_desc": "",
+    "translations": {
+      "ar": {
+        "name": "إدارة الحساب",
+        "description": "",
+        "already_present": false
+      },
+      "zh-CN": {
+        "name": "账户管理",
+        "description": "",
+        "already_present": false
+      },
+      "fr": {
+        "name": "Gestion de compte",
+        "description": "",
+        "already_present": false
+      },
+      "de": {
+        "name": "Kontoverwaltung",
+        "description": "",
+        "already_present": false
+      },
+      "hi": {
+        "name": "खाता प्रबंधन",
+        "description": "",
+        "already_present": false
+      },
+      "it": {
+        "name": "Gestione Account",
+        "description": "",
+        "already_present": false
+      },
+      "ja": {
+        "name": "アカウント管理",
+        "description": "",
+        "already_present": false
+      },
+      "pt-BR": {
+        "name": "Gerenciamento de Conta",
+        "description": "",
+        "already_present": false
+      },
+      "es": {
+        "name": "Gestión de Cuenta",
+        "description": "",
+        "already_present": false
+      },
+      "th": {
+        "name": "การจัดการบัญชี",
+        "description": "",
+        "already_present": false
+      }
+    }
+  },
+  {
+    "id": "17735015",
+    "en_name": "General Trading Questions",
+    "en_desc": "",
+    "translations": {
+      "ar": {
+        "name": "أسئلة عامة حول التداول",
+        "description": "",
+        "already_present": false
+      },
+      "zh-CN": {
+        "name": "常见交易问题",
+        "description": "",
+        "already_present": false
+      },
+      "fr": {
+        "name": "Questions générales sur le trading",
+        "description": "",
+        "already_present": false
+      },
+      "de": {
+        "name": "Allgemeine Handelsfragen",
+        "description": "",
+        "already_present": false
+      },
+      "hi": {
+        "name": "सामान्य ट्रेडिंग प्रश्न",
+        "description": "",
+        "already_present": false
+      },
+      "it": {
+        "name": "Domande Generali sul Trading",
+        "description": "",
+        "already_present": false
+      },
+      "ja": {
+        "name": "一般的な取引に関する質問",
+        "description": "",
+        "already_present": false
+      },
+      "pt-BR": {
+        "name": "Perguntas Gerais sobre Negociação",
+        "description": "",
+        "already_present": false
+      },
+      "es": {
+        "name": "Preguntas Generales sobre Trading",
+        "description": "",
+        "already_present": false
+      },
+      "th": {
+        "name": "คำถามทั่วไปเกี่ยวกับการซื้อขาย",
+        "description": "",
+        "already_present": false
+      }
+    }
+  },
+  {
+    "id": "17735062",
+    "en_name": "Fees &amp; Charges",
+    "en_desc": "",
+    "translations": {
+      "ar": {
+        "name": "الرسوم والتكاليف",
+        "description": "",
+        "already_present": false
+      },
+      "zh-CN": {
+        "name": "费用与收费",
+        "description": "",
+        "already_present": false
+      },
+      "fr": {
+        "name": "Frais et charges",
+        "description": "",
+        "already_present": false
+      },
+      "de": {
+        "name": "Gebühren & Kosten",
+        "description": "",
+        "already_present": false
+      },
+      "hi": {
+        "name": "शुल्क और चार्ज़",
+        "description": "",
+        "already_present": false
+      },
+      "it": {
+        "name": "Commissioni e costi",
+        "description": "",
+        "already_present": false
+      },
+      "ja": {
+        "name": "手数料と料金",
+        "description": "",
+        "already_present": false
+      },
+      "pt-BR": {
+        "name": "Taxas e Encargos",
+        "description": "",
+        "already_present": false
+      },
+      "es": {
+        "name": "Tarifas y Cargos",
+        "description": "",
+        "already_present": false
+      },
+      "th": {
+        "name": "ค่าธรรมเนียมและค่าใช้จ่าย",
+        "description": "",
+        "already_present": false
+      }
+    }
+  },
+  {
+    "id": "17735111",
+    "en_name": "Ongoing Offers and Promotions",
+    "en_desc": "",
+    "translations": {
+      "ar": {
+        "name": "العروض والترويجات المستمرة",
+        "description": "",
+        "already_present": false
+      },
+      "zh-CN": {
+        "name": "持续优惠与促销",
+        "description": "",
+        "already_present": false
+      },
+      "fr": {
+        "name": "Offres et promotions en cours",
+        "description": "",
+        "already_present": false
+      },
+      "de": {
+        "name": "Laufende Angebote und Aktionen",
+        "description": "",
+        "already_present": false
+      },
+      "hi": {
+        "name": "चल रहे ऑफर और प्रचार",
+        "description": "",
+        "already_present": false
+      },
+      "it": {
+        "name": "Offerte e Promozioni in Corso",
+        "description": "",
+        "already_present": false
+      },
+      "ja": {
+        "name": "現在のキャンペーンとプロモーション",
+        "description": "",
+        "already_present": false
+      },
+      "pt-BR": {
+        "name": "Ofertas e Promoções Atuais",
+        "description": "",
+        "already_present": false
+      },
+      "es": {
+        "name": "Ofertas y Promociones Actuales",
+        "description": "",
+        "already_present": false
+      },
+      "th": {
+        "name": "ข้อเสนอและโปรโมชั่นที่กำลังดำเนินอยู่",
+        "description": "",
+        "already_present": false
+      }
+    }
+  },
+  {
+    "id": "17735184",
+    "en_name": "Trading Platform",
+    "en_desc": "",
+    "translations": {
+      "ar": {
+        "name": "منصة التداول",
+        "description": "",
+        "already_present": false
+      },
+      "zh-CN": {
+        "name": "交易平台",
+        "description": "",
+        "already_present": false
+      },
+      "fr": {
+        "name": "Plateforme de trading",
+        "description": "",
+        "already_present": false
+      },
+      "de": {
+        "name": "Handelsplattform",
+        "description": "",
+        "already_present": false
+      },
+      "hi": {
+        "name": "ट्रेडिंग प्लेटफ़ॉर्म",
+        "description": "",
+        "already_present": false
+      },
+      "it": {
+        "name": "Piattaforma di Trading",
+        "description": "",
+        "already_present": false
+      },
+      "ja": {
+        "name": "取引プラットフォーム",
+        "description": "",
+        "already_present": false
+      },
+      "pt-BR": {
+        "name": "Plataforma de Negociação",
+        "description": "",
+        "already_present": false
+      },
+      "es": {
+        "name": "Plataforma de Trading",
+        "description": "",
+        "already_present": false
+      },
+      "th": {
+        "name": "แพลตฟอร์มการซื้อขาย",
+        "description": "",
+        "already_present": false
+      }
+    }
+  },
+  {
+    "id": "17735238",
+    "en_name": "Educational Resources",
+    "en_desc": "",
+    "translations": {
+      "ar": {
+        "name": "الموارد التعليمية",
+        "description": "",
+        "already_present": false
+      },
+      "zh-CN": {
+        "name": "教育资源",
+        "description": "",
+        "already_present": false
+      },
+      "fr": {
+        "name": "Ressources éducatives",
+        "description": "",
+        "already_present": false
+      },
+      "de": {
+        "name": "Bildungsressourcen",
+        "description": "",
+        "already_present": false
+      },
+      "hi": {
+        "name": "शैक्षिक संसाधन",
+        "description": "",
+        "already_present": false
+      },
+      "it": {
+        "name": "Risorse Educative",
+        "description": "",
+        "already_present": false
+      },
+      "ja": {
+        "name": "教育リソース",
+        "description": "",
+        "already_present": false
+      },
+      "pt-BR": {
+        "name": "Recursos Educacionais",
+        "description": "",
+        "already_present": false
+      },
+      "es": {
+        "name": "Recursos Educativos",
+        "description": "",
+        "already_present": false
+      },
+      "th": {
+        "name": "แหล่งข้อมูลการศึกษา",
+        "description": "",
+        "already_present": false
+      }
+    }
+  },
+  {
+    "id": "17735253",
+    "en_name": "Deposit",
+    "en_desc": "",
+    "translations": {
+      "ar": {
+        "name": "إيداع",
+        "description": "",
+        "already_present": false
+      },
+      "zh-CN": {
+        "name": "存款",
+        "description": "",
+        "already_present": false
+      },
+      "fr": {
+        "name": "Dépôt",
+        "description": "",
+        "already_present": false
+      },
+      "de": {
+        "name": "Einzahlung",
+        "description": "",
+        "already_present": false
+      },
+      "hi": {
+        "name": "जमा करें",
+        "description": "",
+        "already_present": false
+      },
+      "it": {
+        "name": "Deposito",
+        "description": "",
+        "already_present": false
+      },
+      "ja": {
+        "name": "入金",
+        "description": "",
+        "already_present": false
+      },
+      "pt-BR": {
+        "name": "Depósito",
+        "description": "",
+        "already_present": false
+      },
+      "es": {
+        "name": "Depósito",
+        "description": "",
+        "already_present": false
+      },
+      "th": {
+        "name": "ฝากเงิน",
+        "description": "",
+        "already_present": false
+      }
+    }
+  },
+  {
+    "id": "17735260",
+    "en_name": "Withdrawal",
+    "en_desc": "",
+    "translations": {
+      "ar": {
+        "name": "السحب",
+        "description": "",
+        "already_present": false
+      },
+      "zh-CN": {
+        "name": "提现",
+        "description": "",
+        "already_present": false
+      },
+      "fr": {
+        "name": "Retrait",
+        "description": "",
+        "already_present": false
+      },
+      "de": {
+        "name": "Auszahlung",
+        "description": "",
+        "already_present": false
+      },
+      "hi": {
+        "name": "निकासी",
+        "description": "",
+        "already_present": false
+      },
+      "it": {
+        "name": "Prelievo",
+        "description": "",
+        "already_present": false
+      },
+      "ja": {
+        "name": "出金",
+        "description": "",
+        "already_present": false
+      },
+      "pt-BR": {
+        "name": "Retirada",
+        "description": "",
+        "already_present": false
+      },
+      "es": {
+        "name": "Retiro",
+        "description": "",
+        "already_present": false
+      },
+      "th": {
+        "name": "การถอนเงิน",
+        "description": "",
+        "already_present": false
+      }
+    }
+  },
+  {
+    "id": "17735291",
+    "en_name": "Orders and Execution",
+    "en_desc": "Orders and Execution",
+    "translations": {
+      "ar": {
+        "name": "الأوامر والتنفيذ",
+        "description": "الأوامر والتنفيذ",
+        "already_present": false
+      },
+      "zh-CN": {
+        "name": "订单与执行",
+        "description": "订单与执行",
+        "already_present": false
+      },
+      "fr": {
+        "name": "Ordres et Exécution",
+        "description": "Ordres et Exécution",
+        "already_present": false
+      },
+      "de": {
+        "name": "Aufträge und Ausführung",
+        "description": "Aufträge und Ausführung",
+        "already_present": false
+      },
+      "hi": {
+        "name": "आदेश और निष्पादन",
+        "description": "आदेश और निष्पादन",
+        "already_present": false
+      },
+      "it": {
+        "name": "Ordini ed Esecuzione",
+        "description": "Ordini ed Esecuzione",
+        "already_present": false
+      },
+      "ja": {
+        "name": "注文と執行",
+        "description": "注文と執行",
+        "already_present": false
+      },
+      "pt-BR": {
+        "name": "Ordens e Execução",
+        "description": "Ordens e Execução",
+        "already_present": false
+      },
+      "es": {
+        "name": "Órdenes y Ejecución",
+        "description": "Órdenes y Ejecución",
+        "already_present": false
+      },
+      "th": {
+        "name": "คำสั่งซื้อและการดำเนินการ",
+        "description": "คำสั่งซื้อและการดำเนินการ",
+        "already_present": false
+      }
+    }
+  },
+  {
+    "id": "19687404",
+    "en_name": "FNmarkets Futures CFDs",
+    "en_desc": "FNmarkets Futures CFDs",
+    "translations": {
+      "ar": {
+        "name": "عقود الفروقات لعقود FNmarkets الآجلة",
+        "description": "عقود الفروقات لأسواق FNmarkets الآجلة",
+        "already_present": false
+      },
+      "zh-CN": {
+        "name": "FNmarkets 期货差价合约",
+        "description": "FNmarkets 期货差价合约",
+        "already_present": false
+      },
+      "fr": {
+        "name": "CFD sur contrats à terme FNmarkets",
+        "description": "CFD sur Futures FNmarkets",
+        "already_present": false
+      },
+      "de": {
+        "name": "FNmarkets Futures CFDs",
+        "description": "FNmarkets Futures CFDs",
+        "already_present": false
+      },
+      "hi": {
+        "name": "FNmarkets फ्यूचर्स CFDs",
+        "description": "FNmarkets फ्यूचर्स CFDs",
+        "already_present": false
+      },
+      "it": {
+        "name": "FNmarkets Futures CFD",
+        "description": "FNmarkets Futures CFD",
+        "already_present": false
+      },
+      "ja": {
+        "name": "FNmarkets Futures CFD",
+        "description": "FNmarkets Futures CFD",
+        "already_present": false
+      },
+      "pt-BR": {
+        "name": "CFDs FNmarkets Futures",
+        "description": "CFDs FNmarkets Futures",
+        "already_present": false
+      },
+      "es": {
+        "name": "CFD de FNmarkets Futures",
+        "description": "CFD de futuros FNmarkets",
+        "already_present": false
+      },
+      "th": {
+        "name": "FNmarkets ฟิวเจอร์ส CFDs",
+        "description": "FNmarkets ฟิวเจอร์ส CFDs",
+        "already_present": false
+      }
+    }
+  }
+]
