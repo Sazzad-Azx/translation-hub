@@ -14,7 +14,9 @@ PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 ENV_PATH = os.path.join(PROJECT_DIR, ".env")
 FNMARKETS_HC = 4802013
 
-TARGET_LOCALES = ["ar", "zh-CN", "fr", "de", "hi", "it", "ja", "pt-BR", "es", "th"]
+TARGET_LOCALES = ["ar", "zh-CN", "fr", "de", "hi", "it", "ja", "pt-BR", "es", "th", "fa"]
+
+LOCALE_MAP = {"fa": "fa-IR"}
 
 for line in open(ENV_PATH, encoding="utf-8"):
     line = line.strip()
@@ -78,7 +80,8 @@ def main():
         row = {"id": cid, "en_name": en_name, "en_desc": en_desc, "translations": {}}
 
         for loc in TARGET_LOCALES:
-            existing = locale_entry(tc, loc)
+            ic_loc = LOCALE_MAP.get(loc, loc)
+            existing = locale_entry(tc, ic_loc)
             has = bool(existing.get("name"))
             loc_name = tr.translate_text(en_name, loc, "en", context=ctx, is_html=False) if en_name and not has else ""
             loc_desc = tr.translate_text(en_desc, loc, "en", context=ctx, is_html=False) if en_desc and not has else ""
@@ -112,16 +115,17 @@ def main():
         tc = current.get("translated_content") or {}
         changed = False
         for loc in TARGET_LOCALES:
+            ic_loc = LOCALE_MAP.get(loc, loc)
             t = row["translations"][loc]
             if t["already_present"]:
                 skipped += 1
                 continue
-            entry = dict(tc.get(loc) or {})
+            entry = dict(tc.get(ic_loc) or {})
             entry["type"] = "group_content"
             entry["name"] = t["name"]
             if row["en_desc"]:
                 entry["description"] = t["description"]
-            tc[loc] = entry
+            tc[ic_loc] = entry
             changed = True
         if changed:
             api("PUT", f"/help_center/collections/{cid}", {"translated_content": tc})

@@ -109,6 +109,7 @@ def resolve_product(product_id: str) -> dict:
         "supabase_db_url": os.getenv(spec.get("supabase_db_url_env", ""), ""),
         "openai_key": os.getenv(spec["openai_key_env"], ""),
         "default_languages": spec["default_languages"],
+        "locale_map": spec.get("locale_map", {}),
     }
 
 
@@ -263,6 +264,12 @@ def supabase_key_value() -> str:
 # keyed by product id so products never share a language set. language_service
 # populates a product's entry from its own DB via the TARGET_LANGUAGES proxy.
 _LANG_CACHE: dict = {}
+
+
+def intercom_locale(locale: str) -> str:
+    """Remap an internal locale code to the one the active product's Intercom
+    workspace expects.  Returns the locale unchanged when no mapping exists."""
+    return current_product().get("locale_map", {}).get(locale, locale)
 
 
 def active_languages_dict() -> dict:

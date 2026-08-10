@@ -24,6 +24,7 @@ from typing import Dict, List, Optional, Set
 from intercom_client import IntercomClient
 from translator import GPTTranslator
 from config import TARGET_LANGUAGES
+import product_context
 
 _CTX = (
     "Intercom help-center collection title. Keep product/brand names in English "
@@ -101,7 +102,8 @@ def localize_collection_names(
         for loc in locales:
             if loc not in TARGET_LANGUAGES:
                 continue
-            cur = existing.get(loc)
+            ic_loc = product_context.intercom_locale(loc)
+            cur = existing.get(ic_loc)
             if isinstance(cur, dict) and cur.get("name"):
                 skipped.append(loc)
                 continue
@@ -109,7 +111,7 @@ def localize_collection_names(
             entry = {"type": "group_content", "name": name}
             if with_descriptions and en_desc:
                 entry["description"] = translator.translate_text(en_desc, loc, "en", context=_CTX, is_html=False)
-            tc[loc] = entry
+            tc[ic_loc] = entry
             added[loc] = name
         if tc and apply:
             client._make_request("PUT", f"/help_center/collections/{cid}", json={"translated_content": tc})

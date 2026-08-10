@@ -657,9 +657,10 @@ def push_single(intercom_id: str, locale: str, intercom_client) -> Dict:
         body = _prepare_body_for_push(body, strip_videos=False)
 
         # Push to Intercom — state matches source article
+        ic_locale = product_context.intercom_locale(locale)
         result = intercom_client.create_or_update_translation(
             article_id=intercom_id,
-            locale=locale,
+            locale=ic_locale,
             title=title,
             body=body,
             source_state=source_state,

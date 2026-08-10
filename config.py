@@ -215,6 +215,9 @@ PRODUCTS: Dict[str, dict] = {
         },
         # Seed set (same as FundedNext's defaults); edit in-app per product.
         "default_languages": dict(DEFAULT_TARGET_LANGUAGES),
+        # Locale codes this workspace's Intercom API expects differ from the
+        # internal code we store in Supabase.  Remap at the API boundary only.
+        "locale_map": {"fa": "fa-IR"},
     },
 }
 
