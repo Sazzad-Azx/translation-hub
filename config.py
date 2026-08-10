@@ -163,7 +163,7 @@ PRODUCTS: Dict[str, dict] = {
     },
     "fnmarket": {
         "name": "FNmarkets",
-        "short": "FM",
+        "short": "FN",
         "company": "NEXT Ventures",
         "domain": "fnmarket.com",
         "support_email": "support@fnmarket.com",
