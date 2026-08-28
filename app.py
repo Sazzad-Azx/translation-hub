@@ -2532,9 +2532,8 @@ def automation_run_now():
         if key == 'auto_pull_articles':
             result = automation_service.run_auto_pull(get_intercom())
         elif key == 'auto_sweep_leaked_translations':
-            # Manual trigger always runs regardless of the enabled flag
-            settings = automation_service.get_settings(key)
-            settings['_skip_enabled_check'] = True
+            # Ensure row exists, then run regardless of enabled flag
+            automation_service.get_settings(key)
             result = automation_service.run_auto_sweep(get_intercom())
         else:
             result = automation_service.run_auto_sync(get_intercom())
@@ -2548,8 +2547,11 @@ def sweep_run_manual():
     """Manual sweep trigger from the UI — always runs regardless of enabled flag."""
     import automation_service
     from sweep_service import scan_and_demote
+    key = 'auto_sweep_leaked_translations'
     try:
         init_clients()
+        # Ensure the settings row exists before we try to record into it
+        automation_service.get_settings(key)
         result = scan_and_demote(get_intercom())
         articles = result.get('articles_demoted', 0)
         locales = result.get('locales_demoted', 0)
@@ -2562,10 +2564,10 @@ def sweep_run_manual():
                 f"({result.get('articles_checked', 0)} checked, "
                 f"{len(result.get('errors', []))} errors)"
             )
-        automation_service.record_run('auto_sweep_leaked_translations', 'success', message)
+        automation_service.record_run(key, 'success', message)
         return jsonify({'success': True, 'message': message, **result})
     except Exception as e:
-        automation_service.record_run('auto_sweep_leaked_translations', 'error', str(e))
+        automation_service.record_run(key, 'error', str(e))
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
