@@ -83,7 +83,7 @@ def inject_brand():
 
 
 # ─── Auth helpers ──────────────────────────────────────────────
-PUBLIC_PATHS = {'/', '/favicon.ico', '/api/health', '/api/auth/login', '/api/cron/sync', '/api/cron/pull', '/api/cron/sweep', '/api/faq/search'}
+PUBLIC_PATHS = {'/', '/favicon.ico', '/api/health', '/api/auth/login', '/api/cron/sync', '/api/cron/pull', '/api/cron/sweep', '/api/cron/costs', '/api/faq/search'}
 PUBLIC_PREFIXES = ('/static/',)
 
 
@@ -811,6 +811,12 @@ COST_TARGET_KEYS = [k.strip() for k in _cost_keys_raw.split(',') if k.strip()]
 # to FundedNext's, with no per-schema duplication or first-load populate gap.
 COST_SCHEMA = 'public'
 
+# TTL gate: today's cost is synced inline (blocking) at most once every 5 minutes.
+# Multiple loads within the window hit the cache instantly; the first load (or the
+# first load after 5 min) blocks ~0.5-1s and returns a fresh number.
+_TODAY_SYNC_TTL_SECS = 300
+_today_sync_last_run = None  # time.monotonic() of last successful inline sync
+
 def _fetch_and_upsert_dates(dates_to_fetch):
     """Fetch per-key costs for a list of dates from Vercel API and upsert to Supabase."""
     import datetime
@@ -1284,15 +1290,24 @@ def dashboard_costs():
     Syncs missing past days in background, returns cached data immediately.
     Optional query params: start_date, end_date (YYYY-MM-DD) for filtered cost.
     """
-    import datetime, threading
+    import datetime, threading, time as _time
+    global _today_sync_last_run
     try:
-        # Sync missing past days and today in background (non-blocking).
-        # Wrap with with_current_product so the thread inherits Flask g — same
-        # pattern as the ThreadPoolExecutor workers in dashboard_stats.
         if COST_API_URL and COST_TARGET_KEYS:
             _wcp = product_context.with_current_product
+            # Past days: async safety net. The daily cron (/api/cron/costs) keeps
+            # the table warm, so this thread almost always finds nothing to do.
             threading.Thread(target=_wcp(_sync_past_costs), daemon=True).start()
-            threading.Thread(target=_wcp(_sync_today_cost), daemon=True).start()
+            # Today: inline (blocking) with 5-min TTL.
+            # First load of the day → syncs fresh (~0.5-1s). Repeat loads within
+            # 5 min → skip sync, read from cache instantly. No stale numbers.
+            _now = _time.monotonic()
+            if _today_sync_last_run is None or (_now - _today_sync_last_run) > _TODAY_SYNC_TTL_SECS:
+                try:
+                    _sync_today_cost()
+                except Exception:
+                    pass
+                _today_sync_last_run = _now
 
         # Check for date filter params
         q_start = request.args.get('start_date')  # YYYY-MM-DD or None
@@ -2713,6 +2728,43 @@ def cron_sweep():
         return jsonify({'success': True, 'products': results})
     except Exception as e:
         print(f"[CRON SWEEP] Error: {e}", flush=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/cron/costs', methods=['GET', 'POST'])
+def cron_costs():
+    """
+    Cron endpoint called daily at 23:30 UTC.
+    Backfills any missing past-date rows in daily_api_costs so the table is
+    always warm — no cold-start latency when someone logs in after time away.
+    """
+    import config as _config
+
+    cron_secret = os.getenv('CRON_SECRET', '').strip()
+    auth_header = request.headers.get('Authorization', '')
+    has_auth = hasattr(request, 'auth_session') and request.auth_session
+    has_cron_secret = cron_secret and auth_header == f'Bearer {cron_secret}'
+
+    if not has_auth and not has_cron_secret:
+        vercel_cron = request.headers.get('x-vercel-cron')
+        if not vercel_cron:
+            print(f"[CRON COSTS] Rejected — no auth.", flush=True)
+            return jsonify({'success': False, 'error': 'Unauthorized cron request'}), 401
+
+    if not (COST_API_URL and COST_TARGET_KEYS):
+        return jsonify({'success': True, 'skipped': True, 'reason': 'COST_API_URL or COST_TARGET_KEYS not configured'})
+
+    print("[CRON COSTS] Authorized — syncing past cost dates + today", flush=True)
+    try:
+        # Cost data is product-agnostic (public schema) — one run covers all products.
+        default_pid = next(iter(_config.PRODUCTS))
+        g.product = product_context.resolve_product(default_pid)
+        _sync_past_costs()
+        _sync_today_cost()
+        print("[CRON COSTS] Done", flush=True)
+        return jsonify({'success': True})
+    except Exception as e:
+        print(f"[CRON COSTS] Error: {e}", flush=True)
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
