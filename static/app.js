@@ -1769,16 +1769,22 @@ function renderActivityFeed(activities) {
     feed.innerHTML = '';
     activities.forEach(activity => {
         const iconMap = {
-            'translate': 'activity-icon-translate',
-            'pull': 'activity-icon-pull',
-            'push': 'activity-icon-push',
-            'sync': 'activity-icon-sync'
+            'translate':  'activity-icon-translate',
+            'pull':       'activity-icon-pull',
+            'push':       'activity-icon-push',
+            'sync':       'activity-icon-sync',
+            'auto_sync':  'activity-icon-auto_sync',
+            'auto_pull':  'activity-icon-auto_pull',
+            'auto_sweep': 'activity-icon-auto_sweep',
         };
         const faMap = {
-            'translate': 'fa-exchange-alt',
-            'pull': 'fa-cloud-download-alt',
-            'push': 'fa-cloud-upload-alt',
-            'sync': 'fa-sync-alt'
+            'translate':  'fa-exchange-alt',
+            'pull':       'fa-cloud-download-alt',
+            'push':       'fa-cloud-upload-alt',
+            'sync':       'fa-sync-alt',
+            'auto_sync':  'fa-sync-alt',
+            'auto_pull':  'fa-cloud-download-alt',
+            'auto_sweep': 'fa-shield-alt',
         };
 
         const type = activity.type || 'sync';

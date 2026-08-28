@@ -1200,6 +1200,23 @@ def dashboard_stats():
         for info in push_by_article.values():
             activity_entries.append((info['ts'], 'push', info['title']))
 
+        # Inject automation task runs so they appear alongside article events
+        import automation_service as _auto_svc
+        _AUTO_TASKS = [
+            ('auto_sync_pull',                 'auto_sync',  'Auto Sync completed'),
+            ('auto_pull_articles',             'auto_pull',  'Auto Pull completed'),
+            ('auto_sweep_leaked_translations', 'auto_sweep', 'Auto Sweep completed'),
+        ]
+        for _key, _atype, _label in _AUTO_TASKS:
+            try:
+                _s = _auto_svc.get_settings(_key)
+                _ts = _parse_ts(_s.get('last_run_at') or '')
+                if _ts and _s.get('last_run_status'):
+                    _msg = _s.get('last_run_message') or ''
+                    activity_entries.append((_ts, _atype, f'{_label} — {_msg}' if _msg else _label))
+            except Exception:
+                pass
+
         # Sort all entries by timestamp desc, take top 20
         activity_entries.sort(key=lambda x: x[0], reverse=True)
 
@@ -1208,16 +1225,24 @@ def dashboard_stats():
             'translate': 'Translated',
             'push': 'Pushed',
         }
+        # Automation types render their message directly (no article title wrapping)
+        _auto_types = {'auto_sync', 'auto_pull', 'auto_sweep'}
 
         recent_activities = []
         for ts, atype, title in activity_entries[:20]:
-            display_title = title
-            label = type_labels.get(atype, atype.capitalize())
-            recent_activities.append({
-                'type': atype,
-                'text': f'{label} <strong>{escapeHtml(display_title)}</strong>',
-                'time': _time_ago(ts)
-            })
+            if atype in _auto_types:
+                recent_activities.append({
+                    'type': atype,
+                    'text': escapeHtml(title),
+                    'time': _time_ago(ts)
+                })
+            else:
+                label = type_labels.get(atype, atype.capitalize())
+                recent_activities.append({
+                    'type': atype,
+                    'text': f'{label} <strong>{escapeHtml(title)}</strong>',
+                    'time': _time_ago(ts)
+                })
 
         # last_sync_str was fetched in parallel above. Send the raw ISO to the
         # frontend so it can format with the user's local timezone.

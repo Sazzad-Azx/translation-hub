@@ -773,6 +773,9 @@ body {
 .activity-icon-pull      { background: linear-gradient(135deg, #ecfdf5, #d1fae5); color: #059669; }
 .activity-icon-push      { background: linear-gradient(135deg, #fffbeb, #fef3c7); color: #D97706; }
 .activity-icon-sync      { background: linear-gradient(135deg, var(--pale), var(--mist)); color: var(--dark); }
+.activity-icon-auto_sync  { background: linear-gradient(135deg, #eef2ff, #e0e7ff); color: #6366f1; }
+.activity-icon-auto_pull  { background: linear-gradient(135deg, #ecfdf5, #d1fae5); color: #059669; }
+.activity-icon-auto_sweep { background: linear-gradient(135deg, #fff1f2, #ffe4e6); color: #f43f5e; }
 
 .activity-body {
     flex: 1;
