@@ -2418,6 +2418,52 @@ def cleanup_locale_duplicates():
 # AUTOMATION MODULE API
 # ============================================================
 
+@app.route('/api/automation/recent-activity', methods=['GET'])
+def automation_recent_activity():
+    """Return last-run summary for all automation tasks, sorted newest first."""
+    import automation_service
+    TASKS = [
+        {
+            'key': 'auto_sync_pull',
+            'label': 'Auto Sync Source List',
+            'icon': 'sync-alt',
+            'color': 'indigo',
+        },
+        {
+            'key': 'auto_pull_articles',
+            'label': 'Auto Pull Articles',
+            'icon': 'cloud-download-alt',
+            'color': 'emerald',
+        },
+        {
+            'key': 'auto_sweep_leaked_translations',
+            'label': 'Auto Sweep Leaked Translations',
+            'icon': 'shield-alt',
+            'color': 'rose',
+        },
+    ]
+    try:
+        entries = []
+        for task in TASKS:
+            s = automation_service.get_settings(task['key'])
+            if not s.get('last_run_at'):
+                continue
+            entries.append({
+                'key': task['key'],
+                'label': task['label'],
+                'icon': task['icon'],
+                'color': task['color'],
+                'ran_at': s['last_run_at'],
+                'status': s.get('last_run_status') or '',
+                'message': s.get('last_run_message') or '',
+                'enabled': bool(s.get('enabled')),
+            })
+        entries.sort(key=lambda x: x['ran_at'], reverse=True)
+        return jsonify({'success': True, 'entries': entries})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/automation/settings', methods=['GET'])
 def automation_get_settings():
     """Get automation settings. Query param: key (default: auto_sync_pull)."""

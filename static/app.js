@@ -408,6 +408,7 @@ async function initAutomationSection() {
         autoRefreshStatus();
         autoRefreshPullStatus();
         autoRefreshSweepStatus();
+        loadRecentActivity();
         return;
     }
     autoState.loaded = true;
@@ -462,6 +463,7 @@ function setupAutomationListeners() {
                 showAutoToast('Sync failed: ' + (data.error || 'Unknown'), 'error');
             }
             await autoRefreshStatus();
+            loadRecentActivity();
         } catch (err) {
             showAutoToast('Error: ' + err.message, 'error');
         }
@@ -556,6 +558,7 @@ function setupAutomationListeners() {
                 showAutoToast('Pull failed: ' + (data.error || 'Unknown'), 'error');
             }
             await autoRefreshPullStatus();
+            loadRecentActivity();
         } catch (err) {
             showAutoToast('Error: ' + err.message, 'error');
         }
@@ -609,6 +612,7 @@ function setupAutomationListeners() {
                 showAutoToast('Sweep failed: ' + (data.error || 'Unknown'), 'error');
             }
             await autoRefreshSweepStatus();
+            loadRecentActivity();
         } catch (err) {
             showAutoToast('Error: ' + err.message, 'error');
         }
@@ -616,6 +620,8 @@ function setupAutomationListeners() {
     });
 
     document.getElementById('auto-sweep-refresh-btn')?.addEventListener('click', () => autoRefreshSweepStatus());
+
+    document.getElementById('auto-activity-refresh-btn')?.addEventListener('click', () => loadRecentActivity());
 }
 
 async function autoCheckTable() {
@@ -633,6 +639,7 @@ async function autoCheckTable() {
             await autoRefreshStatus();
             await autoRefreshPullStatus();
             await autoRefreshSweepStatus();
+            loadRecentActivity();
         } else {
             if (banner) banner.classList.remove('hidden');
             if (main) main.classList.add('hidden');
@@ -837,6 +844,55 @@ async function autoRefreshSweepStatus() {
         }
     } catch (err) {
         console.warn('Auto-sweep status refresh failed:', err);
+    }
+}
+
+async function loadRecentActivity() {
+    const list = document.getElementById('auto-activity-list');
+    if (!list) return;
+
+    const TASK_META = {
+        auto_sync_pull:                   { icon: 'fa-sync-alt',           color: 'indigo'  },
+        auto_pull_articles:               { icon: 'fa-cloud-download-alt', color: 'emerald' },
+        auto_sweep_leaked_translations:   { icon: 'fa-shield-alt',         color: 'rose'    },
+    };
+
+    try {
+        const resp = await fetch('/api/automation/recent-activity');
+        const data = await resp.json();
+        if (!data.success) return;
+
+        if (!data.entries || data.entries.length === 0) {
+            list.innerHTML = '<div class="auto-activity-empty" style="padding:16px 20px;color:var(--steel);font-size:13px;"><i class="fas fa-clock" style="margin-right:6px;opacity:0.5;"></i> No activity yet — run an automation to see results here.</div>';
+            return;
+        }
+
+        list.innerHTML = data.entries.map(e => {
+            const meta = TASK_META[e.key] || { icon: 'fa-cog', color: 'indigo' };
+            const timeStr = e.ran_at ? new Date(e.ran_at).toLocaleString() : '—';
+            const badgeHtml = e.status === 'success'
+                ? '<span class="auto-badge auto-badge-success"><i class="fas fa-check"></i> Success</span>'
+                : e.status === 'error'
+                ? '<span class="auto-badge auto-badge-error"><i class="fas fa-times"></i> Error</span>'
+                : '<span class="auto-badge auto-badge-disabled">—</span>';
+            const msgHtml = e.message
+                ? `<span class="auto-activity-msg">${escapeHtml(e.message)}</span>`
+                : '';
+            return `
+                <div class="auto-activity-row">
+                    <div class="auto-activity-dot ${meta.color}"><i class="fas ${meta.icon}"></i></div>
+                    <div class="auto-activity-body">
+                        <div class="auto-activity-label">${escapeHtml(e.label)}</div>
+                        <div class="auto-activity-meta">
+                            ${badgeHtml}
+                            ${msgHtml}
+                        </div>
+                    </div>
+                    <div class="auto-activity-time">${timeStr}</div>
+                </div>`;
+        }).join('');
+    } catch (err) {
+        console.warn('Recent activity load failed:', err);
     }
 }
 
