@@ -927,9 +927,10 @@ def _get_cached_daily_costs(days=None, start_date=None, end_date=None):
 
     params = {
         'select': 'date,cost,key_id',
-        'key_id': f'in.({",".join(COST_TARGET_KEYS)})',
         'order': 'date.asc',
     }
+    if COST_TARGET_KEYS:
+        params['key_id'] = f'in.({",".join(COST_TARGET_KEYS)})'
     if start_date:
         params['date'] = f'gte.{start_date}'
     elif days:
@@ -1285,9 +1286,13 @@ def dashboard_costs():
     """
     import datetime, threading
     try:
-        # Sync missing past days and today in background (non-blocking)
-        threading.Thread(target=_sync_past_costs, daemon=True).start()
-        threading.Thread(target=_sync_today_cost, daemon=True).start()
+        # Sync missing past days and today in background (non-blocking).
+        # Wrap with with_current_product so the thread inherits Flask g — same
+        # pattern as the ThreadPoolExecutor workers in dashboard_stats.
+        if COST_API_URL and COST_TARGET_KEYS:
+            _wcp = product_context.with_current_product
+            threading.Thread(target=_wcp(_sync_past_costs), daemon=True).start()
+            threading.Thread(target=_wcp(_sync_today_cost), daemon=True).start()
 
         # Check for date filter params
         q_start = request.args.get('start_date')  # YYYY-MM-DD or None
@@ -1334,6 +1339,8 @@ def dashboard_costs():
             'cost_prev_weekly': [round(c, 4) for c in cost_prev_weekly],
             'cost_monthly': [round(c, 4) for c in cost_monthly],
             'cost_monthly_labels': cost_monthly_labels,
+            # Diagnostic: tells the frontend whether env vars are configured
+            'config_ok': bool(COST_API_URL and COST_TARGET_KEYS),
         })
     except Exception as e:
         return jsonify({

@@ -1465,6 +1465,19 @@ function renderCostData(data) {
     if (data.cost_all_time !== undefined) {
         setStatValue('stat-cost-month', '$' + data.cost_all_time.toFixed(2));
     }
+    // Show a warning banner if COST_API_URL / COST_TARGET_KEYS are not configured
+    const existingWarn = document.getElementById('cost-config-warning');
+    if (existingWarn) existingWarn.remove();
+    if (data.config_ok === false) {
+        const costSection = document.getElementById('costChart')?.closest('.dashboard-card, .stat-card, section') || document.getElementById('costChart')?.parentElement;
+        if (costSection) {
+            const warn = document.createElement('div');
+            warn.id = 'cost-config-warning';
+            warn.style.cssText = 'font-size:12px;color:#d97706;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:8px 12px;margin-top:8px;';
+            warn.innerHTML = '<i class="fas fa-exclamation-triangle" style="margin-right:6px;"></i>Cost tracking is not configured — set <strong>COST_API_URL</strong> and <strong>COST_TARGET_KEYS</strong> in Vercel environment variables.';
+            costSection.appendChild(warn);
+        }
+    }
     // Cost Analysis chart
     renderCostChart('week', data);
 }
