@@ -817,8 +817,14 @@ COST_SCHEMA = 'public'
 _TODAY_SYNC_TTL_SECS = 300
 _today_sync_last_run = None  # time.monotonic() of last successful inline sync
 
-def _fetch_and_upsert_dates(dates_to_fetch):
-    """Fetch per-key costs for a list of dates from Vercel API and upsert to Supabase."""
+def _fetch_and_upsert_dates(dates_to_fetch, write_zero_placeholders=True):
+    """Fetch per-key costs for a list of dates from the cost API and upsert to Supabase.
+
+    write_zero_placeholders: when True (default, for past dates), writes a cost=0 row
+    for any target key absent in the API response so the date is marked "checked" and
+    won't be re-fetched. Set False for today's sync — today is always re-fetched, and
+    writing zeros would overwrite real accumulated costs when the API returns nothing.
+    """
     import datetime
     import requests as _req
     _pctx = product_context.current_product(); SUPABASE_URL, SUPABASE_SERVICE_KEY = _pctx["supabase_url"], _pctx["supabase_key"]
@@ -851,16 +857,17 @@ def _fetch_and_upsert_dates(dates_to_fetch):
                             'requests': key.get('requests', 0),
                             'updated_at': datetime.datetime.utcnow().isoformat() + 'Z',
                         })
-                # Store $0 rows for target keys not found, so this date
-                # is marked as "checked" and won't be re-fetched every load.
-                for missing_key in set(COST_TARGET_KEYS) - found_keys:
-                    rows_to_upsert.append({
-                        'date': ds,
-                        'key_id': missing_key,
-                        'cost': 0,
-                        'requests': 0,
-                        'updated_at': datetime.datetime.utcnow().isoformat() + 'Z',
-                    })
+                if write_zero_placeholders:
+                    # Store $0 rows for target keys not found, so this past date
+                    # is marked as "checked" and won't be re-fetched every load.
+                    for missing_key in set(COST_TARGET_KEYS) - found_keys:
+                        rows_to_upsert.append({
+                            'date': ds,
+                            'key_id': missing_key,
+                            'cost': 0,
+                            'requests': 0,
+                            'updated_at': datetime.datetime.utcnow().isoformat() + 'Z',
+                        })
         except Exception:
             continue
 
@@ -915,9 +922,10 @@ def _sync_past_costs():
 
 
 def _sync_today_cost():
-    """Refresh today's cost (background). Today is still accumulating."""
+    """Refresh today's cost. Today is still accumulating — never write $0 placeholders
+    so a transient empty API response can't overwrite real accumulated cost rows."""
     import datetime
-    _fetch_and_upsert_dates([datetime.date.today()])
+    _fetch_and_upsert_dates([datetime.date.today()], write_zero_placeholders=False)
 
 
 def _get_cached_daily_costs(days=None, start_date=None, end_date=None):
