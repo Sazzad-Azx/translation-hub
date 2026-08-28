@@ -128,6 +128,8 @@ def set_enabled(key: str, enabled: bool) -> Dict:
     # Determine schedule based on key
     if key == "auto_pull_articles":
         next_h, next_m = 1, 30
+    elif key == "auto_sweep_leaked_translations":
+        next_h, next_m = 3, 0
     else:
         next_h, next_m = 0, 0
 
@@ -160,6 +162,8 @@ def record_run(key: str, status: str, message: str) -> None:
     """Record the result of an automation run."""
     if key == "auto_pull_articles":
         next_h, next_m = 1, 30
+    elif key == "auto_sweep_leaked_translations":
+        next_h, next_m = 3, 0
     else:
         next_h, next_m = 0, 0
 
@@ -277,6 +281,41 @@ def run_auto_pull(intercom_client) -> Dict:
             "total": len(ids),
             "message": message,
         }
+    except Exception as e:
+        error_msg = str(e)
+        record_run(key, "error", error_msg)
+        return {"success": False, "error": error_msg}
+
+
+def run_auto_sweep(intercom_client) -> Dict:
+    """
+    Scan for and demote leaked translations.
+    Called by /api/cron/sweep (nightly) and /api/sweep/run (manual UI trigger).
+    """
+    from sweep_service import scan_and_demote
+
+    key = "auto_sweep_leaked_translations"
+
+    settings = get_settings(key)
+    # When called from the manual UI route, callers pass skip_enabled_check=True
+    # via run_auto_sweep directly; the cron route honours the enabled flag.
+    if not settings.get("_skip_enabled_check") and not settings.get("enabled"):
+        return {"success": False, "skipped": True, "reason": "Auto-sweep is disabled"}
+
+    try:
+        result = scan_and_demote(intercom_client)
+        articles = result.get("articles_demoted", 0)
+        locales = result.get("locales_demoted", 0)
+        leaks = result.get("leaks_found", 0)
+        if leaks == 0:
+            message = f"No leaks found ({result.get('articles_checked', 0)} articles checked)"
+        else:
+            message = (
+                f"Demoted {articles} article(s), {locales} locale(s) "
+                f"({result.get('articles_checked', 0)} checked, {len(result.get('errors', []))} errors)"
+            )
+        record_run(key, "success", message)
+        return {"success": True, "message": message, **result}
     except Exception as e:
         error_msg = str(e)
         record_run(key, "error", error_msg)

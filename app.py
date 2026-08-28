@@ -83,7 +83,7 @@ def inject_brand():
 
 
 # ─── Auth helpers ──────────────────────────────────────────────
-PUBLIC_PATHS = {'/', '/favicon.ico', '/api/health', '/api/auth/login', '/api/cron/sync', '/api/cron/pull', '/api/faq/search'}
+PUBLIC_PATHS = {'/', '/favicon.ico', '/api/health', '/api/auth/login', '/api/cron/sync', '/api/cron/pull', '/api/cron/sweep', '/api/faq/search'}
 PUBLIC_PREFIXES = ('/static/',)
 
 
@@ -2485,10 +2485,41 @@ def automation_run_now():
         init_clients()
         if key == 'auto_pull_articles':
             result = automation_service.run_auto_pull(get_intercom())
+        elif key == 'auto_sweep_leaked_translations':
+            # Manual trigger always runs regardless of the enabled flag
+            settings = automation_service.get_settings(key)
+            settings['_skip_enabled_check'] = True
+            result = automation_service.run_auto_sweep(get_intercom())
         else:
             result = automation_service.run_auto_sync(get_intercom())
         return jsonify(result)
     except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/sweep/run', methods=['POST'])
+def sweep_run_manual():
+    """Manual sweep trigger from the UI — always runs regardless of enabled flag."""
+    import automation_service
+    from sweep_service import scan_and_demote
+    try:
+        init_clients()
+        result = scan_and_demote(get_intercom())
+        articles = result.get('articles_demoted', 0)
+        locales = result.get('locales_demoted', 0)
+        leaks = result.get('leaks_found', 0)
+        if leaks == 0:
+            message = f"No leaks found ({result.get('articles_checked', 0)} articles checked)"
+        else:
+            message = (
+                f"Demoted {articles} article(s), {locales} locale(s) "
+                f"({result.get('articles_checked', 0)} checked, "
+                f"{len(result.get('errors', []))} errors)"
+            )
+        automation_service.record_run('auto_sweep_leaked_translations', 'success', message)
+        return jsonify({'success': True, 'message': message, **result})
+    except Exception as e:
+        automation_service.record_run('auto_sweep_leaked_translations', 'error', str(e))
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
@@ -2572,6 +2603,36 @@ def cron_pull():
         return jsonify({'success': True, 'products': results})
     except Exception as e:
         print(f"[CRON PULL] Error: {e}", flush=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/cron/sweep', methods=['GET', 'POST'])
+def cron_sweep():
+    """
+    Cron endpoint called by Vercel Cron at UTC 03:00.
+    Finds articles whose English source is unpublished but have translated
+    locales still published, and demotes those locales to draft.
+    """
+    import automation_service
+
+    cron_secret = os.getenv('CRON_SECRET', '').strip()
+    auth_header = request.headers.get('Authorization', '')
+    has_auth = hasattr(request, 'auth_session') and request.auth_session
+    has_cron_secret = cron_secret and auth_header == f'Bearer {cron_secret}'
+
+    if not has_auth and not has_cron_secret:
+        vercel_cron = request.headers.get('x-vercel-cron')
+        if not vercel_cron:
+            print(f"[CRON SWEEP] Rejected — no auth. Headers: {dict(request.headers)}", flush=True)
+            return jsonify({'success': False, 'error': 'Unauthorized cron request'}), 401
+
+    print("[CRON SWEEP] Authorized — starting sweep for all products", flush=True)
+    try:
+        results = _run_for_all_products("CRON SWEEP", lambda: automation_service.run_auto_sweep(get_intercom()))
+        print(f"[CRON SWEEP] Results: {results}", flush=True)
+        return jsonify({'success': True, 'products': results})
+    except Exception as e:
+        print(f"[CRON SWEEP] Error: {e}", flush=True)
         return jsonify({'success': False, 'error': str(e)}), 500
 
 

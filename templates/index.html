@@ -1225,6 +1225,70 @@
                         </ul>
                     </div>
                 </div>
+
+                <!-- Auto Sweep Card -->
+                <div class="auto-card" style="margin-top: 20px;">
+                    <div class="auto-card-header">
+                        <div class="auto-card-title-area">
+                            <div class="auto-card-icon" style="background:rgba(244,63,94,0.1);color:#f43f5e;"><i class="fas fa-shield-alt"></i></div>
+                            <div>
+                                <h3>Auto Sweep Leaked Translations</h3>
+                                <p class="auto-card-desc">Detect and unpublish translations whose <strong>English source has been unpublished</strong>. Prevents translated articles from staying live on the Help Center after the source is removed. Runs every day at <strong>03:00 UTC</strong>.</p>
+                            </div>
+                        </div>
+                        <div class="auto-toggle-area">
+                            <label class="auto-toggle" for="auto-sweep-toggle">
+                                <input type="checkbox" id="auto-sweep-toggle">
+                                <span class="auto-toggle-slider"></span>
+                            </label>
+                            <span class="auto-toggle-label" id="auto-sweep-status-label">Disabled</span>
+                        </div>
+                    </div>
+
+                    <div class="auto-card-body">
+                        <div class="auto-info-grid">
+                            <div class="auto-info-item">
+                                <span class="auto-info-label"><i class="fas fa-clock"></i> Status</span>
+                                <span class="auto-info-value" id="auto-sweep-status-badge">
+                                    <span class="auto-badge auto-badge-disabled">Disabled</span>
+                                </span>
+                            </div>
+                            <div class="auto-info-item">
+                                <span class="auto-info-label"><i class="fas fa-history"></i> Last Run</span>
+                                <span class="auto-info-value" id="auto-sweep-last-run">Never</span>
+                            </div>
+                            <div class="auto-info-item">
+                                <span class="auto-info-label"><i class="fas fa-check-circle"></i> Last Result</span>
+                                <span class="auto-info-value" id="auto-sweep-last-result">—</span>
+                            </div>
+                            <div class="auto-info-item">
+                                <span class="auto-info-label"><i class="fas fa-forward"></i> Next Run</span>
+                                <span class="auto-info-value" id="auto-sweep-next-run">—</span>
+                            </div>
+                        </div>
+
+                        <div class="auto-actions">
+                            <button class="btn btn-outline btn-sm" id="auto-sweep-run-now-btn">
+                                <i class="fas fa-play"></i> Sweep Now
+                            </button>
+                            <button class="btn btn-outline btn-sm" id="auto-sweep-refresh-btn">
+                                <i class="fas fa-sync-alt"></i> Refresh Status
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- How it works -->
+                    <div class="auto-card-footer">
+                        <h4><i class="fas fa-info-circle"></i> How it works</h4>
+                        <ul class="auto-how-list">
+                            <li><i class="fas fa-check"></i> When enabled, a scheduled job runs every day at <strong>~03:00 UTC</strong> (after sync and pull).</li>
+                            <li><i class="fas fa-check"></i> It scans every article in Intercom and finds ones where the <strong>English source is unpublished</strong> but a translated locale is still <strong>published</strong>.</li>
+                            <li><i class="fas fa-check"></i> Each leaked locale is demoted to <strong>draft</strong>, removing it from the public Help Center.</li>
+                            <li><i class="fas fa-check"></i> If an article is later re-published in English, Intercom automatically restores its translations.</li>
+                            <li><i class="fas fa-check"></i> You can run a manual sweep at any time using <strong>Sweep Now</strong> — it always runs regardless of the enabled toggle.</li>
+                        </ul>
+                    </div>
+                </div>
             </div>
 
             <!-- Toast -->

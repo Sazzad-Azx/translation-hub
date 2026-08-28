@@ -407,6 +407,7 @@ async function initAutomationSection() {
     if (autoState.loaded) {
         autoRefreshStatus();
         autoRefreshPullStatus();
+        autoRefreshSweepStatus();
         return;
     }
     autoState.loaded = true;
@@ -563,6 +564,58 @@ function setupAutomationListeners() {
 
     // Refresh button
     document.getElementById('auto-pull-refresh-btn')?.addEventListener('click', () => autoRefreshPullStatus());
+
+    // ── Auto Sweep Card listeners ──
+
+    const sweepToggle = document.getElementById('auto-sweep-toggle');
+    if (sweepToggle) {
+        sweepToggle.addEventListener('change', async () => {
+            const enabled = sweepToggle.checked;
+            sweepToggle.disabled = true;
+            try {
+                const resp = await fetch('/api/automation/toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key: 'auto_sweep_leaked_translations', enabled }),
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    showAutoToast(enabled ? 'Auto-sweep enabled! Next run at ~03:00 UTC.' : 'Auto-sweep disabled.', 'success');
+                    await autoRefreshSweepStatus();
+                } else {
+                    showAutoToast('Failed to toggle: ' + (data.error || 'Unknown error'), 'error');
+                    sweepToggle.checked = !enabled;
+                }
+            } catch (err) {
+                showAutoToast('Error: ' + err.message, 'error');
+                sweepToggle.checked = !enabled;
+            }
+            sweepToggle.disabled = false;
+        });
+    }
+
+    document.getElementById('auto-sweep-run-now-btn')?.addEventListener('click', async () => {
+        const btn = document.getElementById('auto-sweep-run-now-btn');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<span class="fn-loader-inline"></span> Sweeping…'; }
+        try {
+            const resp = await fetch('/api/sweep/run', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+            });
+            const data = await resp.json();
+            if (data.success) {
+                showAutoToast(data.message || 'Sweep complete.', 'success');
+            } else {
+                showAutoToast('Sweep failed: ' + (data.error || 'Unknown'), 'error');
+            }
+            await autoRefreshSweepStatus();
+        } catch (err) {
+            showAutoToast('Error: ' + err.message, 'error');
+        }
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-play"></i> Sweep Now'; }
+    });
+
+    document.getElementById('auto-sweep-refresh-btn')?.addEventListener('click', () => autoRefreshSweepStatus());
 }
 
 async function autoCheckTable() {
@@ -579,6 +632,7 @@ async function autoCheckTable() {
             if (main) main.classList.remove('hidden');
             await autoRefreshStatus();
             await autoRefreshPullStatus();
+            await autoRefreshSweepStatus();
         } else {
             if (banner) banner.classList.remove('hidden');
             if (main) main.classList.add('hidden');
@@ -722,6 +776,67 @@ async function autoRefreshPullStatus() {
         }
     } catch (err) {
         console.warn('Auto-pull status refresh failed:', err);
+    }
+}
+
+async function autoRefreshSweepStatus() {
+    try {
+        const resp = await fetch('/api/automation/settings?key=auto_sweep_leaked_translations');
+        const data = await resp.json();
+        if (!data.success) return;
+
+        const s = data.settings;
+
+        const toggle = document.getElementById('auto-sweep-toggle');
+        if (toggle) toggle.checked = !!s.enabled;
+
+        const label = document.getElementById('auto-sweep-status-label');
+        if (label) {
+            label.textContent = s.enabled ? 'Enabled' : 'Disabled';
+            label.classList.toggle('enabled', !!s.enabled);
+        }
+
+        const badge = document.getElementById('auto-sweep-status-badge');
+        if (badge) {
+            if (s.enabled) {
+                badge.innerHTML = '<span class="auto-badge auto-badge-enabled"><i class="fas fa-check-circle"></i> Active</span>';
+            } else {
+                badge.innerHTML = '<span class="auto-badge auto-badge-disabled"><i class="fas fa-pause-circle"></i> Disabled</span>';
+            }
+        }
+
+        const lastRunEl = document.getElementById('auto-sweep-last-run');
+        if (lastRunEl) {
+            if (s.last_run_at) {
+                const d = new Date(s.last_run_at);
+                lastRunEl.textContent = d.toLocaleString();
+            } else {
+                lastRunEl.textContent = 'Never';
+            }
+        }
+
+        const lastResultEl = document.getElementById('auto-sweep-last-result');
+        if (lastResultEl) {
+            if (s.last_run_status === 'success') {
+                lastResultEl.innerHTML = `<span class="auto-badge auto-badge-success"><i class="fas fa-check"></i> Success</span> <span style="font-size:12px;color:var(--text-muted);margin-left:6px;">${escapeHtml(s.last_run_message || '')}</span>`;
+            } else if (s.last_run_status === 'error') {
+                lastResultEl.innerHTML = `<span class="auto-badge auto-badge-error"><i class="fas fa-times"></i> Error</span> <span style="font-size:12px;color:#dc2626;margin-left:6px;">${escapeHtml(s.last_run_message || '')}</span>`;
+            } else {
+                lastResultEl.textContent = '—';
+            }
+        }
+
+        const nextRunEl = document.getElementById('auto-sweep-next-run');
+        if (nextRunEl) {
+            if (s.enabled && s.next_run_at) {
+                const d = new Date(s.next_run_at);
+                nextRunEl.textContent = d.toLocaleString();
+            } else {
+                nextRunEl.textContent = s.enabled ? '~03:00 UTC (daily)' : '—';
+            }
+        }
+    } catch (err) {
+        console.warn('Auto-sweep status refresh failed:', err);
     }
 }
 
