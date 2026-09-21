@@ -290,8 +290,8 @@ def get_pull_article(intercom_id: str) -> Optional[Dict]:
 def _fetch_all_existing_intercom_ids() -> Dict[str, Dict]:
     """Return pull_registry data keyed by intercom_id.
 
-    Each value is {content_hash, pulled_at, source_updated_at} so
-    sync_source_list can compare content hashes and fix false positives.
+    Each value is {content_hash, pulled_at} so sync_source_list can
+    identify suspects for Phase 2 verification.
     One paginated GET (1000-row pages).
     """
     out: Dict[str, Dict] = {}
@@ -307,7 +307,7 @@ def _fetch_all_existing_intercom_ids() -> Dict[str, Dict]:
                 f"{REST_BASE}/{TABLE}",
                 headers=headers,
                 params={
-                    "select": "intercom_id,content_hash,pulled_at,source_updated_at",
+                    "select": "intercom_id,content_hash,pulled_at",
                     "limit": str(batch_size),
                     "offset": str(offset),
                 },
@@ -326,7 +326,6 @@ def _fetch_all_existing_intercom_ids() -> Dict[str, Dict]:
                 out[str(iid)] = {
                     "content_hash": r.get("content_hash") or "",
                     "pulled_at": r.get("pulled_at") or "",
-                    "source_updated_at": r.get("source_updated_at") or "",
                 }
         if len(batch) < batch_size:
             break
@@ -359,17 +358,68 @@ def _bulk_upsert_rows(rows: List[Dict], chunk_size: int = 500):
             print(f"[_bulk_upsert_rows] error: {e}", flush=True)
 
 
-def sync_source_list(intercom_client) -> Dict:
+def _verify_suspects(
+    suspect_ids: List[str],
+    intercom_client,
+    existing_data: Dict[str, Dict],
+    max_workers: int = 8,
+) -> Dict[str, bool]:
+    """Phase 2: fetch individual article bodies from the detail API and
+    compare content_hash to decide which suspects genuinely changed.
+
+    Returns {intercom_id: True} for articles whose body actually changed.
+    Articles whose hash matches the stored value are push-bumps / format
+    diffs — they are NOT included (treated as unchanged).
     """
-    Fetch the article listing from Intercom and upsert into pull_registry
-    (title, state, source_updated_at, url). Does NOT fetch the full body.
-    Also resolves collection names from Intercom Help Center.
-    Only syncs articles that belong to a Help Center collection.
-    Returns { synced: int, total: int }
+    if not suspect_ids:
+        return {}
+
+    changed: Dict[str, bool] = {}
+    fetched: Dict[str, object] = {}
+
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        future_to_iid = {
+            pool.submit(intercom_client.get_article, iid): iid
+            for iid in suspect_ids
+        }
+        for fut in as_completed(future_to_iid):
+            iid = future_to_iid[fut]
+            try:
+                fetched[iid] = fut.result()
+            except Exception:
+                fetched[iid] = None
+
+    for iid in suspect_ids:
+        article = fetched.get(iid)
+        if article is None:
+            continue
+        body = article.get("body") or ""
+        detail_hash = _content_hash(body)
+        stored_hash = existing_data.get(iid, {}).get("content_hash", "")
+        if detail_hash != stored_hash:
+            changed[iid] = True
+
+    return changed
+
+
+def sync_source_list(intercom_client) -> Dict:
+    """Two-phase sync: update pull_registry from Intercom.
+
+    Phase 1 (bulk, fast): fetch article listing, update metadata, set
+    source_updated_at from Intercom's updated_at.  Identify *suspects* —
+    existing articles where source_updated_at would be newer than pulled_at.
+
+    Phase 2 (targeted): for suspects only, fetch the individual article
+    body via GET /articles/{id} (same endpoint used during Pull) and
+    compare its hash with the stored content_hash.
+      - Hash differs → genuine edit → keep source_updated_at → "Needs Update"
+      - Hash matches → push bump / format diff → reset source_updated_at
+        back to pulled_at → "Up to Date"
+
+    Returns { synced, total, content_changed, verified, … }
     """
     # Fetch collection names for mapping parent_id → name
     collection_map: Dict[str, str] = {}
-    # Build set of collection IDs that belong to any Help Center
     help_center_collection_ids: set = set()
     try:
         collections = intercom_client.get_collections()
@@ -378,12 +428,12 @@ def sync_source_list(intercom_client) -> Dict:
             cname = c.get("name", "") or ""
             if cid and cname:
                 collection_map[cid] = cname
-            # Only include collections that belong to a help center
             if cid and c.get("help_center_id"):
                 help_center_collection_ids.add(cid)
     except Exception:
-        pass  # Non-critical – articles still sync without collection names
+        pass
 
+    # Paginate through Intercom article listing
     articles = []
     page = 1
     per_page = 50
@@ -396,9 +446,6 @@ def sync_source_list(intercom_client) -> Dict:
             break
         page += 1
 
-    # One bulk GET of every intercom_id already in pull_registry (with hash +
-    # timestamps) so we can detect real content changes vs push-triggered
-    # timestamp bumps without a GET per article.
     existing_data = _fetch_all_existing_intercom_ids()
 
     now = datetime.now(timezone.utc).isoformat()
@@ -406,32 +453,29 @@ def sync_source_list(intercom_client) -> Dict:
     existing_rows_with_src: List[Dict] = []
     existing_rows_no_src: List[Dict] = []
     draft_ids: List[str] = []
+    suspect_ids: List[str] = []
+    suspect_rows: Dict[str, Dict] = {}
     synced = 0
     skipped_locale = 0
     skipped_no_helpcenter = 0
     skipped_draft = 0
-    content_changed_count = 0
 
+    # ── Phase 1: bulk metadata pass ──────────────────────────────────────
     for a in articles:
         iid = str(a.get("id", ""))
         if not iid:
             continue
         title = (a.get("title") or "").strip() or "Untitled"
 
-        # Skip translated articles created by Push Approach 3 (e.g. "[FA] Title")
         if _LOCALE_PREFIX_RE.match(title):
             skipped_locale += 1
             continue
 
-        # Skip articles not belonging to any Help Center collection
         article_collection_id = _resolve_collection_id(a, help_center_collection_ids)
         if help_center_collection_ids and article_collection_id not in help_center_collection_ids:
             skipped_no_helpcenter += 1
             continue
 
-        # Skip drafts — only published articles are translated. Track the IDs
-        # so a draft demoted from a previously-synced published row can be
-        # removed from pull_registry below.
         state = (a.get("state") or "published").lower()
         if state != "published":
             skipped_draft += 1
@@ -449,32 +493,30 @@ def sync_source_list(intercom_client) -> Dict:
             "collection_name": collection_map.get(article_collection_id, ""),
             "updated_at": now,
         }
+
         if iid in existing_data:
             stored = existing_data[iid]
-            body = a.get("body")
-            has_body = body is not None
-            new_hash = _content_hash(body or "") if has_body else None
-            if has_body and stored["content_hash"] and new_hash != stored["content_hash"]:
-                # English body actually changed — flag for re-pull
-                row["source_updated_at"] = _ts_to_iso(a.get("updated_at"))
-                existing_rows_with_src.append(row)
-                content_changed_count += 1
+            intercom_updated = _ts_to_iso(a.get("updated_at"))
+            stored_pulled = stored["pulled_at"]
+
+            # Would this article appear as "needs update"?
+            is_suspect = False
+            if stored_pulled and intercom_updated:
+                try:
+                    src_dt = datetime.fromisoformat(intercom_updated.replace("Z", "+00:00"))
+                    pull_dt = datetime.fromisoformat(stored_pulled.replace("Z", "+00:00"))
+                    if src_dt > pull_dt:
+                        is_suspect = True
+                except Exception:
+                    pass
+            elif not stored_pulled:
+                pass  # never pulled — stays "never_pulled" regardless
+
+            if is_suspect:
+                row["source_updated_at"] = intercom_updated
+                suspect_ids.append(iid)
+                suspect_rows[iid] = row
             else:
-                # Body unchanged (push bump or no change). If source_updated_at
-                # is ahead of pulled_at (false positive from push), reset it so
-                # the article shows "up to date" instead of "needs update".
-                stored_pulled = stored["pulled_at"]
-                stored_src = stored["source_updated_at"]
-                if stored_pulled and stored_src:
-                    try:
-                        src_dt = datetime.fromisoformat(stored_src.replace("Z", "+00:00"))
-                        pull_dt = datetime.fromisoformat(stored_pulled.replace("Z", "+00:00"))
-                        if src_dt > pull_dt:
-                            row["source_updated_at"] = stored_pulled
-                            existing_rows_with_src.append(row)
-                            continue
-                    except Exception:
-                        pass
                 existing_rows_no_src.append(row)
         else:
             row["source_updated_at"] = _ts_to_iso(a.get("updated_at"))
@@ -482,31 +524,38 @@ def sync_source_list(intercom_client) -> Dict:
             new_rows.append(row)
         synced += 1
 
-    # Three bulk upserts: new rows, existing with source_updated_at change,
-    # and existing without (preserves stored source_updated_at via PostgREST
-    # merge-duplicates only touching the columns present in the payload).
+    # ── Phase 2: verify suspects via detail API ──────────────────────────
+    genuinely_changed = _verify_suspects(
+        suspect_ids, intercom_client, existing_data,
+    )
+    content_changed_count = 0
+    for iid in suspect_ids:
+        row = suspect_rows[iid]
+        if iid in genuinely_changed:
+            existing_rows_with_src.append(row)
+            content_changed_count += 1
+        else:
+            # Push bump / format diff — reset to pulled_at
+            row["source_updated_at"] = existing_data[iid]["pulled_at"]
+            existing_rows_with_src.append(row)
+
+    # ── Bulk upserts ─────────────────────────────────────────────────────
     _bulk_upsert_rows(new_rows)
     _bulk_upsert_rows(existing_rows_with_src)
     _bulk_upsert_rows(existing_rows_no_src)
 
-    # Remove draft rows + their translations. Catches both freshly-demoted
-    # articles and any drafts that pre-date the draft filter.
+    # ── Cleanup ──────────────────────────────────────────────────────────
     _cleanup_draft_articles(draft_ids)
-
-    # Clean up any existing [LOCALE] rows already in pull_registry
     _cleanup_locale_articles()
-
-    # Remove articles from pull_registry that are not in any Help Center collection
     if help_center_collection_ids:
         _cleanup_non_helpcenter_articles(help_center_collection_ids)
-
-    # Save last sync timestamp
     _save_last_sync_time()
 
     return {
         "synced": synced,
         "total": len(articles),
         "content_changed": content_changed_count,
+        "verified": len(suspect_ids),
         "skipped_locale": skipped_locale,
         "skipped_no_helpcenter": skipped_no_helpcenter,
         "skipped_draft": skipped_draft,
