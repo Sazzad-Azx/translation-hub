@@ -287,14 +287,16 @@ def get_pull_article(intercom_id: str) -> Optional[Dict]:
 # Sync source list (populate pull_registry from Intercom without pulling body)
 # ---------------------------------------------------------------------------
 
-def _fetch_all_existing_intercom_ids() -> set:
-    """Return every intercom_id currently in pull_registry as a set of strings.
+def _fetch_all_existing_intercom_ids() -> Dict[str, Dict]:
+    """Return pull_registry data keyed by intercom_id.
 
-    One paginated GET (1000-row pages) rather than 1257+ per-article lookups.
+    Each value is {content_hash, pulled_at, source_updated_at} so
+    sync_source_list can compare content hashes and fix false positives.
+    One paginated GET (1000-row pages).
     """
-    ids: set = set()
+    out: Dict[str, Dict] = {}
     if not REST_BASE:
-        return ids
+        return out
     headers = _headers()
     headers.pop("Prefer", None)
     offset = 0
@@ -304,7 +306,11 @@ def _fetch_all_existing_intercom_ids() -> set:
             resp = requests.get(
                 f"{REST_BASE}/{TABLE}",
                 headers=headers,
-                params={"select": "intercom_id", "limit": str(batch_size), "offset": str(offset)},
+                params={
+                    "select": "intercom_id,content_hash,pulled_at,source_updated_at",
+                    "limit": str(batch_size),
+                    "offset": str(offset),
+                },
                 timeout=20,
             )
         except Exception:
@@ -317,11 +323,15 @@ def _fetch_all_existing_intercom_ids() -> set:
         for r in batch:
             iid = r.get("intercom_id")
             if iid:
-                ids.add(str(iid))
+                out[str(iid)] = {
+                    "content_hash": r.get("content_hash") or "",
+                    "pulled_at": r.get("pulled_at") or "",
+                    "source_updated_at": r.get("source_updated_at") or "",
+                }
         if len(batch) < batch_size:
             break
         offset += batch_size
-    return ids
+    return out
 
 
 def _bulk_upsert_rows(rows: List[Dict], chunk_size: int = 500):
@@ -386,19 +396,21 @@ def sync_source_list(intercom_client) -> Dict:
             break
         page += 1
 
-    # One bulk GET of every intercom_id already in pull_registry, so we can
-    # decide new-vs-existing without a GET per article (was the dominant cost
-    # that pushed /api/pull/sync-source past Vercel's function timeout).
-    existing_ids = _fetch_all_existing_intercom_ids()
+    # One bulk GET of every intercom_id already in pull_registry (with hash +
+    # timestamps) so we can detect real content changes vs push-triggered
+    # timestamp bumps without a GET per article.
+    existing_data = _fetch_all_existing_intercom_ids()
 
     now = datetime.now(timezone.utc).isoformat()
     new_rows: List[Dict] = []
-    existing_rows: List[Dict] = []
+    existing_rows_with_src: List[Dict] = []
+    existing_rows_no_src: List[Dict] = []
     draft_ids: List[str] = []
     synced = 0
     skipped_locale = 0
     skipped_no_helpcenter = 0
     skipped_draft = 0
+    content_changed_count = 0
 
     for a in articles:
         iid = str(a.get("id", ""))
@@ -437,17 +449,45 @@ def sync_source_list(intercom_client) -> Dict:
             "collection_name": collection_map.get(article_collection_id, ""),
             "updated_at": now,
         }
-        row["source_updated_at"] = _ts_to_iso(a.get("updated_at"))
-        if iid in existing_ids:
-            existing_rows.append(row)
+        if iid in existing_data:
+            stored = existing_data[iid]
+            body = a.get("body")
+            has_body = body is not None
+            new_hash = _content_hash(body or "") if has_body else None
+            if has_body and stored["content_hash"] and new_hash != stored["content_hash"]:
+                # English body actually changed — flag for re-pull
+                row["source_updated_at"] = _ts_to_iso(a.get("updated_at"))
+                existing_rows_with_src.append(row)
+                content_changed_count += 1
+            else:
+                # Body unchanged (push bump or no change). If source_updated_at
+                # is ahead of pulled_at (false positive from push), reset it so
+                # the article shows "up to date" instead of "needs update".
+                stored_pulled = stored["pulled_at"]
+                stored_src = stored["source_updated_at"]
+                if stored_pulled and stored_src:
+                    try:
+                        src_dt = datetime.fromisoformat(stored_src.replace("Z", "+00:00"))
+                        pull_dt = datetime.fromisoformat(stored_pulled.replace("Z", "+00:00"))
+                        if src_dt > pull_dt:
+                            row["source_updated_at"] = stored_pulled
+                            existing_rows_with_src.append(row)
+                            continue
+                    except Exception:
+                        pass
+                existing_rows_no_src.append(row)
         else:
+            row["source_updated_at"] = _ts_to_iso(a.get("updated_at"))
             row["created_at"] = now
             new_rows.append(row)
         synced += 1
 
-    # Two bulk upserts (~3 HTTP roundtrips total instead of ~2,500).
+    # Three bulk upserts: new rows, existing with source_updated_at change,
+    # and existing without (preserves stored source_updated_at via PostgREST
+    # merge-duplicates only touching the columns present in the payload).
     _bulk_upsert_rows(new_rows)
-    _bulk_upsert_rows(existing_rows)
+    _bulk_upsert_rows(existing_rows_with_src)
+    _bulk_upsert_rows(existing_rows_no_src)
 
     # Remove draft rows + their translations. Catches both freshly-demoted
     # articles and any drafts that pre-date the draft filter.
@@ -466,6 +506,7 @@ def sync_source_list(intercom_client) -> Dict:
     return {
         "synced": synced,
         "total": len(articles),
+        "content_changed": content_changed_count,
         "skipped_locale": skipped_locale,
         "skipped_no_helpcenter": skipped_no_helpcenter,
         "skipped_draft": skipped_draft,
