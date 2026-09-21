@@ -437,13 +437,10 @@ def sync_source_list(intercom_client) -> Dict:
             "collection_name": collection_map.get(article_collection_id, ""),
             "updated_at": now,
         }
+        row["source_updated_at"] = _ts_to_iso(a.get("updated_at"))
         if iid in existing_ids:
-            # Preserve existing source_updated_at — full pull updates it only
-            # when content_hash changes, so push-triggered Intercom timestamp
-            # bumps don't mark articles as outdated.
             existing_rows.append(row)
         else:
-            row["source_updated_at"] = _ts_to_iso(a.get("updated_at"))
             row["created_at"] = now
             new_rows.append(row)
         synced += 1
