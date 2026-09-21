@@ -7,12 +7,13 @@ Columns: id, intercom_id, title, description, state, url, source_updated_at,
          author_id, collection_id, collection_name, created_at, updated_at
 """
 import hashlib
+import html as _html
 import re
 import uuid
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import product_context
 
@@ -61,6 +62,20 @@ def _headers(prefer: str = "") -> Dict[str, str]:
 def _content_hash(body: str) -> str:
     """SHA-256 of article body for change detection."""
     return hashlib.sha256((body or "").encode("utf-8")).hexdigest()
+
+
+def _strip_html_text(body: str) -> str:
+    """Extract plain text from HTML for semantic comparison.
+
+    Pushing translations causes Intercom to reformat the English body HTML
+    (tag changes, attribute reordering, entity encoding) without changing the
+    actual text content. Comparing stripped text lets us distinguish real edits
+    from push-triggered reformatting.
+    """
+    text = re.sub(r'<[^>]+>', ' ', body or '')
+    text = _html.unescape(text)
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
 
 
 def _ts_to_iso(ts) -> Optional[str]:
@@ -358,23 +373,62 @@ def _bulk_upsert_rows(rows: List[Dict], chunk_size: int = 500):
             print(f"[_bulk_upsert_rows] error: {e}", flush=True)
 
 
+def _fetch_suspect_bodies(suspect_ids: List[str]) -> Dict[str, str]:
+    """Fetch stored body_html for suspect articles from pull_registry."""
+    out: Dict[str, str] = {}
+    if not REST_BASE or not suspect_ids:
+        return out
+    headers = _headers()
+    headers.pop("Prefer", None)
+    for i in range(0, len(suspect_ids), 100):
+        chunk = suspect_ids[i:i + 100]
+        ids_csv = ",".join(f'"{x}"' for x in chunk)
+        try:
+            resp = requests.get(
+                f"{REST_BASE}/{TABLE}",
+                headers=headers,
+                params={
+                    "select": "intercom_id,body_html",
+                    "intercom_id": f"in.({ids_csv})",
+                },
+                timeout=30,
+            )
+            if resp.ok:
+                for r in (resp.json() or []):
+                    iid = r.get("intercom_id")
+                    if iid:
+                        out[str(iid)] = r.get("body_html") or ""
+        except Exception:
+            continue
+    return out
+
+
 def _verify_suspects(
     suspect_ids: List[str],
     intercom_client,
     existing_data: Dict[str, Dict],
     max_workers: int = 8,
-) -> Dict[str, bool]:
+) -> Tuple[Dict[str, bool], Dict[str, str]]:
     """Phase 2: fetch individual article bodies from the detail API and
-    compare content_hash to decide which suspects genuinely changed.
+    compare with stored body to decide which suspects genuinely changed.
 
-    Returns {intercom_id: True} for articles whose body actually changed.
-    Articles whose hash matches the stored value are push-bumps / format
-    diffs — they are NOT included (treated as unchanged).
+    Pushing translations causes Intercom to reformat the English body HTML,
+    so raw hash comparison alone produces false positives. We compare
+    stripped plain text: same text = push reformat, different text = real edit.
+
+    Returns (changed, reformat_hashes):
+      changed:         {intercom_id: True} for genuine content edits
+      reformat_hashes: {intercom_id: new_hash} for push-reformatted articles
+                       (caller should update stored content_hash to prevent
+                       re-flagging on subsequent syncs)
     """
     if not suspect_ids:
-        return {}
+        return {}, {}
+
+    stored_bodies = _fetch_suspect_bodies(suspect_ids)
 
     changed: Dict[str, bool] = {}
+    reformat_hashes: Dict[str, str] = {}
     fetched: Dict[str, object] = {}
 
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
@@ -393,13 +447,23 @@ def _verify_suspects(
         article = fetched.get(iid)
         if article is None:
             continue
-        body = article.get("body") or ""
-        detail_hash = _content_hash(body)
+        live_body = article.get("body") or ""
+        live_hash = _content_hash(live_body)
         stored_hash = existing_data.get(iid, {}).get("content_hash", "")
-        if detail_hash != stored_hash:
-            changed[iid] = True
 
-    return changed
+        if live_hash == stored_hash:
+            continue
+
+        stored_body = stored_bodies.get(iid, "")
+        live_text = _strip_html_text(live_body)
+        stored_text = _strip_html_text(stored_body)
+
+        if live_text != stored_text:
+            changed[iid] = True
+        else:
+            reformat_hashes[iid] = live_hash
+
+    return changed, reformat_hashes
 
 
 def sync_source_list(intercom_client) -> Dict:
@@ -525,18 +589,21 @@ def sync_source_list(intercom_client) -> Dict:
         synced += 1
 
     # ── Phase 2: verify suspects via detail API ──────────────────────────
-    genuinely_changed = _verify_suspects(
+    genuinely_changed, reformat_hashes = _verify_suspects(
         suspect_ids, intercom_client, existing_data,
     )
     content_changed_count = 0
     for iid in suspect_ids:
         row = suspect_rows[iid]
         if iid in genuinely_changed:
+            row["content_hash"] = existing_data[iid].get("content_hash", "")
             existing_rows_with_src.append(row)
             content_changed_count += 1
         else:
-            # Push bump / format diff — reset to pulled_at
             row["source_updated_at"] = existing_data[iid]["pulled_at"]
+            row["content_hash"] = reformat_hashes.get(
+                iid, existing_data[iid].get("content_hash", "")
+            )
             existing_rows_with_src.append(row)
 
     # ── Bulk upserts ─────────────────────────────────────────────────────
