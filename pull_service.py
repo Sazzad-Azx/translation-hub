@@ -408,7 +408,7 @@ def _verify_suspects(
     intercom_client,
     existing_data: Dict[str, Dict],
     max_workers: int = 8,
-) -> Tuple[Dict[str, bool], Dict[str, str]]:
+) -> Tuple[Dict[str, bool], Dict[str, str], Dict[str, str]]:
     """Phase 2: fetch individual article bodies from the detail API and
     compare with stored body to decide which suspects genuinely changed.
 
@@ -416,19 +416,24 @@ def _verify_suspects(
     so raw hash comparison alone produces false positives. We compare
     stripped plain text: same text = push reformat, different text = real edit.
 
-    Returns (changed, reformat_hashes):
-      changed:         {intercom_id: True} for genuine content edits
-      reformat_hashes: {intercom_id: new_hash} for push-reformatted articles
-                       (caller should update stored content_hash to prevent
-                       re-flagging on subsequent syncs)
+    When stored body_html is empty (article was pulled by older code that
+    didn't store it), we can't compare — treat as unchanged and backfill
+    the body so future syncs have a baseline.
+
+    Returns (changed, reformat_hashes, backfill_bodies):
+      changed:          {intercom_id: True} for genuine content edits
+      reformat_hashes:  {intercom_id: new_hash} for push-reformatted articles
+      backfill_bodies:  {intercom_id: live_body} for articles with empty
+                        stored body_html (need body_html stored for future)
     """
     if not suspect_ids:
-        return {}, {}
+        return {}, {}, {}
 
     stored_bodies = _fetch_suspect_bodies(suspect_ids)
 
     changed: Dict[str, bool] = {}
     reformat_hashes: Dict[str, str] = {}
+    backfill_bodies: Dict[str, str] = {}
     fetched: Dict[str, object] = {}
 
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
@@ -443,6 +448,11 @@ def _verify_suspects(
             except Exception:
                 fetched[iid] = None
 
+    hash_match = 0
+    empty_body = 0
+    text_match = 0
+    text_differ = 0
+
     for iid in suspect_ids:
         article = fetched.get(iid)
         if article is None:
@@ -452,18 +462,33 @@ def _verify_suspects(
         stored_hash = existing_data.get(iid, {}).get("content_hash", "")
 
         if live_hash == stored_hash:
+            hash_match += 1
             continue
 
         stored_body = stored_bodies.get(iid, "")
+
+        if not stored_body:
+            empty_body += 1
+            reformat_hashes[iid] = live_hash
+            backfill_bodies[iid] = live_body
+            continue
+
         live_text = _strip_html_text(live_body)
         stored_text = _strip_html_text(stored_body)
 
         if live_text != stored_text:
+            text_differ += 1
             changed[iid] = True
         else:
+            text_match += 1
             reformat_hashes[iid] = live_hash
 
-    return changed, reformat_hashes
+    print(f"  [VERIFY] {len(suspect_ids)} suspects: "
+          f"hash_match={hash_match}, empty_body={empty_body}, "
+          f"text_match={text_match}, text_differ={text_differ}, "
+          f"genuine={len(changed)}", flush=True)
+
+    return changed, reformat_hashes, backfill_bodies
 
 
 def sync_source_list(intercom_client) -> Dict:
@@ -589,16 +614,24 @@ def sync_source_list(intercom_client) -> Dict:
         synced += 1
 
     # ── Phase 2: verify suspects via detail API ──────────────────────────
-    genuinely_changed, reformat_hashes = _verify_suspects(
+    genuinely_changed, reformat_hashes, backfill_bodies = _verify_suspects(
         suspect_ids, intercom_client, existing_data,
     )
     content_changed_count = 0
+    backfill_rows: List[Dict] = []
     for iid in suspect_ids:
         row = suspect_rows[iid]
         if iid in genuinely_changed:
             row["content_hash"] = existing_data[iid].get("content_hash", "")
             existing_rows_with_src.append(row)
             content_changed_count += 1
+        elif iid in backfill_bodies:
+            row["source_updated_at"] = existing_data[iid]["pulled_at"]
+            row["content_hash"] = reformat_hashes.get(
+                iid, existing_data[iid].get("content_hash", "")
+            )
+            row["body_html"] = backfill_bodies[iid]
+            backfill_rows.append(row)
         else:
             row["source_updated_at"] = existing_data[iid]["pulled_at"]
             row["content_hash"] = reformat_hashes.get(
@@ -610,6 +643,7 @@ def sync_source_list(intercom_client) -> Dict:
     _bulk_upsert_rows(new_rows)
     _bulk_upsert_rows(existing_rows_with_src)
     _bulk_upsert_rows(existing_rows_no_src)
+    _bulk_upsert_rows(backfill_rows)
 
     # ── Cleanup ──────────────────────────────────────────────────────────
     _cleanup_draft_articles(draft_ids)
@@ -623,6 +657,7 @@ def sync_source_list(intercom_client) -> Dict:
         "total": len(articles),
         "content_changed": content_changed_count,
         "verified": len(suspect_ids),
+        "backfilled": len(backfill_rows),
         "skipped_locale": skipped_locale,
         "skipped_no_helpcenter": skipped_no_helpcenter,
         "skipped_draft": skipped_draft,
