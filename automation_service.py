@@ -228,6 +228,8 @@ def run_auto_sync(intercom_client) -> Dict:
         synced = result.get("synced", 0)
         total = result.get("total", 0)
         message = f"Synced {synced} articles (total: {total})"
+        if result.get("listing_unstable"):
+            message += " — WARNING: Intercom listing did not converge; some articles may be missing"
         record_run(key, "success", message)
         return {"success": True, "synced": synced, "total": total, "message": message}
     except Exception as e:

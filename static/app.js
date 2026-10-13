@@ -2257,7 +2257,11 @@ async function pullSyncSource() {
         const data = await resp.json();
 
         if (data.success) {
-            showPullToast(`Synced ${data.synced} articles from Intercom.`, 'success');
+            if (data.listing_unstable > 0) {
+                showPullToast(`Synced ${data.synced} articles, but Intercom's article list kept changing during sync — some articles may be missing. Run Sync again.`, 'error');
+            } else {
+                showPullToast(`Synced ${data.synced} articles from Intercom.`, 'success');
+            }
             await loadPullStats();
             await loadPullArticles();
         } else {

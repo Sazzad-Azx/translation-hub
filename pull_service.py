@@ -522,18 +522,7 @@ def sync_source_list(intercom_client) -> Dict:
     except Exception:
         pass
 
-    # Paginate through Intercom article listing
-    articles = []
-    page = 1
-    per_page = 50
-    while True:
-        resp = intercom_client._make_request("GET", "/articles", params={"page": page, "per_page": per_page})
-        data = resp.json()
-        batch = data.get("data", [])
-        articles.extend(batch)
-        if not data.get("pages", {}).get("next"):
-            break
-        page += 1
+    articles, listing_unstable, listing_passes = _fetch_article_listing(intercom_client)
 
     existing_data = _fetch_all_existing_intercom_ids()
 
@@ -661,7 +650,64 @@ def sync_source_list(intercom_client) -> Dict:
         "skipped_locale": skipped_locale,
         "skipped_no_helpcenter": skipped_no_helpcenter,
         "skipped_draft": skipped_draft,
+        "listing_passes": listing_passes,
+        "listing_unstable": listing_unstable,
     }
+
+
+def _fetch_article_listing(intercom_client, max_passes: int = 3, max_workers: int = 8) -> Tuple[List[Dict], int, int]:
+    """Fetch the full /articles listing, deduped by id.
+
+    Intercom's page-based listing is not stably ordered: while articles are
+    being created/edited, items shift between pages, so a single pass can
+    silently skip articles (observed 2026-10-13: a newly published article
+    was missing from one pass and present in the next). `total_count` can't
+    be used as a completeness check — it counts rows, and some articles come
+    back twice on every pass.
+
+    Pages are fetched in parallel (shrinks the drift window) and the listing
+    is re-read until a pass finds no ids the earlier passes missed, up to
+    `max_passes`.
+
+    Returns (articles, unstable, passes_used) — `unstable` is the number of
+    ids the final pass newly found; > 0 means the listing never converged and
+    more articles may still be missing.
+    """
+    per_page = 50
+
+    def _get_page(page: int) -> Dict:
+        resp = intercom_client._make_request("GET", "/articles", params={"page": page, "per_page": per_page})
+        return resp.json()
+
+    by_id: Dict[str, Dict] = {}
+    unstable = 0
+    passes = 0
+    for passes in range(1, max_passes + 1):
+        first = _get_page(1)
+        total_pages = int((first.get("pages") or {}).get("total_pages") or 1)
+        batches = [first.get("data", [])]
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            for data in pool.map(_get_page, range(2, total_pages + 1)):
+                batches.append(data.get("data", []))
+        before = len(by_id)
+        for batch in batches:
+            for a in batch:
+                iid = str(a.get("id", ""))
+                if iid:
+                    by_id[iid] = a
+        unstable = len(by_id) - before
+        if passes > 1 and unstable == 0:
+            break
+        if passes > 1:
+            print(f"[sync_source_list] listing pass {passes} found {unstable} ids earlier passes missed", flush=True)
+
+    if passes > 1 and unstable:
+        print(
+            f"[sync_source_list] WARNING: listing did not converge after {passes} passes "
+            f"({unstable} ids first seen on the last pass)",
+            flush=True,
+        )
+    return list(by_id.values()), unstable, passes
 
 
 def _save_last_sync_time():
