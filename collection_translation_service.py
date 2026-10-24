@@ -58,12 +58,19 @@ def _collections_for(client: IntercomClient, hc_id: int) -> List[Dict]:
 
 
 def collections_with_published_articles(client: IntercomClient, hc_id: int) -> Set[str]:
-    """Collection ids in this help center that hold at least one published article."""
+    """Collection ids in this help center that hold at least one published article,
+    directly or through a sub-collection (a parent with no name hides its children)."""
     used: Set[str] = set()
     for a in client.search_articles(help_center_id=hc_id, state="published", limit=10000):
         for p in [a.get("parent_id")] + (a.get("parent_ids") or []):
             if p:
                 used.add(str(p))
+    parent_of = {str(c.get("id")): str(c.get("parent_id") or "") for c in client.get_collections()}
+    for cid in list(used):
+        cid = parent_of.get(cid, "")
+        while cid and cid not in used:
+            used.add(cid)
+            cid = parent_of.get(cid, "")
     return used
 
 
