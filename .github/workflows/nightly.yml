@@ -46,7 +46,7 @@ jobs:
         env:
           INTERCOM_ACCESS_TOKEN: ${{ secrets.INTERCOM_ACCESS_TOKEN }}
           FNMARKET_INTERCOM_TOKEN: ${{ secrets.FNMARKET_INTERCOM_TOKEN }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL || 'https://reiacekmluvuguqfswac.supabase.co' }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           COST_API_URL: ${{ secrets.COST_API_URL }}
