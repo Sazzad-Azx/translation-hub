@@ -31,7 +31,7 @@ import product_context
 _CTX = (
     "Intercom help-center collection title. Keep product/brand names in English "
     "(FundedNext, FundedNext Futures, FN Market, Rapid, Rapid Pro, Rapid Daily, "
-    "Bolt, Flex, Legacy, Stellar, NinjaTrader, TradingView, Tradovate, FAQ). "
+    "FundedNext Labs, Bolt, Flex, Legacy, Stellar, NinjaTrader, TradingView, Tradovate, FAQ). "
     "Do not add words."
 )
 
@@ -200,3 +200,160 @@ def ensure_collection_names_for_article(
             coll["translated_content"] = tc
         localized.append(cid)
     return localized
+
+
+# ---------------------------------------------------------------------------
+# Nightly sweep: catch what the push hook can't see
+# ---------------------------------------------------------------------------
+# The push hook only fires for translations pushed from the Hub. Three gaps stay
+# open without this sweep: translations published directly in Intercom, an
+# already-translated article moved into a collection with no localized name,
+# and an English collection rename (the hook never overwrites a name).
+#
+# Rename detection needs the English name we last saw, kept per product schema:
+STATE_TABLE = "collection_name_state"
+
+# Left alone by the sweep: legacy locales the Hub doesn't manage (it uses de /
+# pt-BR), and collections kept English-only on purpose.
+SKIP_LOCALES = {"de-form", "pt"}
+SKIP_COLLECTIONS = {
+    "19767325",  # FundedNext HC "Test article" — pending owner review
+}
+STATE_SQL = """
+CREATE TABLE IF NOT EXISTS collection_name_state (
+    collection_id text PRIMARY KEY,
+    en_name       text NOT NULL,
+    updated_at    timestamptz DEFAULT now()
+);
+""".strip()
+
+
+def _load_name_state() -> Optional[Dict[str, str]]:
+    """{collection_id: last seen English name}, or None if the table is missing."""
+    import requests
+    base = product_context.supabase_rest_base()
+    if not base:
+        return None
+    r = requests.get(f"{base}/{STATE_TABLE}?select=collection_id,en_name",
+                     headers=product_context.supabase_headers(), timeout=20)
+    if r.status_code != 200:
+        print(f"[collections] {STATE_TABLE} unavailable ({r.status_code}): {r.text[:200]}", flush=True)
+        return None
+    return {row["collection_id"]: row["en_name"] for row in r.json()}
+
+
+def _save_name_state(rows: List[Dict]) -> None:
+    import requests
+    if not rows:
+        return
+    r = requests.post(
+        f"{product_context.supabase_rest_base()}/{STATE_TABLE}?on_conflict=collection_id",
+        headers=product_context.supabase_headers({"Prefer": "resolution=merge-duplicates"}),
+        json=rows, timeout=30)
+    if r.status_code not in (200, 201, 204):
+        raise RuntimeError(f"saving {STATE_TABLE} failed ({r.status_code}): {r.text[:200]}")
+
+
+def sync_collection_names(
+    client: IntercomClient,
+    translator: Optional[GPTTranslator] = None,
+    apply: bool = True,
+) -> Dict:
+    """Bring every collection name in line with what's actually published.
+
+    1. Missing: a collection (or ancestor) holding an article published in a
+       locale gets a name in that locale if it has none.
+    2. Renamed: if the English name changed since the last run, every existing
+       localized name is re-translated. The first run only records a baseline.
+    """
+    by_id = {str(c.get("id")): c for c in client.get_collections()}
+
+    # Intercom locale codes → internal codes for the translator prompt.
+    inverse = {v: k for k, v in product_context.current_product().get("locale_map", {}).items()}
+
+    # (collection, locale) pairs that must carry a name.
+    need: Set[tuple] = set()
+    seen_articles: Set[str] = set()
+    for a in client.get_articles():
+        aid = str(a.get("id"))
+        if aid in seen_articles or (a.get("state") or "") != "published":
+            continue
+        seen_articles.add(aid)
+        locs = [loc for loc, v in (a.get("translated_content") or {}).items()
+                if loc != "en" and loc not in SKIP_LOCALES and isinstance(v, dict) and v.get("state") == "published"]
+        if not locs:
+            continue
+        for cid in [str(p) for p in [a.get("parent_id")] + (a.get("parent_ids") or []) if p]:
+            depth = 0
+            while cid and cid in by_id and depth < 10:
+                for loc in locs:
+                    need.add((cid, loc))
+                parent = by_id[cid].get("parent_id")
+                cid = str(parent) if parent else ""
+                depth += 1
+
+    state = _load_name_state()
+    updates: Dict[str, Dict[str, Dict]] = {}  # cid → {locale: entry}
+    missing = renamed = 0
+    translator_ = translator
+
+    def _translate(text: str, loc: str) -> str:
+        nonlocal translator_
+        translator_ = translator_ or GPTTranslator()
+        return translator_.translate_text(text, inverse.get(loc, loc), "en", context=_CTX, is_html=False)
+
+    if state is not None:
+        for cid, coll in by_id.items():
+            en_name = (coll.get("name") or "").strip()
+            old = state.get(cid)
+            if not en_name or old is None or old == en_name or cid in SKIP_COLLECTIONS:
+                continue
+            tc = coll.get("translated_content") or {}
+            for loc, v in tc.items():
+                if loc != "en" and loc not in SKIP_LOCALES and isinstance(v, dict) and v.get("name"):
+                    updates.setdefault(cid, {})[loc] = {"type": "group_content", "name": _translate(en_name, loc)}
+            renamed += 1
+
+    for cid, loc in sorted(need):
+        if cid in SKIP_COLLECTIONS:
+            continue
+        coll = by_id[cid]
+        cur = (coll.get("translated_content") or {}).get(loc)
+        if (isinstance(cur, dict) and cur.get("name")) or loc in updates.get(cid, {}):
+            continue
+        en_name = (coll.get("name") or "").strip()
+        if not en_name:
+            continue
+        updates.setdefault(cid, {})[loc] = {"type": "group_content", "name": _translate(en_name, loc)}
+        missing += 1
+
+    failed: List[str] = []
+    if apply:
+        for cid, tc in updates.items():
+            try:
+                client._make_request("PUT", f"/help_center/collections/{cid}", json={"translated_content": tc})
+            except Exception as e:
+                print(f"[collections] PUT {cid} failed: {e}", flush=True)
+                failed.append(cid)
+        if state is not None:
+            _save_name_state([
+                {"collection_id": cid, "en_name": (c.get("name") or "").strip(),
+                 "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+                for cid, c in by_id.items()
+                if cid not in failed and (c.get("name") or "").strip()
+                and state.get(cid) != (c.get("name") or "").strip()
+            ])
+        with _coll_lock:
+            _coll_cache.pop(product_context.current_product().get("id", ""), None)
+
+    return {
+        "collections": len(by_id),
+        "articles": len(seen_articles),
+        "missing_names_added": missing,
+        "renamed_collections": renamed,
+        "collections_updated": len(updates) - len(failed),
+        "failed": failed,
+        "rename_tracking": state is not None,
+        "updates": {cid: {loc: e["name"] for loc, e in tc.items()} for cid, tc in updates.items()},
+        "applied": apply,
+    }

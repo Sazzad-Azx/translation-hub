@@ -130,6 +130,8 @@ def set_enabled(key: str, enabled: bool) -> Dict:
         next_h, next_m = 1, 30
     elif key == "auto_sweep_leaked_translations":
         next_h, next_m = 3, 0
+    elif key == "auto_localize_collections":
+        next_h, next_m = 2, 30
     else:
         next_h, next_m = 0, 0
 
@@ -318,6 +320,36 @@ def run_auto_sweep(intercom_client) -> Dict:
             )
         record_run(key, "success", message)
         return {"success": True, "message": message, **result}
+    except Exception as e:
+        error_msg = str(e)
+        record_run(key, "error", error_msg)
+        return {"success": False, "error": error_msg}
+
+
+def run_auto_collections(intercom_client) -> Dict:
+    """
+    Add missing collection names and re-translate renamed ones.
+    Called by /api/cron/collections at ~02:30 UTC.
+    """
+    from collection_translation_service import sync_collection_names
+
+    key = "auto_localize_collections"
+
+    settings = get_settings(key)
+    if not settings.get("enabled"):
+        return {"success": False, "skipped": True, "reason": "Auto-localize collections is disabled"}
+
+    try:
+        result = sync_collection_names(intercom_client)
+        message = (
+            f"Added {result['missing_names_added']} missing name(s), re-translated "
+            f"{result['renamed_collections']} renamed collection(s), {len(result['failed'])} failed"
+        )
+        if not result["rename_tracking"]:
+            message += " — rename tracking off: collection_name_state table missing"
+        status = "success" if not result["failed"] else "error"
+        record_run(key, status, message)
+        return {"success": not result["failed"], "message": message, **result}
     except Exception as e:
         error_msg = str(e)
         record_run(key, "error", error_msg)

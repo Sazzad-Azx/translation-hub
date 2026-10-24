@@ -83,7 +83,7 @@ def inject_brand():
 
 
 # ─── Auth helpers ──────────────────────────────────────────────
-PUBLIC_PATHS = {'/', '/favicon.ico', '/api/health', '/api/auth/login', '/api/cron/sync', '/api/cron/pull', '/api/cron/sweep', '/api/cron/costs', '/api/faq/search'}
+PUBLIC_PATHS = {'/', '/favicon.ico', '/api/health', '/api/auth/login', '/api/cron/sync', '/api/cron/pull', '/api/cron/sweep', '/api/cron/collections', '/api/cron/costs', '/api/faq/search'}
 PUBLIC_PREFIXES = ('/static/',)
 
 
@@ -2730,6 +2730,34 @@ def cron_sweep():
         return jsonify({'success': True, 'products': results})
     except Exception as e:
         print(f"[CRON SWEEP] Error: {e}", flush=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/cron/collections', methods=['GET', 'POST'])
+def cron_collections():
+    """
+    Nightly job at UTC 02:30 (GitHub Actions).
+    Adds missing collection names for every locale with published articles and
+    re-translates collection names whose English name changed.
+    """
+    import automation_service
+
+    cron_secret = os.getenv('CRON_SECRET', '').strip()
+    auth_header = request.headers.get('Authorization', '')
+    has_auth = hasattr(request, 'auth_session') and request.auth_session
+    has_cron_secret = cron_secret and auth_header == f'Bearer {cron_secret}'
+
+    if not has_auth and not has_cron_secret:
+        print(f"[CRON COLLECTIONS] Rejected — no auth.", flush=True)
+        return jsonify({'success': False, 'error': 'Unauthorized cron request'}), 401
+
+    print("[CRON COLLECTIONS] Authorized — starting for all products", flush=True)
+    try:
+        results = _run_for_all_products("CRON COLLECTIONS", lambda: automation_service.run_auto_collections(get_intercom()))
+        print(f"[CRON COLLECTIONS] Results: {results}", flush=True)
+        return jsonify({'success': True, 'products': results})
+    except Exception as e:
+        print(f"[CRON COLLECTIONS] Error: {e}", flush=True)
         return jsonify({'success': False, 'error': str(e)}), 500
 
 

@@ -1,5 +1,5 @@
 """
-Run a nightly job (sync / pull / sweep / costs) outside Vercel.
+Run a nightly job (sync / pull / collections / sweep / costs) outside Vercel.
 
 The Vercel crons could never finish: the sync alone spends ~45s listing
 Intercom collections + articles, past the function's 10s cap, so every run
@@ -9,14 +9,14 @@ the existing /api/cron/* handlers in-process through Flask's test client, so
 the job logic stays in exactly one place.
 
 Usage:
-    python scripts/run_cron.py sync|pull|sweep|costs
+    python scripts/run_cron.py sync|pull|collections|sweep|costs
 Exit code is non-zero if the handler fails or any product reports an error.
 """
 import os
 import secrets
 import sys
 
-JOBS = ("sync", "pull", "sweep", "costs")
+JOBS = ("sync", "pull", "collections", "sweep", "costs")
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
