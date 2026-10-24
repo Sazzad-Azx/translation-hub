@@ -18,6 +18,17 @@ import sys
 
 JOBS = ("sync", "pull", "collections", "sweep", "costs")
 
+# A missing secret makes the handlers read every automation as "disabled" and
+# skip, which still returns 200 — fail loudly instead of going green.
+_INTERCOM = ("SUPABASE_URL", "SUPABASE_SERVICE_KEY", "INTERCOM_ACCESS_TOKEN")
+REQUIRED_ENV = {
+    "sync": _INTERCOM,
+    "pull": _INTERCOM,
+    "collections": _INTERCOM + ("OPENAI_API_KEY",),
+    "sweep": _INTERCOM,
+    "costs": ("SUPABASE_URL", "SUPABASE_SERVICE_KEY"),
+}
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
@@ -26,6 +37,12 @@ def main() -> int:
     if job not in JOBS:
         print(f"usage: run_cron.py {'|'.join(JOBS)}")
         return 2
+
+    missing = [k for k in REQUIRED_ENV[job] if not os.getenv(k, "").strip()]
+    if missing:
+        print(f"[run_cron {job}] missing env: {', '.join(missing)} — "
+              "add them as GitHub Actions repository secrets", flush=True)
+        return 1
 
     # The handlers only accept a Bearer CRON_SECRET; mint one for this process.
     os.environ["CRON_SECRET"] = secrets.token_hex(16)
