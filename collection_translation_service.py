@@ -19,6 +19,8 @@ Design notes
 - By default we only localize collections that contain published articles, to
   avoid creating empty collection shells for a locale with no article coverage.
 """
+import threading
+import time
 from typing import Dict, List, Optional, Set
 
 from intercom_client import IntercomClient
@@ -117,3 +119,77 @@ def localize_collection_names(
             client._make_request("PUT", f"/help_center/collections/{cid}", json={"translated_content": tc})
         report["collections"].append({"id": cid, "name": en_name, "added": added, "skipped": skipped})
     return report
+
+
+# ---------------------------------------------------------------------------
+# Push-time hook: keep collection names in step with article pushes
+# ---------------------------------------------------------------------------
+# Every time the Hub publishes an article translation, the article's parent
+# collection chain must also carry a name in that locale, or the article stays
+# invisible on the localized site. New collections created in Intercom never
+# went through the one-off CLI above, so we close the gap at push time.
+
+_COLL_CACHE_TTL = 300  # seconds; a bulk push reuses one collection listing
+_coll_cache: Dict[str, Dict] = {}  # product id → {"at": ts, "by_id": {cid: collection}}
+_coll_lock = threading.Lock()
+
+
+def _collections_by_id(client: IntercomClient) -> Dict[str, Dict]:
+    pid = product_context.current_product().get("id", "")
+    with _coll_lock:
+        hit = _coll_cache.get(pid)
+        if hit and time.time() - hit["at"] < _COLL_CACHE_TTL:
+            return hit["by_id"]
+    by_id = {str(c.get("id")): c for c in client.get_collections()}
+    with _coll_lock:
+        _coll_cache[pid] = {"at": time.time(), "by_id": by_id}
+    return by_id
+
+
+def ensure_collection_names_for_article(
+    client: IntercomClient,
+    article_id: str,
+    locale: str,
+    translator: Optional[GPTTranslator] = None,
+) -> List[str]:
+    """Give the article's parent collections (and their ancestors) a name in
+    ``locale`` where missing. Returns the collection ids that were localized.
+    Existing names are never overwritten."""
+    article = client.get_article(article_id)
+    parents = [str(p) for p in [article.get("parent_id")] + (article.get("parent_ids") or []) if p]
+    if not parents:
+        return []
+
+    by_id = _collections_by_id(client)
+    ic_loc = product_context.intercom_locale(locale)
+
+    chain: List[str] = []
+    for cid in parents:
+        seen = 0
+        while cid and cid in by_id and cid not in chain and seen < 10:
+            chain.append(cid)
+            parent = by_id[cid].get("parent_id")
+            cid = str(parent) if parent else ""
+            seen += 1
+
+    localized: List[str] = []
+    for cid in chain:
+        coll = by_id[cid]
+        cur = (coll.get("translated_content") or {}).get(ic_loc)
+        if isinstance(cur, dict) and cur.get("name"):
+            continue
+        en_name = (coll.get("name") or "").strip()
+        if not en_name:
+            continue
+        translator = translator or GPTTranslator()
+        name = translator.translate_text(en_name, locale, "en", context=_CTX, is_html=False)
+        client._make_request("PUT", f"/help_center/collections/{cid}",
+                             json={"translated_content": {ic_loc: {"type": "group_content", "name": name}}})
+        # Reflect the write in the cached listing so concurrent pushes in the
+        # same bulk job don't translate this collection again.
+        with _coll_lock:
+            tc = coll.setdefault("translated_content", {}) or {}
+            tc[ic_loc] = {"type": "group_content", "name": name}
+            coll["translated_content"] = tc
+        localized.append(cid)
+    return localized

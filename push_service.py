@@ -672,11 +672,22 @@ def push_single(intercom_id: str, locale: str, intercom_client) -> Dict:
             intercom_id, locale, pushed_at=now, push_error=""
         )
 
+        # A localized site hides any collection without a name in that locale,
+        # taking its articles with it. Best-effort: never fail the push over it.
+        message = "Successfully pushed to Intercom"
+        try:
+            from collection_translation_service import ensure_collection_names_for_article
+            localized = ensure_collection_names_for_article(intercom_client, intercom_id, locale)
+            if localized:
+                message += f"; localized {len(localized)} collection name(s)"
+        except Exception as ce:
+            print(f"[push_service] collection-name localization failed for {intercom_id}/{locale}: {ce}")
+
         return {
             "success": True,
             "intercom_id": intercom_id,
             "locale": locale,
-            "message": "Successfully pushed to Intercom",
+            "message": message,
             "pushed_at": now,
         }
 
