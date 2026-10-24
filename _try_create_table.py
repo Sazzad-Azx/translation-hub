@@ -1,9 +1,13 @@
 """Attempt to create pull_registry via Supabase pg-meta API."""
+import os
 import requests
 import json
+from dotenv import load_dotenv
+
+load_dotenv()
 
 SUPABASE_URL = "https://reiacekmluvuguqfswac.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJlaWFjZWttbHV2dWd1cWZzd2FjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MDAxMTE3NywiZXhwIjoyMDg1NTg3MTc3fQ.dAHUSTH5XhAS6WAGFA1YyqBcIFzjGCWWwsRj1jH8ruo"
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
 
 headers = {
     "apikey": SUPABASE_KEY,

@@ -45,7 +45,7 @@ From the `intercom-translator` folder:
 ```powershell
 $env:INTERCOM_ACCESS_TOKEN="your_intercom_access_token_here"
 $env:SUPABASE_URL="https://reiacekmluvuguqfswac.supabase.co"
-$env:SUPABASE_SERVICE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJlaWFjZWttbHV2dWd1cWZzd2FjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MDAxMTE3NywiZXhwIjoyMDg1NTg3MTc3fQ.dAHUSTH5XhAS6WAGFA1YyqBcIFzjGCWWwsRj1jH8ruo"
+$env:SUPABASE_SERVICE_KEY="your_supabase_service_role_key_here"
 python run_sync_test.py
 ```
 
