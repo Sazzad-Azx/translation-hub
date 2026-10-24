@@ -1,23 +1,5 @@
 {
   "version": 2,
-  "crons": [
-    {
-      "path": "/api/cron/sync",
-      "schedule": "0 0 * * *"
-    },
-    {
-      "path": "/api/cron/pull",
-      "schedule": "30 1 * * *"
-    },
-    {
-      "path": "/api/cron/sweep",
-      "schedule": "0 3 * * *"
-    },
-    {
-      "path": "/api/cron/costs",
-      "schedule": "30 23 * * *"
-    }
-  ],
   "builds": [
     {
       "src": "api/index.py",

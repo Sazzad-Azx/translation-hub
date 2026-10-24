@@ -2664,10 +2664,8 @@ def cron_sync():
     has_cron_secret = cron_secret and auth_header == f'Bearer {cron_secret}'
 
     if not has_auth and not has_cron_secret:
-        vercel_cron = request.headers.get('x-vercel-cron')
-        if not vercel_cron:
-            print(f"[CRON SYNC] Rejected — no auth. Headers: {dict(request.headers)}", flush=True)
-            return jsonify({'success': False, 'error': 'Unauthorized cron request'}), 401
+        print(f"[CRON SYNC] Rejected — no auth.", flush=True)
+        return jsonify({'success': False, 'error': 'Unauthorized cron request'}), 401
 
     print("[CRON SYNC] Authorized — starting auto sync for all products", flush=True)
     try:
@@ -2694,10 +2692,8 @@ def cron_pull():
     has_cron_secret = cron_secret and auth_header == f'Bearer {cron_secret}'
 
     if not has_auth and not has_cron_secret:
-        vercel_cron = request.headers.get('x-vercel-cron')
-        if not vercel_cron:
-            print(f"[CRON PULL] Rejected — no auth. Headers: {dict(request.headers)}", flush=True)
-            return jsonify({'success': False, 'error': 'Unauthorized cron request'}), 401
+        print(f"[CRON PULL] Rejected — no auth.", flush=True)
+        return jsonify({'success': False, 'error': 'Unauthorized cron request'}), 401
 
     print("[CRON PULL] Authorized — starting auto pull for all products", flush=True)
     try:
@@ -2724,10 +2720,8 @@ def cron_sweep():
     has_cron_secret = cron_secret and auth_header == f'Bearer {cron_secret}'
 
     if not has_auth and not has_cron_secret:
-        vercel_cron = request.headers.get('x-vercel-cron')
-        if not vercel_cron:
-            print(f"[CRON SWEEP] Rejected — no auth. Headers: {dict(request.headers)}", flush=True)
-            return jsonify({'success': False, 'error': 'Unauthorized cron request'}), 401
+        print(f"[CRON SWEEP] Rejected — no auth.", flush=True)
+        return jsonify({'success': False, 'error': 'Unauthorized cron request'}), 401
 
     print("[CRON SWEEP] Authorized — starting sweep for all products", flush=True)
     try:
@@ -2754,10 +2748,8 @@ def cron_costs():
     has_cron_secret = cron_secret and auth_header == f'Bearer {cron_secret}'
 
     if not has_auth and not has_cron_secret:
-        vercel_cron = request.headers.get('x-vercel-cron')
-        if not vercel_cron:
-            print(f"[CRON COSTS] Rejected — no auth.", flush=True)
-            return jsonify({'success': False, 'error': 'Unauthorized cron request'}), 401
+        print(f"[CRON COSTS] Rejected — no auth.", flush=True)
+        return jsonify({'success': False, 'error': 'Unauthorized cron request'}), 401
 
     if not (COST_API_URL and COST_TARGET_KEYS):
         return jsonify({'success': True, 'skipped': True, 'reason': 'COST_API_URL or COST_TARGET_KEYS not configured'})
