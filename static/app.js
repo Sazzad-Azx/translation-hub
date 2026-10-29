@@ -3374,7 +3374,9 @@ function trRenderTable() {
             </td>`;
         for (const [loc] of langs) {
             const st = (a.lang_statuses && a.lang_statuses[loc]) || 'NOT_STARTED';
-            bodyHtml += `<td class="tr-cell-lang" data-iid="${a.intercom_id}" data-loc="${loc}">${trStatusChip(st)}</td>`;
+            const err = (a.lang_errors && a.lang_errors[loc]) || '';
+            const tip = err ? ` title="${escapeHtml('Translation failed: ' + err)}"` : '';
+            bodyHtml += `<td class="tr-cell-lang" data-iid="${a.intercom_id}" data-loc="${loc}"${tip}>${trStatusChip(st)}</td>`;
         }
         bodyHtml += `</tr>`;
     }

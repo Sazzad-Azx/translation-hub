@@ -21,6 +21,7 @@ from typing import Dict, List, Optional, Tuple
 
 import product_context
 from config import TARGET_LANGUAGES
+from translate_service import fetch_translation_failures
 
 REST_BASE = product_context.LazyStr(product_context.supabase_rest_base)
 SUPABASE_URL = product_context.LazyStr(product_context.supabase_url_value)
@@ -232,9 +233,16 @@ def _fetch_article_source(intercom_id: str) -> Optional[Dict]:
 # Status computation
 # ---------------------------------------------------------------------------
 
-def _compute_push_status(article: Dict, translation: Optional[Dict], locale: str) -> Tuple[str, str]:
+def _compute_push_status(
+    article: Dict,
+    translation: Optional[Dict],
+    locale: str,
+    failure: Optional[Dict] = None,
+) -> Tuple[str, str]:
     """
     Compute push status for one article × one locale.
+    `failure` is the last failed translation attempt, if any — it only changes
+    the status when there is no usable translation to push.
     Returns: (status, reason)
     """
     iid = article.get("intercom_id", "")
@@ -248,11 +256,14 @@ def _compute_push_status(article: Dict, translation: Optional[Dict], locale: str
     pulled_at = _parse_ts(article.get("pulled_at"))
     source_updated = _parse_ts(article.get("source_updated_at"))
 
+    has_content = bool(translation and (translation.get("translated_title") or translation.get("translated_body_html")))
+    if not has_content and failure:
+        return "FAILED", f"Translation failed: {(failure.get('error') or '')[:100]}"
+
     # No translation exists
     if not translation:
         return "MISSING", "No translation exists for this language"
 
-    has_content = bool(translation.get("translated_title") or translation.get("translated_body_html"))
     if not has_content:
         return "MISSING", "Translation has no content"
 
@@ -312,6 +323,7 @@ def list_push_articles(
     """
     articles = _fetch_pulled_articles(search)
     translations = _fetch_translations_for_locale(locale) if locale else {}
+    failures = fetch_translation_failures() if locale else {}
 
     # Build enriched list
     enriched = []
@@ -320,7 +332,7 @@ def list_push_articles(
         t = translations.get(iid) if locale else None
 
         if locale:
-            push_status, reason = _compute_push_status(a, t, locale)
+            push_status, reason = _compute_push_status(a, t, locale, failures.get((iid, locale)))
         else:
             push_status = "NO_LANG"
             reason = "Select a target language"
@@ -415,13 +427,15 @@ def list_push_articles_multi(
         if loc not in trans_by_locale:
             trans_by_locale[loc] = {}
 
+    failures = fetch_translation_failures()
+
     enriched = []
     for a in articles:
         iid = a.get("intercom_id", "")
         locale_data: Dict[str, Dict] = {}
         for loc in locales:
             t = trans_by_locale[loc].get(iid)
-            status, reason = _compute_push_status(a, t, loc)
+            status, reason = _compute_push_status(a, t, loc, failures.get((iid, loc)))
             locale_data[loc] = {
                 "status": status,
                 "reason": reason,

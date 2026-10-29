@@ -7,6 +7,7 @@ Mutates config.TARGET_LANGUAGES so all other services pick up changes.
 """
 import os
 import json
+import time
 import requests
 from typing import Dict, List, Optional
 from pathlib import Path
@@ -129,6 +130,29 @@ def _save_local(langs: Dict[str, str]) -> None:
 
 # ── Public API ───────────────────────────────────────────────────────────
 
+# Per-product time of the last successful Supabase read (see ensure_active_languages).
+_LOADED_AT: Dict[str, float] = {}
+LANG_CACHE_TTL = 60  # seconds
+
+
+def ensure_active_languages(max_age: float = LANG_CACHE_TTL) -> None:
+    """
+    Refresh the active product's languages from Supabase if not read recently.
+    Called before every API request: a cold serverless instance otherwise runs
+    on the hard-coded defaults, which silently drops newer languages (tr/uz)
+    from translate jobs. Read-only — unlike load_active_languages it never
+    seeds Supabase, so a failed read can't overwrite the stored set.
+    """
+    pid = product_context.current_product()["id"]
+    if time.time() - _LOADED_AT.get(pid, 0) < max_age:
+        return
+    result = _read_supabase()
+    if result is not None:
+        TARGET_LANGUAGES.clear()
+        TARGET_LANGUAGES.update(result)
+        _LOADED_AT[pid] = time.time()
+
+
 def load_active_languages() -> Dict[str, str]:
     """
     Fetch active languages. Tries Supabase first, then local file.
@@ -140,6 +164,7 @@ def load_active_languages() -> Dict[str, str]:
     if result is not None:
         TARGET_LANGUAGES.clear()
         TARGET_LANGUAGES.update(result)
+        _LOADED_AT[product_context.current_product()["id"]] = time.time()
         _save_local(result)
         return result
 

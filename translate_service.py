@@ -51,6 +51,7 @@ SUPABASE_URL = product_context.LazyStr(product_context.supabase_url_value)
 SUPABASE_SERVICE_KEY = product_context.LazyStr(product_context.supabase_key_value)
 PULL_TABLE = "pull_registry"
 TRANSLATIONS_TABLE = "article_translations"
+FAILURES_TABLE = "translation_failures"
 
 STATUS_PRIORITY = {
     "OUTDATED": 0,
@@ -182,6 +183,60 @@ def _fetch_all_translations() -> Dict[str, List[Dict]]:
         return {}
 
 
+def fetch_translation_failures() -> Dict[Tuple[str, str], Dict]:
+    """Fetch last-attempt failures, keyed by (parent_intercom_article_id, target_locale)."""
+    if not REST_BASE:
+        return {}
+    headers = _headers()
+    headers.pop("Prefer", None)
+    try:
+        resp = requests.get(
+            f"{REST_BASE}/{FAILURES_TABLE}",
+            headers=headers,
+            params={"select": "parent_intercom_article_id,target_locale,error,failed_at"},
+            timeout=20,
+        )
+        if not resp.ok:
+            return {}
+        return {
+            (r["parent_intercom_article_id"], r["target_locale"]): r
+            for r in (resp.json() or [])
+        }
+    except Exception:
+        return {}
+
+
+def _record_translation_failure(iid: str, locale: str, error: str) -> None:
+    """Remember that the last translation attempt for iid × locale failed."""
+    try:
+        requests.post(
+            f"{REST_BASE}/{FAILURES_TABLE}",
+            headers=_headers("resolution=merge-duplicates,return=minimal"),
+            params={"on_conflict": "parent_intercom_article_id,target_locale"},
+            json={
+                "parent_intercom_article_id": str(iid),
+                "target_locale": locale,
+                "error": (error or "")[:1000],
+                "failed_at": datetime.now(timezone.utc).isoformat(),
+            },
+            timeout=15,
+        )
+    except Exception:
+        pass
+
+
+def _clear_translation_failure(iid: str, locale: str) -> None:
+    try:
+        requests.delete(
+            f"{REST_BASE}/{FAILURES_TABLE}",
+            headers=_headers("return=minimal"),
+            params={"parent_intercom_article_id": f"eq.{iid}", "target_locale": f"eq.{locale}"},
+            timeout=15,
+        )
+    except Exception:
+        pass
+
+
 # ---------------------------------------------------------------------------
 # Status computation
 # ---------------------------------------------------------------------------
@@ -190,6 +245,7 @@ def _compute_article_lang_status(
     article: Dict,
     locale: str,
     translation: Optional[Dict],
+    failure: Optional[Dict] = None,
 ) -> str:
     """Compute status for one article × one language."""
     iid = article.get("intercom_id", "")
@@ -199,6 +255,10 @@ def _compute_article_lang_status(
     with _active_jobs_lock:
         if job_key in _active_jobs:
             return "IN_PROGRESS"
+
+    # Last attempt failed (row is cleared on the next successful translation)
+    if failure:
+        return "FAILED"
 
     pulled_at = _parse_ts(article.get("pulled_at"))
     source_updated = _parse_ts(article.get("source_updated_at"))
@@ -284,6 +344,7 @@ def list_translate_articles(
     """
     articles = _fetch_pulled_articles(search)
     translations_map = _fetch_all_translations()
+    failures = fetch_translation_failures()
 
     enriched = []
     counts: Dict[str, int] = {
@@ -306,9 +367,13 @@ def list_translate_articles(
                 trans_by_locale[loc] = t
 
         lang_statuses: Dict[str, str] = {}
+        lang_errors: Dict[str, str] = {}
         for loc in TARGET_LANGUAGES:
             t = trans_by_locale.get(loc)
-            lang_statuses[loc] = _compute_article_lang_status(a, loc, t)
+            f = failures.get((iid, loc))
+            lang_statuses[loc] = _compute_article_lang_status(a, loc, t, f)
+            if f and lang_statuses[loc] == "FAILED":
+                lang_errors[loc] = f.get("error", "")
 
         row_priority = _compute_row_priority(lang_statuses)
         # Row status = worst status across all languages
@@ -331,6 +396,7 @@ def list_translate_articles(
             "source_updated_at": a.get("source_updated_at"),
             "source_updated_relative": _relative_time(source_dt),
             "lang_statuses": lang_statuses,
+            "lang_errors": lang_errors,
             "row_status": row_status,
             "row_priority": row_priority,
         })
@@ -495,18 +561,22 @@ def bulk_translate(
         glossary_terms = []
 
     jobs = []
+    results = []
+    completed = 0
+    failed = 0
     for iid in intercom_ids:
         for loc in locales:
             if loc not in TARGET_LANGUAGES:
+                # Report, don't drop: a silent skip used to come back as success.
+                err = f"Language '{loc}' is not in the active language list"
+                _record_translation_failure(iid, loc, err)
+                results.append({"intercom_id": iid, "locale": loc, "status": "failed", "error": err})
+                failed += 1
                 continue
             jobs.append((iid, loc))
 
     if not jobs:
-        return {"total_jobs": 0, "completed": 0, "failed": 0, "results": []}
-
-    results = []
-    completed = 0
-    failed = 0
+        return {"total_jobs": failed, "completed": 0, "failed": failed, "results": results}
 
     def do_translate(iid: str, locale: str) -> Dict:
         job_key = f"{iid}:{locale}"
@@ -596,6 +666,7 @@ def bulk_translate(
                 except Exception:
                     pass
 
+            _clear_translation_failure(iid, locale)
             print(f"  [TRANSLATE OK] {safe_title} -> {lang_name}", flush=True)
             return {"intercom_id": iid, "locale": locale, "status": "success"}
 
@@ -603,6 +674,7 @@ def bulk_translate(
             err = str(e)
             safe_err = err.encode("ascii", "replace").decode("ascii")
             print(f"  [TRANSLATE FAIL] {iid} -> {locale}: {safe_err}", flush=True)
+            _record_translation_failure(iid, locale, err)
             return {"intercom_id": iid, "locale": locale, "status": "failed", "error": err}
         finally:
             with _active_jobs_lock:
@@ -624,7 +696,7 @@ def bulk_translate(
                 failed += 1
 
     return {
-        "total_jobs": len(jobs),
+        "total_jobs": completed + failed,
         "completed": completed,
         "failed": failed,
         "results": results,

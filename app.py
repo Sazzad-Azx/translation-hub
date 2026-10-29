@@ -68,6 +68,9 @@ def resolve_active_product():
     product. Purely populates g.product — nothing breaks if a request omits it.
     """
     product_context.load_active_product()
+    if request.path.startswith('/api/'):
+        import language_service
+        language_service.ensure_active_languages()
 
 
 @app.context_processor
