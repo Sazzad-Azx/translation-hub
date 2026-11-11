@@ -78,6 +78,42 @@ def _strip_html_text(body: str) -> str:
     return text
 
 
+def _remap_translation_checksums(remap: Dict[str, Tuple[str, str]]) -> int:
+    """Move translations' source_checksum from old_hash → new_hash per article.
+
+    Only rows still pointing at old_hash are touched, so translations made
+    from an even older (genuinely different) body stay flagged.
+    """
+    if not REST_BASE or not remap:
+        return 0
+    updated = 0
+    for iid, (old_hash, new_hash) in remap.items():
+        if not old_hash or not new_hash or old_hash == new_hash:
+            continue
+        try:
+            resp = requests.patch(
+                f"{REST_BASE}/article_translations",
+                headers=_headers("return=minimal,count=exact"),
+                params={
+                    "parent_intercom_article_id": f"eq.{iid}",
+                    "source_checksum": f"eq.{old_hash}",
+                },
+                json={"source_checksum": new_hash},
+                timeout=15,
+            )
+            if resp.ok:
+                # Content-Range: "0-10/11" or "*/0" → rows changed = total
+                total = (resp.headers.get("Content-Range") or "").rsplit("/", 1)[-1]
+                updated += int(total) if total.isdigit() else 0
+            else:
+                print(f"    [WARN] checksum remap {iid}: {resp.status_code} {resp.text[:150]}", flush=True)
+        except Exception as e:
+            print(f"    [WARN] checksum remap {iid}: {e}", flush=True)
+    if updated:
+        print(f"    [INFO] Remapped {updated} translation checksum(s) across {len(remap)} reformatted article(s)", flush=True)
+    return updated
+
+
 def _ts_to_iso(ts) -> Optional[str]:
     """Convert Intercom unix timestamp (seconds) or ISO string to ISO-8601 string."""
     if ts is None:
@@ -642,6 +678,15 @@ def sync_source_list(intercom_client) -> Dict:
     _bulk_upsert_rows(existing_rows_with_src)
     _bulk_upsert_rows(existing_rows_no_src)
     _bulk_upsert_rows(backfill_rows)
+
+    # Reformat-only (text verified identical): carry translations over to the
+    # new hash, else they read as "source changed" and need re-translating.
+    # Backfills are skipped — there was no stored text to verify against.
+    _remap_translation_checksums({
+        iid: (existing_data[iid].get("content_hash", ""), new_hash)
+        for iid, new_hash in reformat_hashes.items()
+        if iid not in backfill_bodies and iid not in genuinely_changed
+    })
 
     # ── Cleanup ──────────────────────────────────────────────────────────
     _cleanup_draft_articles(draft_ids)
