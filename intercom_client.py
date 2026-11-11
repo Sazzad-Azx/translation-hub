@@ -253,9 +253,15 @@ class IntercomClient:
         help_centers = self.get_help_centers()
         # Match the ACTIVE product's help center (e.g. "fundednext", "fnmarket").
         match = (product_context.current_product().get("help_center_match") or "").lower()
+        own_hcs = product_context.current_product().get("help_center_ids") or []
         fundednext_id = None
         first_id = None
-        for hc in help_centers:
+        visible = {str(hc.get("id")) for hc in help_centers}
+        for hid in own_hcs:
+            if hid in visible:
+                fundednext_id = int(hid)
+                break
+        for hc in ([] if fundednext_id else help_centers):
             try:
                 hc_id = int(hc.get("id"))
             except (TypeError, ValueError):
@@ -466,19 +472,14 @@ class IntercomClient:
             return result
         except Exception as e:
             print(f"    [WARN] Typed translated_content PUT failed for article {article_id}, locale {locale}: {e}")
+            last_error = e
 
-        # ── Fallback: Create separate translated article ──
-        # Only used if the workspace does not support multi-language.
-        locale_upper = locale.upper()
-        translated_title = f"[{locale_upper}] {title}"
-        print(f"    [FALLBACK] Creating separate [{locale_upper}] article in Intercom...")
-        created = self.create_article(
-            title=translated_title,
-            body=body,
-            description=description or "",
-            state=translation_state,
+        # No fallback: creating a separate "[LOCALE] title" article used to mask
+        # failures (e.g. wrong-workspace token → 404) as a successful push and
+        # littered the workspace with orphan articles. Fail loudly instead.
+        raise RuntimeError(
+            f"Could not attach '{locale}' translation to article {article_id}: {last_error}"
         )
-        return created
     
     def create_article(
         self,

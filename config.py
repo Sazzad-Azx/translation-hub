@@ -137,6 +137,11 @@ PRODUCTS: Dict[str, dict] = {
         "support_email": "support@fundednext.com",
         "logo_file": "fn-logo.png",
         "help_center_match": "fundednext",
+        # Help centers this product owns. FundedNext and FNmarkets share one
+        # Intercom workspace (since 2026-10), so sync / collection jobs must be
+        # scoped by help center or each product pulls the other's articles.
+        # FundedNext Help Center, Affiliates section, FN Futures.
+        "help_center_ids": ["3616949", "3699061", "4171779"],
         "default_collection": "About FundedNext",
         # Live cost panel: shared analyzer (same data on every product's dashboard).
         # Omit `cost_analyzer` on a product to hide the cost card/chart entirely
@@ -171,6 +176,10 @@ PRODUCTS: Dict[str, dict] = {
         # FN Market logo file in static/ when available.
         "logo_file": "fn-logo.png",
         "help_center_match": "fnmarket",
+        # FNmarkets (help.fnmarkets.com) + FNmarkets Global (help.fnmarketsglobal.com),
+        # both in the FundedNext workspace since 2026-10. Old copies 4802013 /
+        # 4050095 in workspace qr1kxx9n are switched off.
+        "help_center_ids": ["5874689", "5884692"],
         "default_collection": "About FN Market",
         # Shares FundedNext's cost analyzer → identical API cost / cost analysis.
         "cost_analyzer": _SHARED_COST_ANALYZER,

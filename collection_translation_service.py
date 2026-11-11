@@ -266,7 +266,9 @@ def sync_collection_names(
     2. Renamed: if the English name changed since the last run, every existing
        localized name is re-translated. The first run only records a baseline.
     """
-    by_id = {str(c.get("id")): c for c in client.get_collections()}
+    own_hcs = set(product_context.current_product().get("help_center_ids") or [])
+    by_id = {str(c.get("id")): c for c in client.get_collections()
+             if not own_hcs or str(c.get("help_center_id") or "") in own_hcs}
 
     # Intercom locale codes → internal codes for the translator prompt.
     inverse = {v: k for k, v in product_context.current_product().get("locale_map", {}).items()}

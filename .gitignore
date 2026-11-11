@@ -63,3 +63,6 @@ test_*.py
 # Documentation (keep deployment guides)
 # *.md
 # !README.md
+
+# Data backups from migration scripts
+backups/

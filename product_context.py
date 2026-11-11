@@ -101,6 +101,7 @@ def resolve_product(product_id: str) -> dict:
             "cost_analyzer": spec.get("cost_analyzer"),
         },
         "help_center_match": spec["help_center_match"],
+        "help_center_ids": [str(h) for h in spec.get("help_center_ids", [])],
         "default_collection": spec["default_collection"],
         "schema": spec.get("schema", "public"),
         "intercom_token": os.getenv(spec["intercom_token_env"], ""),

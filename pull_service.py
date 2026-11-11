@@ -510,6 +510,8 @@ def sync_source_list(intercom_client) -> Dict:
     # Fetch collection names for mapping parent_id → name
     collection_map: Dict[str, str] = {}
     help_center_collection_ids: set = set()
+    # Only this product's help centers — the workspace is shared across products.
+    own_hcs = set(product_context.current_product().get("help_center_ids") or [])
     try:
         collections = intercom_client.get_collections()
         for c in collections:
@@ -517,10 +519,17 @@ def sync_source_list(intercom_client) -> Dict:
             cname = c.get("name", "") or ""
             if cid and cname:
                 collection_map[cid] = cname
-            if cid and c.get("help_center_id"):
+            hc = str(c.get("help_center_id") or "")
+            if cid and hc and (not own_hcs or hc in own_hcs):
                 help_center_collection_ids.add(cid)
     except Exception:
         pass
+    if own_hcs and not help_center_collection_ids:
+        # Token can't see this product's help centers (wrong workspace). Bail out
+        # instead of letting the cleanup below delete every row + translation.
+        raise RuntimeError(
+            f"None of this product's help centers {sorted(own_hcs)} are visible to its Intercom token"
+        )
 
     articles, listing_unstable, listing_passes = _fetch_article_listing(intercom_client)
 
