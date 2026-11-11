@@ -30,6 +30,10 @@ class IntercomClient:
         delay so the total wall time stays under ~10s per attempt.
         """
         url = f"{self.base_url}{endpoint}"
+        # Without a timeout a dropped connection blocks the worker forever
+        # (seen during the 2026-11-11 FNmarkets bulk push). Timeouts raise a
+        # RequestException, so they're retried below like any other failure.
+        kwargs.setdefault("timeout", (10, 60))  # (connect, read) seconds
 
         for attempt in range(MAX_RETRIES):
             try:
