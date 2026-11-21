@@ -78,6 +78,28 @@ def _strip_html_text(body: str) -> str:
     return text
 
 
+_MEDIA_ATTR_RE = re.compile(
+    r'<(img|iframe|video|source|a)\b[^>]*?\b(src|href)\s*=\s*["\']([^"\']+)["\']',
+    re.IGNORECASE,
+)
+
+
+def _media_signature(body: str) -> List[str]:
+    """Ordered list of image/video/iframe sources and link targets.
+
+    The text-only comparison can't see a swapped image or changed link.
+    Intercom CDN URLs are re-signed on every fetch (?expires=…&signature=…),
+    so their query string is dropped; the asset path identifies the file.
+    """
+    sig = []
+    for tag, _attr, url in _MEDIA_ATTR_RE.findall(body or ""):
+        url = _html.unescape(url).strip()
+        if "intercomcdn.com" in url:
+            url = url.split("?", 1)[0]
+        sig.append(f"{tag.lower()}:{url}")
+    return sig
+
+
 def _remap_translation_checksums(remap: Dict[str, Tuple[str, str]]) -> int:
     """Move translations' source_checksum from old_hash → new_hash per article.
 
@@ -488,6 +510,7 @@ def _verify_suspects(
     empty_body = 0
     text_match = 0
     text_differ = 0
+    media_differ = 0
 
     for iid in suspect_ids:
         article = fetched.get(iid)
@@ -497,11 +520,16 @@ def _verify_suspects(
         live_hash = _content_hash(live_body)
         stored_hash = existing_data.get(iid, {}).get("content_hash", "")
 
-        if live_hash == stored_hash:
+        stored_body = stored_bodies.get(iid, "")
+
+        # stored_hash can be a reformat hash newer than stored_body (reformats
+        # update the hash, not the body), so only trust a hash match when the
+        # stored body is that same version; otherwise compare against it.
+        if live_hash == stored_hash and (
+            not stored_body or _content_hash(stored_body) == stored_hash
+        ):
             hash_match += 1
             continue
-
-        stored_body = stored_bodies.get(iid, "")
 
         if not stored_body:
             empty_body += 1
@@ -515,6 +543,9 @@ def _verify_suspects(
         if live_text != stored_text:
             text_differ += 1
             changed[iid] = True
+        elif _media_signature(live_body) != _media_signature(stored_body):
+            media_differ += 1
+            changed[iid] = True
         else:
             text_match += 1
             reformat_hashes[iid] = live_hash
@@ -522,6 +553,7 @@ def _verify_suspects(
     print(f"  [VERIFY] {len(suspect_ids)} suspects: "
           f"hash_match={hash_match}, empty_body={empty_body}, "
           f"text_match={text_match}, text_differ={text_differ}, "
+          f"media_differ={media_differ}, "
           f"genuine={len(changed)}", flush=True)
 
     return changed, reformat_hashes, backfill_bodies
