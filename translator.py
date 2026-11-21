@@ -53,6 +53,15 @@ def _split_into_chunks(html: str) -> List[str]:
     return chunks if chunks else [html]
 
 
+_PRESERVED_TAG_RE = re.compile(r'<(a|img|iframe|video|source)\b', re.IGNORECASE)
+_MAX_TAG_RETRIES = 2
+
+
+def _preserved_tags(html: str) -> List[str]:
+    """Ordered names of the tags a translation must never drop (links, media)."""
+    return [t.lower() for t in _PRESERVED_TAG_RE.findall(html or "")]
+
+
 def _is_translatable(chunk: str) -> bool:
     """Check if a chunk has visible text worth translating."""
     text = re.sub(r'<[^>]+>', '', chunk).strip()
@@ -106,6 +115,9 @@ CRITICAL HTML RULES — you MUST follow these exactly:
 - Do NOT merge, remove, or rearrange any HTML tags.
 - Preserve ALL spacing elements: empty paragraphs, line breaks, whitespace-only tags.
 - Only translate the visible text content between tags. Never translate attribute values.
+- Keep EVERY <a> link: its opening tag, href and closing </a> must wrap the translated
+  text it wrapped in the source — including when that text is a brand or glossary term
+  kept in English (e.g. <a href="...">FundedNext Futures</a> stays a link).
 - Maintain the original tone appropriate for help center documentation.
 - Do NOT wrap output in markdown code fences. Return raw HTML only.
 """
@@ -168,6 +180,9 @@ RULES:
 - Return ONLY a valid JSON array. No markdown, no commentary.
 - Each element in the output array corresponds to the same-index element in the input.
 - Preserve ALL HTML tags, attributes, and structure exactly. Only translate visible text.
+- Keep EVERY <a> link: its opening tag, href and closing </a> must wrap the translated
+  text it wrapped in the source — including when that text is a brand or glossary term
+  kept in English (e.g. <a href="...">FundedNext Futures</a> stays a link).
 - Do NOT merge, split, add, or remove any HTML elements.
 - Elements that are only tags with no visible text (e.g. "<br>", "<p><br></p>") must be returned unchanged.
 - Maintain the original tone appropriate for help center documentation.
@@ -195,7 +210,9 @@ RULES:
             # Parse JSON array from response
             result = json.loads(raw)
             if isinstance(result, list) and len(result) == len(chunks):
-                return result
+                return self._repair_dropped_tags(
+                    chunks, result, target_language, source_language, context, glossary_prompt
+                )
 
             # Length mismatch — fall back to one-by-one
             print(f"  [WARN] Chunk batch returned {len(result)} items, expected {len(chunks)}. Falling back.", flush=True)
@@ -220,7 +237,41 @@ RULES:
                 results.append(self.translate_text(chunk, target_language, source_language, context, glossary_prompt, is_html=True))
             else:
                 results.append(chunk)
-        return results
+        return self._repair_dropped_tags(
+            chunks, results, target_language, source_language, context, glossary_prompt
+        )
+
+    def _repair_dropped_tags(
+        self,
+        chunks: List[str],
+        results: List[str],
+        target_language: str,
+        source_language: str,
+        context: Optional[str],
+        glossary_prompt: str,
+    ) -> List[str]:
+        """Re-translate, one at a time, any chunk whose links/media the model
+        dropped (it tends to unwrap <a> around brand terms kept in English).
+        Only the failing chunks cost an extra call."""
+        out = list(results)
+        for i, (src, got) in enumerate(zip(chunks, results)):
+            want = _preserved_tags(src)
+            if not isinstance(got, str) or _preserved_tags(got) == want:
+                continue
+            for attempt in range(1, _MAX_TAG_RETRIES + 1):
+                try:
+                    retry = self.translate_text(
+                        src, target_language, source_language, context, glossary_prompt, is_html=True
+                    )
+                except Exception:
+                    continue
+                if _preserved_tags(retry) == want:
+                    out[i] = retry
+                    break
+            else:
+                print(f"  [WARN] {target_language}: chunk {i} still drops links/media after "
+                      f"{_MAX_TAG_RETRIES} retries", flush=True)
+        return out
 
     # ------------------------------------------------------------------
     # High-level: translate an HTML body preserving structure
