@@ -58,7 +58,10 @@ def _parse_ts(ts_str: Optional[str]) -> Optional[datetime]:
     if not ts_str:
         return None
     try:
-        return datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+        # Pad fractional seconds to 6 digits: Python < 3.11 rejects e.g. ".67137".
+        ts = re.sub(r"\.(\d+)", lambda m: "." + (m.group(1) + "000000")[:6],
+                    ts_str.replace("Z", "+00:00"), count=1)
+        return datetime.fromisoformat(ts)
     except Exception:
         return None
 
@@ -169,6 +172,12 @@ def _compute_health(
                     else:
                         lang_statuses[loc] = "NOT_STARTED"
                         has_untranslated = True
+                    all_pushed = False
+                elif (_parse_ts(t.get("updated_at")) or pulled_at) > (_parse_ts(pushed_at_val) or pulled_at):
+                    # Re-translated/edited after the last push: not live yet.
+                    # Same rule the Push page uses (push_service READY).
+                    lang_statuses[loc] = "TRANSLATED"
+                    has_unpushed = True
                     all_pushed = False
                 else:
                     lang_statuses[loc] = "PUSHED"
