@@ -165,6 +165,8 @@ PRODUCTS: Dict[str, dict] = {
             "text": "#0D2137",
         },
         "default_languages": DEFAULT_TARGET_LANGUAGES,
+        # Same workspace as FNmarkets: Intercom rejects "fa", expects "fa-IR".
+        "locale_map": {"fa": "fa-IR"},
     },
     "fnmarket": {
         "name": "FNmarkets",

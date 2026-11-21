@@ -991,7 +991,9 @@ def _demote_intercom_translations_for_ids(intercom_ids: List[str], sel_headers: 
 
     for pid, locs in locales_by_id.items():
         try:
-            client.demote_locales_to_draft(pid, locs)
+            client.demote_locales_to_draft(
+                pid, [product_context.intercom_locale(l) for l in locs]
+            )
         except Exception as e:
             print(f"    [WARN] demote: PUT failed for {pid}: {e}")
 
